@@ -5,4 +5,5 @@ include(
     "devkit-permissions",
     "devkit-commands",
     "devkit-bukkit",
+    "devkit-bukkit-metadata",
 )

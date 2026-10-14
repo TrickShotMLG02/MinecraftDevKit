@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -64,6 +65,23 @@ class PermissionTest {
         assertThrows(IllegalStateException.class,
                 () -> escapedOptions.get().defaultAccess(DefaultAccess.OP));
         assertEquals(DefaultAccess.TRUE, permission.defaultAccess());
+    }
+
+    @Test
+    void failedMetadataCallbackDoesNotRegisterAPartialPermission() {
+        PermissionNamespace namespace = PermissionNamespace.create("friendnet");
+
+        assertThrows(IllegalStateException.class, () -> namespace.permission("friends.add", options -> {
+            options.description("Incomplete declaration");
+            throw new IllegalStateException("declaration failed");
+        }));
+
+        Permission retry = namespace.permission("friends.add");
+        PermissionCatalog catalog = namespace.build();
+
+        assertEquals(Set.of(retry), catalog.permissions());
+        assertEquals("friendnet.friends.add", retry.node());
+        assertNull(retry.description());
     }
 
     @Test

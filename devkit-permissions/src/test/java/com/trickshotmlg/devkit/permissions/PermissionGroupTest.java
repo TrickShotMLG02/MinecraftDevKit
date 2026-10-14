@@ -74,6 +74,38 @@ class PermissionGroupTest {
     }
 
     @Test
+    void exclusionRemovesPermissionGrantedThroughMultipleOverlappingPaths() {
+        PermissionNamespace namespace = PermissionNamespace.create("friendnet");
+        Permission shared = namespace.permission("shared");
+        Permission leftOnly = namespace.permission("left");
+        Permission rightOnly = namespace.permission("right");
+        PermissionSection overlap = namespace.section("overlap", shared, rightOnly);
+        PermissionGroup left = namespace.group("left-role", group -> group.grant(shared, leftOnly));
+        PermissionGroup right = namespace.group("right-role", group -> group.grant(overlap));
+        PermissionGroup combined = namespace.group("combined", group -> group
+                .inherits(left, right)
+                .grant(shared)
+                .exclude(shared));
+        PermissionCatalog catalog = namespace.build();
+
+        assertEquals(Set.of(leftOnly, rightOnly), catalog.effectivePermissions(combined));
+    }
+
+    @Test
+    void childMayExplicitlyRegrantPermissionExcludedByAnInheritedGroup() {
+        PermissionNamespace namespace = PermissionNamespace.create("friendnet");
+        Permission item = namespace.permission("item");
+        PermissionGroup restricted = namespace.group("restricted", group -> group.exclude(item));
+        PermissionGroup exception = namespace.group("exception", group -> group
+                .inherits(restricted)
+                .grant(item));
+        PermissionCatalog catalog = namespace.build();
+
+        assertTrue(catalog.effectivePermissions(restricted).isEmpty());
+        assertEquals(Set.of(item), catalog.effectivePermissions(exception));
+    }
+
+    @Test
     void allPermissionsResolvesAtBuildAndDoesNotIncludeGroupNodes() {
         PermissionNamespace namespace = PermissionNamespace.create("friendnet");
         Permission first = namespace.permission("first");
