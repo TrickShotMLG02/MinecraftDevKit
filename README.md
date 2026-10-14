@@ -2,7 +2,7 @@
 
 MinecraftDevKit is a modular, reusable Java development toolkit for Minecraft server plugins and mods. It is being built around platform-independent libraries with small, platform-specific adapters.
 
-> **Status:** Repository infrastructure is in place. The platform-independent permission declaration and catalog model is implemented; command, configuration, and platform integration features remain planned.
+> **Status:** Permission definitions, Bukkit `plugin.yml` permission export, and its Gradle build integration are implemented. Command, configuration, and runtime platform integrations remain planned.
 
 ## Goals
 
@@ -26,8 +26,9 @@ Shared modules contain ordinary Java APIs and must not depend on Bukkit, Paper, 
 | `devkit-commands` | Platform-independent command definitions and execution contracts | Build structure only; depends on core and permissions |
 | `devkit-bukkit` | Common Bukkit/Spigot/Paper adapters | Minimal package structure; depends on shared modules |
 | `devkit-bukkit-metadata` | Bukkit-compatible build-time metadata exporters, including permission YAML | Permission catalog exporter implemented; Java 17; does not require a server or Bukkit API |
+| `devkit-gradle-plugin` | Gradle plugin that merges catalog permissions into traditional Bukkit/Spigot `plugin.yml` | Implemented; Java 17; local Maven publication only |
 
-See the [`devkit-permissions` guide](devkit-permissions/README.md) for the permission framework and the [`devkit-bukkit-metadata` guide](devkit-bukkit-metadata/README.md) for exporting catalog definitions to a Bukkit-compatible `plugin.yml` permissions section. Paper, Velocity, Fabric, Forge, and NeoForge may be added as separate adapters later. No platform API dependency is included in the permissions module.
+See the [`devkit-permissions` guide](devkit-permissions/README.md), [`devkit-bukkit-metadata` guide](devkit-bukkit-metadata/README.md), and [`devkit-gradle-plugin` guide](devkit-gradle-plugin/README.md). The Gradle plugin supports traditional Bukkit/Spigot-style `plugin.yml`; Paper's `paper-plugin.yml`, Velocity, Fabric, Forge, and NeoForge metadata are not supported. No platform API dependency is included in the permissions module.
 
 ## Installation
 
@@ -70,7 +71,7 @@ For local development, each module also publishes under `com.trickshotmlg.devkit
 
 ## Building
 
-The project uses JDK 21 to run Gradle and build the Bukkit adapter, and JDK 17 to compile shared libraries and the Bukkit metadata exporter. Ensure both toolchains are available to Gradle. Shared libraries and `devkit-bukkit-metadata` compile to Java 17 bytecode; `devkit-bukkit` targets Java 21.
+The project uses JDK 21 to run Gradle and build the Bukkit adapter, and JDK 17 to compile shared libraries, metadata exporter, and Gradle plugin. Ensure both toolchains are available to Gradle. Shared libraries, `devkit-bukkit-metadata`, and `devkit-gradle-plugin` compile to Java 17 bytecode; `devkit-bukkit` targets Java 21.
 
 From the repository root, run the appropriate wrapper command:
 
@@ -90,7 +91,7 @@ From the repository root, run the appropriate wrapper command:
 
 ## Platform compatibility
 
-The common modules are normal Java libraries and do not currently require a Minecraft runtime. `devkit-bukkit-metadata` uses Java-only catalog and YAML APIs; it can generate metadata without starting a server. Runtime integration with Bukkit, Paper, Velocity, Fabric, Forge, and NeoForge requires platform-specific adapters. Java compatibility depends on the selected module: shared modules and metadata export target Java 17, while `devkit-bukkit` targets Java 21.
+The common modules are normal Java libraries and do not currently require a Minecraft runtime. `devkit-bukkit-metadata` and `devkit-gradle-plugin` generate Bukkit `plugin.yml` permissions without starting a server. Runtime integration with Bukkit, Paper, Velocity, Fabric, Forge, and NeoForge requires platform-specific adapters. Java compatibility depends on the selected module: shared modules, metadata export, and the Gradle plugin target Java 17, while `devkit-bukkit` targets Java 21.
 
 ## Roadmap
 
@@ -102,7 +103,7 @@ The common modules are normal Java libraries and do not currently require a Mine
 - General utilities.
 - Bukkit/Paper, Velocity, Fabric, Forge, and NeoForge integrations.
 
-Permission declarations, catalog resolution, and Bukkit-compatible permission metadata export are implemented. Runtime registration, automatic Gradle integration, and the remaining roadmap items are planned work.
+Permission declarations, catalog resolution, Bukkit-compatible permission metadata export, and automatic Gradle resource integration are implemented. Runtime registration and the remaining roadmap items are planned work.
 
 ## Contributing
 

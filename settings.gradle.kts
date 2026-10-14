@@ -6,4 +6,5 @@ include(
     "devkit-commands",
     "devkit-bukkit",
     "devkit-bukkit-metadata",
+    "devkit-gradle-plugin",
 )

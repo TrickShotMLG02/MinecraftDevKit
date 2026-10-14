@@ -68,9 +68,7 @@ subprojects {
 
     extensions.configure<org.gradle.api.publish.PublishingExtension> {
         publications {
-            create<MavenPublication>("mavenJava") {
-                from(components["java"])
-                artifactId = project.name
+            withType<MavenPublication>().configureEach {
                 pom {
                     name.set(project.name)
                     description.set("${project.name} module of MinecraftDevKit")
@@ -87,6 +85,15 @@ subprojects {
                         developerConnection.set("scm:git:ssh://github.com/TrickshotMLG/MinecraftDevKit.git")
                         url.set("https://github.com/TrickshotMLG/MinecraftDevKit")
                     }
+                }
+            }
+            // java-gradle-plugin creates pluginMaven and plugin marker publications itself.
+            // Creating another Java component publication for that project targets the same
+            // implementation coordinates and can cause conflicting publication tasks.
+            if (project.name != "devkit-gradle-plugin") {
+                create<MavenPublication>("mavenJava") {
+                    from(components["java"])
+                    artifactId = project.name
                 }
             }
         }
