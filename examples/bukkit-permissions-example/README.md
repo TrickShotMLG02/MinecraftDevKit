@@ -1,26 +1,16 @@
 # MinecraftDevKit Bukkit Permissions Example
 
-This is a standalone Gradle build for a minimal Bukkit/Paper plugin. It consumes the published MinecraftDevKit permission library and Gradle plugin from Maven Local, declares a realistic permission catalog in Java, and packages the generated `plugin.yml` together with runtime libraries in one deployable JAR.
+This is a standalone Gradle build for a minimal Bukkit/Paper plugin. It consumes the MinecraftDevKit permission library and Gradle plugin from JitPack, declares a realistic permission catalog in Java, and packages the generated `plugin.yml` together with runtime libraries in one deployable JAR.
 
 It is intentionally outside the root multi-project build. It demonstrates traditional Bukkit/Spigot-style `plugin.yml`; it does not target Paper's separate `paper-plugin.yml` format.
 
 ## Prerequisites
 
 - JDK 21 (Gradle toolchain and the Paper API target).
-- The MinecraftDevKit modules and plugin published into Maven Local.
+- A published MinecraftDevKit JitPack tag. The example is configured for `0.1.0-beta.1`; it cannot resolve until that tag exists and JitPack reports a successful build.
 - A Paper 1.21.8 test server for the documented API target.
 
-From the repository root, publish the required local artifacts first:
-
-```powershell
-.\gradlew.bat publishToMavenLocal
-```
-
-```sh
-./gradlew publishToMavenLocal
-```
-
-Then build the standalone example:
+Build the standalone example once the JitPack prerelease is available:
 
 ```powershell
 cd examples\bukkit-permissions-example
@@ -86,4 +76,6 @@ Native Bukkit defaults, operator status, permission attachments, and LuckPerms m
 
 ## Dependency coordinates
 
-The independent build resolves the Gradle plugin marker from Maven Local and Maven Central/Paper's repository for ordinary dependencies. Run the root publication command after changing MinecraftDevKit and before rebuilding this example. No `project(...)` dependencies point back into the root build.
+The independent build resolves the plugin implementation module and permission library from JitPack, and Paper's API from the Paper repository. Its `pluginManagement.resolutionStrategy` maps the plugin ID directly to `com.github.TrickshotMLG.MinecraftDevKit:devkit-gradle-plugin:<version>`. This avoids relying on the plugin marker artifact, whose group is the plugin ID rather than JitPack's multi-module repository group. No `project(...)` dependencies point back into the root build.
+
+To test unpublished source locally, first run the repository's `publishToMavenLocal` task. Temporarily add `mavenLocal()` to both repository blocks, change the `useModule` target to `com.trickshotmlg.devkit:devkit-gradle-plugin:0.1.0-SNAPSHOT`, change the plugin request version to `0.1.0-SNAPSHOT`, and use `com.trickshotmlg.devkit:devkit-permissions:0.1.0-SNAPSHOT`. Restore the JitPack settings and coordinates before committing changes.

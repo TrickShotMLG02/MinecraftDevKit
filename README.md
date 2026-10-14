@@ -26,7 +26,7 @@ Shared modules contain ordinary Java APIs and must not depend on Bukkit, Paper, 
 | `devkit-commands` | Platform-independent command definitions and execution contracts | Build structure only; depends on core and permissions |
 | `devkit-bukkit` | Common Bukkit/Spigot/Paper adapters | Minimal package structure; depends on shared modules |
 | `devkit-bukkit-metadata` | Bukkit-compatible build-time metadata exporters, including permission YAML | Permission catalog exporter implemented; Java 17; does not require a server or Bukkit API |
-| `devkit-gradle-plugin` | Gradle plugin that merges catalog permissions into traditional Bukkit/Spigot `plugin.yml` | Implemented; Java 17; local Maven publication only |
+| `devkit-gradle-plugin` | Gradle plugin that merges catalog permissions into traditional Bukkit/Spigot `plugin.yml` | Implemented; Java 17; Maven Local and JitPack module publication configured; public JitPack build not verified |
 
 See the [`devkit-permissions` guide](devkit-permissions/README.md), [`devkit-bukkit-metadata` guide](devkit-bukkit-metadata/README.md), and [`devkit-gradle-plugin` guide](devkit-gradle-plugin/README.md). The Gradle plugin supports traditional Bukkit/Spigot-style `plugin.yml`; Paper's `paper-plugin.yml`, Velocity, Fabric, Forge, and NeoForge metadata are not supported. No platform API dependency is included in the permissions module.
 
@@ -34,7 +34,7 @@ The standalone [`Bukkit permissions example`](examples/bukkit-permissions-exampl
 
 ## Installation
 
-After the repository has been pushed, a version has been tagged, and JitPack has successfully built it, add JitPack to the consuming project's repositories and declare the module dependency. These examples describe future consumption; no public artifact is available yet.
+After the repository is public, tag `0.1.0-beta.1`, and JitPack successfully builds that tag, consumers can declare individual modules using JitPack coordinates. These examples document the intended prerelease coordinates; no public artifact or JitPack build has been verified yet.
 
 ### Gradle Kotlin DSL
 
@@ -44,7 +44,7 @@ repositories {
 }
 
 dependencies {
-    implementation("com.github.TrickshotMLG.MinecraftDevKit:devkit-permissions:0.1.0")
+    implementation("com.github.TrickshotMLG.MinecraftDevKit:devkit-permissions:0.1.0-beta.1")
 }
 ```
 
@@ -62,7 +62,7 @@ dependencies {
   <dependency>
     <groupId>com.github.TrickshotMLG.MinecraftDevKit</groupId>
     <artifactId>devkit-permissions</artifactId>
-    <version>0.1.0</version>
+    <version>0.1.0-beta.1</version>
   </dependency>
 </dependencies>
 ```
@@ -70,6 +70,52 @@ dependencies {
 Declaring a dependency makes it available to compile and run your project. It does not by itself package the dependency inside a Minecraft plugin or mod JAR. Follow the packaging and dependency-distribution requirements of the target platform; this project does not currently provide a shading or bundling plugin.
 
 For local development, each module also publishes under `com.trickshotmlg.devkit` and the configured project version. Run `publishToMavenLocal` to install those artifacts into your local Maven repository.
+
+### Applying the Gradle plugin from JitPack
+
+Gradle plugin marker artifacts use the plugin ID as their group. JitPack's documented multi-module coordinates instead use `com.github.TrickshotMLG.MinecraftDevKit` as the group and `devkit-gradle-plugin` as the artifact. Resolve the plugin request directly to that published module:
+
+```kotlin
+// settings.gradle.kts
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        maven("https://jitpack.io")
+    }
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id.id == "com.trickshotmlg.devkit.bukkit-permissions") {
+                useModule("com.github.TrickshotMLG.MinecraftDevKit:devkit-gradle-plugin:${requested.version}")
+            }
+        }
+    }
+}
+```
+
+```kotlin
+// build.gradle.kts
+plugins {
+    java
+    id("com.trickshotmlg.devkit.bukkit-permissions") version "0.1.0-beta.1"
+}
+
+repositories {
+    mavenCentral()
+    maven("https://jitpack.io")
+}
+
+dependencies {
+    implementation("com.github.TrickshotMLG.MinecraftDevKit:devkit-permissions:0.1.0-beta.1")
+}
+
+minecraftDevKit {
+    bukkitPermissions {
+        catalogClass.set("com.example.permissions.PluginPermissions")
+    }
+}
+```
+
+JitPack builds multi-module artifacts using `com.github.USER.REPO:MODULE:TAG`. The plugin's generated marker publication is also available from local Maven publication, but consumers should use the module mapping above for JitPack instead of assuming the marker group is hosted there.
 
 ## Building
 
@@ -110,6 +156,8 @@ Permission declarations, catalog resolution, Bukkit-compatible permission metada
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, design guidelines, compatibility expectations, and pull-request guidance.
+
+See [RELEASING.md](RELEASING.md) for the `0.1.0-beta.1` prerelease readiness checklist. No tag or release has been created.
 
 ## License
 

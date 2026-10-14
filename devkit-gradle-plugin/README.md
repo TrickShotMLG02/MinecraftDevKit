@@ -4,6 +4,39 @@ The `devkit-gradle-plugin` module provides `com.trickshotmlg.devkit.bukkit-permi
 
 This plugin does not generate Paper `paper-plugin.yml`, command metadata, runtime registrations, or metadata for Velocity, Fabric, Forge, or NeoForge. It has no server runtime requirement.
 
+## Publishing and applying
+
+The plugin implementation is published as the `devkit-gradle-plugin` module. For JitPack, the module coordinates are `com.github.TrickshotMLG.MinecraftDevKit:devkit-gradle-plugin:<tag>`.
+
+The standard Gradle plugin marker has group `com.trickshotmlg.devkit.bukkit-permissions`, derived from the plugin ID. JitPack documents repository modules under `com.github.USER.REPO:MODULE:TAG`, so do not rely on the marker coordinate being available from JitPack. Use `pluginManagement.resolutionStrategy` to map the plugin request to its implementation module:
+
+```kotlin
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        maven("https://jitpack.io")
+    }
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id.id == "com.trickshotmlg.devkit.bukkit-permissions") {
+                useModule("com.github.TrickshotMLG.MinecraftDevKit:devkit-gradle-plugin:${requested.version}")
+            }
+        }
+    }
+}
+```
+
+Then apply the plugin in a project build:
+
+```kotlin
+plugins {
+    java
+    id("com.trickshotmlg.devkit.bukkit-permissions") version "0.1.0-beta.1"
+}
+```
+
+Add JitPack to normal dependency resolution as well when the consuming project depends on MinecraftDevKit modules.
+
 ## Publishing and applying locally
 
 The plugin and marker artifacts are published to Maven Local with the repository's existing command:
