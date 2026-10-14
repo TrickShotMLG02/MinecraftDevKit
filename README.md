@@ -2,7 +2,7 @@
 
 MinecraftDevKit is a modular, reusable Java development toolkit for Minecraft server plugins and mods. It is being built around platform-independent libraries with small, platform-specific adapters.
 
-> **Status:** This repository currently establishes build, module, and publishing infrastructure. The domain features listed below are planned; they are not implemented yet.
+> **Status:** Repository infrastructure is in place. The platform-independent permission declaration and catalog model is implemented; command, configuration, and platform integration features remain planned.
 
 ## Goals
 
@@ -22,11 +22,11 @@ Shared modules contain ordinary Java APIs and must not depend on Bukkit, Paper, 
 | Module | Responsibility | Current state |
 | --- | --- | --- |
 | `devkit-core` | Platform-independent interfaces and foundational abstractions | Build and package structure only |
-| `devkit-permissions` | Permission definitions, registries, hierarchies, and checking contracts | Build structure only; depends on `devkit-core` |
+| `devkit-permissions` | Platform-independent permission definitions, sections, groups, and immutable catalog resolution | Implemented; depends on `devkit-core` |
 | `devkit-commands` | Platform-independent command definitions and execution contracts | Build structure only; depends on core and permissions |
 | `devkit-bukkit` | Common Bukkit/Spigot/Paper adapters | Minimal package structure; depends on shared modules |
 
-Paper, Velocity, Fabric, Forge, and NeoForge may be added as separate adapters later. No platform API dependency is currently included.
+See the [`devkit-permissions` guide](devkit-permissions/README.md) for the implemented permission framework. Paper, Velocity, Fabric, Forge, and NeoForge may be added as separate adapters later. No platform API dependency is included in the permissions module.
 
 ## Installation
 
@@ -93,7 +93,7 @@ The common modules are normal Java libraries and do not currently require a Mine
 
 ## Roadmap
 
-- Permission management contracts and implementations.
+- Catalog export and platform-specific permission integrations.
 - A platform-independent command framework.
 - Configuration management.
 - Messaging and localization.
@@ -101,7 +101,7 @@ The common modules are normal Java libraries and do not currently require a Mine
 - General utilities.
 - Bukkit/Paper, Velocity, Fabric, Forge, and NeoForge integrations.
 
-These are planned areas, not existing features.
+Permission declarations and catalog resolution are implemented. The remaining roadmap items are planned work.
 
 ## Contributing
 
