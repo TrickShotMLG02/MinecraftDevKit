@@ -1,0 +1,9 @@
+name: MinecraftDevKitPermissionsExample
+version: 0.1.0-SNAPSHOT
+main: com.trickshotmlg.devkit.examples.friendnet.FriendNetPlugin
+api-version: '1.21'
+description: End-to-end example of MinecraftDevKit Bukkit permission metadata generation.
+commands:
+  mdkperms:
+    description: Displays this player's effective FriendNet permission checks.
+    usage: /mdkperms [check <permission.node>]

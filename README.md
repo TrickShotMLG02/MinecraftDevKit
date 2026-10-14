@@ -30,6 +30,8 @@ Shared modules contain ordinary Java APIs and must not depend on Bukkit, Paper, 
 
 See the [`devkit-permissions` guide](devkit-permissions/README.md), [`devkit-bukkit-metadata` guide](devkit-bukkit-metadata/README.md), and [`devkit-gradle-plugin` guide](devkit-gradle-plugin/README.md). The Gradle plugin supports traditional Bukkit/Spigot-style `plugin.yml`; Paper's `paper-plugin.yml`, Velocity, Fabric, Forge, and NeoForge metadata are not supported. No platform API dependency is included in the permissions module.
 
+The standalone [`Bukkit permissions example`](examples/bukkit-permissions-example/README.md) consumes the Maven Local publications, generates permission metadata during its own Gradle build, and packages a test plugin JAR for a Paper server.
+
 ## Installation
 
 After the repository has been pushed, a version has been tagged, and JitPack has successfully built it, add JitPack to the consuming project's repositories and declare the module dependency. These examples describe future consumption; no public artifact is available yet.
