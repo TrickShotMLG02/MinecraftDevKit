@@ -86,6 +86,32 @@ class CloudCommandRegistrarTest {
     }
 
     @Test
+    void nestedCommandRequiresEveryParentPermissionEvenThroughAliases() {
+        var permissions = com.trickshotmlg.devkit.permissions.PermissionNamespace.create("test");
+        Permission admin = permissions.permission("friends.admin");
+        Permission reload = permissions.permission("friends.reload");
+        permissions.build();
+        TestManager manager = new TestManager();
+        AtomicReference<Boolean> called = new AtomicReference<>(false);
+        var definition = CommandRegistry.builder().root("friends", root -> root
+                .aliases("f")
+                .subcommand("admin", parent -> parent.aliases("a").permission(admin)
+                        .subcommand("reload", child -> child.aliases("rl").permission(reload)
+                                .execute(context -> called.set(true))))).build();
+        new CloudCommandRegistrar<>(manager, Sender::asCommandSender).register(definition);
+
+        Sender sender = new Sender();
+        sender.permissions.add(reload.node());
+        var denied = manager.commandExecutor().executeCommand(sender, "f a rl");
+        assertThrows(java.util.concurrent.CompletionException.class, denied::join);
+        assertFalse(called.get(), "child permission alone must not bypass the inherited parent requirement");
+
+        sender.permissions.add(admin.node());
+        manager.commandExecutor().executeCommand(sender, "f a rl").join();
+        assertTrue(called.get());
+    }
+
+    @Test
     void allowsARegisteredCustomCloudParser() {
         Argument<UUID> id = Arguments.custom("id", UUID.class);
         UUID expected = UUID.randomUUID();

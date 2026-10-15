@@ -34,6 +34,7 @@ public final class CommandHelpRenderer {
         Objects.requireNonNull(sender, "sender");
         if (page < 1) throw new IllegalArgumentException("page must be at least 1");
         if (pageSize < 1) throw new IllegalArgumentException("pageSize must be at least 1");
+        if (!selected.isVisibleTo(sender)) return List.of();
 
         List<Component> lines = new ArrayList<>();
         selected.description().ifPresent(description -> lines.add(textProvider.resolve(description, sender.locale(), Map.of())));

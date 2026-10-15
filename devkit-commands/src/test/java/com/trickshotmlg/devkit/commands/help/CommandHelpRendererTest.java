@@ -96,6 +96,24 @@ class CommandHelpRendererTest {
     }
 
     @Test
+    void directHelpForAnInaccessibleSelectedNodeDoesNotExposeItsDescription() {
+        PermissionNamespace namespace = PermissionNamespace.create("help");
+        Permission staff = namespace.permission("staff");
+        namespace.build();
+        var definition = CommandRegistry.builder().root("friends", root -> root
+                .subcommand("admin", admin -> admin.permission(staff).description("Secret administration"))
+        ).build();
+        CommandNode root = definition.roots().get(0);
+        CommandNode admin = root.children().get(0);
+
+        List<String> lines = new CommandHelpRenderer(new StaticTextProvider(MissingTranslationPolicy.SHOW_KEY))
+                .page(root, admin, "/friends admin", new TestSender(), 1, 10)
+                .stream().map(PLAIN::serialize).toList();
+
+        assertTrue(lines.isEmpty());
+    }
+
+    @Test
     void helpPagesOnlyRenderTheSelectedNodesImmediateSyntax() {
         var definition = CommandRegistry.builder().root("friends", root -> root
                 .subcommand("requests", requests -> requests
