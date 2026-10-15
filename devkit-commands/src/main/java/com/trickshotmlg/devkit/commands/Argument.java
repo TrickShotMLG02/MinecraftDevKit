@@ -15,10 +15,11 @@ public final class Argument<T> {
     private final Optional<Number> minimum;
     private final Optional<Number> maximum;
     private final Optional<TextRef> description;
+    private final Optional<CommandSuggestionProvider> suggestions;
 
     Argument(String name, ArgumentType type, Class<T> valueType,
              Class<? extends Enum<?>> enumType, Optional<Number> minimum, Optional<Number> maximum,
-             Optional<TextRef> description) {
+             Optional<TextRef> description, Optional<CommandSuggestionProvider> suggestions) {
         this.name = Objects.requireNonNull(name, "name");
         if (!NAME.matcher(name).matches()) throw new IllegalArgumentException("Invalid argument name: " + name);
         this.type = Objects.requireNonNull(type, "type");
@@ -27,6 +28,7 @@ public final class Argument<T> {
         this.minimum = Objects.requireNonNull(minimum, "minimum");
         this.maximum = Objects.requireNonNull(maximum, "maximum");
         this.description = Objects.requireNonNull(description, "description");
+        this.suggestions = Objects.requireNonNull(suggestions, "suggestions");
         if (minimum.isPresent() && maximum.isPresent()
                 && minimum.get().doubleValue() > maximum.get().doubleValue()) {
             throw new IllegalArgumentException("Minimum exceeds maximum for argument '" + name + "'");
@@ -40,6 +42,7 @@ public final class Argument<T> {
     public Optional<Number> minimum() { return minimum; }
     public Optional<Number> maximum() { return maximum; }
     public Optional<TextRef> description() { return description; }
+    public Optional<CommandSuggestionProvider> suggestions() { return suggestions; }
 
     /** Returns a copy of this descriptor with literal explanatory text. */
     public Argument<T> withDescription(String value) { return withDescription(TextRef.literal(value)); }
@@ -47,7 +50,13 @@ public final class Argument<T> {
     /** Returns a copy of this descriptor with localized explanatory text. */
     public Argument<T> withDescription(TextRef value) {
         return new Argument<>(name, type, valueType, enumType, minimum, maximum,
-                Optional.of(Objects.requireNonNull(value, "description")));
+                Optional.of(Objects.requireNonNull(value, "description")), suggestions);
+    }
+
+    /** Returns a copy with an asynchronous or immediate custom suggestion provider. */
+    public Argument<T> withSuggestions(CommandSuggestionProvider value) {
+        return new Argument<>(name, type, valueType, enumType, minimum, maximum, description,
+                Optional.of(Objects.requireNonNull(value, "suggestions")));
     }
 
     @Override public String toString() { return "<" + name + ">"; }

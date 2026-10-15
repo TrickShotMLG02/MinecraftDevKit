@@ -9,5 +9,7 @@ public enum ArgumentType {
     DOUBLE,
     BOOLEAN,
     ENUM,
-    UUID
+    UUID,
+    /** Parser supplied to a Cloud-backed runtime. */
+    CUSTOM
 }

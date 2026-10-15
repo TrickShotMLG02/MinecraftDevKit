@@ -43,4 +43,20 @@ The `CommandDefinition` is a stable snapshot. Duplicate root names, aliases, sib
 
 Permission and sender requirements declared on a parent are inherited by descendants and combined with logical AND. Permission node names do not imply authorization inheritance. Optional arguments with defaults are available through `context.get(handle)`; optional arguments without defaults use `context.getOptional(handle)`.
 
-The model intentionally leaves parsing, suggestions, execution, help, and sender adaptation to the Cloud-backed runtime and platform adapter.
+## Cloud v2 execution
+
+The module includes `CloudCommandRegistrar`, a thin bridge from the immutable definitions to an existing Cloud v2 `CommandManager`. The module publishes Cloud Core 2.1.0 as an API dependency; platform integrations provide the manager and a function that adapts Cloud's native sender to `CommandSender`.
+
+```java
+CloudCommandRegistrar<NativeSender> registrar =
+    new CloudCommandRegistrar<>(cloudManager, senderAdapter);
+registrar.register(FriendCommands.create(listPermission, addPermission));
+```
+
+The registrar uses Cloud's standard parsers for the built-in argument types, preserving parser suggestions and range constraints. Custom types use `Arguments.custom("target", Target.class)` and a Cloud `ParserDescriptor` registered through `registrar.parser(handle, descriptor)`. Custom suggestion providers return a `CompletionStage<List<String>>`; Cloud controls when the provider runs and converts the results to platform suggestions.
+
+Each executable command path becomes a Cloud command. Literal child branches and argument branches are registered together, so Cloud's literal-first parsing behavior applies. The bridge attaches one Cloud predicate permission that evaluates every inherited typed permission and sender restriction in the MinecraftDevKit model. This preserves the framework's logical-AND access rules while allowing Cloud and the platform to filter inaccessible commands.
+
+The command handler runs on the execution coordinator configured for the supplied Cloud manager. Suggestions run through Cloud's suggestion pipeline. Bukkit integrations must select a coordinator compatible with the platform's thread rules and should not move Bukkit API access to an arbitrary executor.
+
+Text descriptions are deliberately not copied into Cloud's static descriptions: translated references must be resolved for the current sender when rendering help. The Cloud manager remains available to applications for advanced parsers, preprocessors, exception handling, and other Cloud features.
