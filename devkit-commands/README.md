@@ -61,6 +61,8 @@ The command handler runs on the execution coordinator configured for the supplie
 
 Text descriptions are deliberately not copied into Cloud's static descriptions: translated references must be resolved for the current sender when rendering help. The Cloud manager remains available to applications for advanced parsers, preprocessors, exception handling, and other Cloud features.
 
+For localization validation, `CommandDefinition.textReferences()` collects translated descriptions, explicit usage overrides, and argument descriptions from the finalized tree. `CommandErrorMessages.textReferences()` exposes the framework error keys. Merge these immutable catalogs with application-owned references using `TextCatalog.builder().addCatalog(...)`, then write a manifest with `TextCatalogManifest`.
+
 ## Generated usage, help, and errors
 
 Pass a `CommandHelpRenderer` to the registrar to make non-executable parent commands show generated help:

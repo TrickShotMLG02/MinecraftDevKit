@@ -2,7 +2,7 @@
 
 MinecraftDevKit is a modular, reusable Java development toolkit for Minecraft server plugins and mods. It is being built around platform-independent libraries with small, platform-specific adapters.
 
-> **Status:** Permission definitions, Bukkit `plugin.yml` permission export, and its Gradle build integration are implemented. Command, configuration, and runtime platform integrations remain planned.
+> **Status:** Permission definitions and metadata generation, Cloud-backed command definitions, text/localization providers, and localization diagnostics are implemented. Bukkit/Paper runtime command registration remains planned.
 
 ## Goals
 
@@ -22,13 +22,16 @@ Shared modules contain ordinary Java APIs and must not depend on Bukkit, Paper, 
 | Module | Responsibility | Current state |
 | --- | --- | --- |
 | `devkit-core` | Platform-independent interfaces and foundational abstractions | Build and package structure only |
+| `devkit-text` | Immutable text references, resolution contracts, and reference catalogs | Implemented; Java 17 |
+| `devkit-localization` | UTF-8 locale catalogs, fallback resolution, diagnostics, and localization scanning | Implemented; Java 17 |
+| `devkit-localization-cli` | Terminal scanner for translation resources and reference manifests | Implemented; Java 17 |
 | `devkit-permissions` | Platform-independent permission definitions, sections, groups, and immutable catalog resolution | Implemented; depends on `devkit-core` |
-| `devkit-commands` | Platform-independent command definitions and execution contracts | Build structure only; depends on core and permissions |
+| `devkit-commands` | Immutable typed command definitions, Cloud v2 dispatch, suggestions, generated help/usage, and localized errors | Implemented; Java 17 |
 | `devkit-bukkit` | Common Bukkit/Spigot/Paper adapters | Minimal package structure; depends on shared modules |
 | `devkit-bukkit-metadata` | Bukkit-compatible build-time metadata exporters, including permission YAML | Permission catalog exporter implemented; Java 17; does not require a server or Bukkit API |
-| `devkit-gradle-plugin` | Gradle plugin that merges catalog permissions into traditional Bukkit/Spigot `plugin.yml` | Implemented; Java 17; Maven Local and JitPack module publication configured; public JitPack build not verified |
+| `devkit-gradle-plugin` | Gradle plugins for Bukkit permission metadata and localization scanning | Implemented; Java 17; Maven Local and JitPack module publication configured; public JitPack build not verified |
 
-See the [`devkit-permissions` guide](devkit-permissions/README.md), [`devkit-bukkit-metadata` guide](devkit-bukkit-metadata/README.md), and [`devkit-gradle-plugin` guide](devkit-gradle-plugin/README.md). The Gradle plugin supports traditional Bukkit/Spigot-style `plugin.yml`; Paper's `paper-plugin.yml`, Velocity, Fabric, Forge, and NeoForge metadata are not supported. No platform API dependency is included in the permissions module.
+See the [`devkit-permissions` guide](devkit-permissions/README.md), [`devkit-commands` guide](devkit-commands/README.md), [`devkit-text` guide](devkit-text/README.md), [`devkit-localization` guide](devkit-localization/README.md), and [`devkit-gradle-plugin` guide](devkit-gradle-plugin/README.md). The metadata plugin supports traditional Bukkit/Spigot-style `plugin.yml`; Paper's `paper-plugin.yml`, Velocity, Fabric, Forge, and NeoForge metadata are not supported. Shared command, text, and localization modules contain no Bukkit API dependency.
 
 The standalone [`Bukkit permissions example`](examples/bukkit-permissions-example/README.md) resolves MinecraftDevKit from JitPack and the Paper API from PaperMC, generates permission metadata during its own Gradle build, and packages a test plugin JAR for a Paper server. The repository also includes a local [Paper test server provisioner and IntelliJ run/debug profiles](tools/devservers/README.md); server download and startup are opt-in and Paper's EULA is never accepted automatically.
 
@@ -84,7 +87,8 @@ pluginManagement {
     }
     resolutionStrategy {
         eachPlugin {
-            if (requested.id.id == "com.trickshotmlg.devkit.bukkit-permissions") {
+            if (requested.id.id == "com.trickshotmlg.devkit.bukkit-permissions"
+                    || requested.id.id == "com.trickshotmlg.devkit.localization-scan") {
                 useModule("com.github.TrickshotMLG.MinecraftDevKit:devkit-gradle-plugin:${requested.version}")
             }
         }

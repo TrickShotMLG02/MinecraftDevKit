@@ -1,6 +1,7 @@
 package com.trickshotmlg.devkit.commands.error;
 
 import com.trickshotmlg.devkit.text.TextRef;
+import com.trickshotmlg.devkit.text.TextCatalog;
 
 import java.util.Collections;
 import java.util.EnumMap;
@@ -40,4 +41,11 @@ public final class CommandErrorMessages {
     }
 
     public Map<CommandErrorCategory, TextRef> messages() { return messages; }
+
+    /** Collects framework error text references for localization validation. */
+    public TextCatalog textReferences() {
+        TextCatalog.Builder catalog = TextCatalog.builder();
+        messages.forEach((category, reference) -> catalog.add(reference, "framework-error", category.name()));
+        return catalog.build();
+    }
 }

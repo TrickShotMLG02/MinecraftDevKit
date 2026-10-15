@@ -1,8 +1,30 @@
 # MinecraftDevKit Bukkit Permissions Gradle Plugin
 
-The `devkit-gradle-plugin` module provides `com.trickshotmlg.devkit.bukkit-permissions`. It loads a compiled Java `PermissionCatalog`, exports its traditional Bukkit/Spigot `plugin.yml` permission metadata, and merges that metadata into the main resource descriptor during normal Gradle resource processing.
+The `devkit-gradle-plugin` module provides `com.trickshotmlg.devkit.bukkit-permissions` and `com.trickshotmlg.devkit.localization-scan`. The first loads a compiled Java `PermissionCatalog`, exports traditional Bukkit/Spigot `plugin.yml` permission metadata, and merges that metadata during normal Gradle resource processing. The second validates UTF-8 localization catalogs against a JSON text-reference manifest.
 
 This plugin does not generate Paper `paper-plugin.yml`, command metadata, runtime registrations, or metadata for Velocity, Fabric, Forge, or NeoForge. It has no server runtime requirement.
+
+## Localization scanning
+
+The scanner API and standalone CLI live in `devkit-localization` and `devkit-localization-cli`; they do not depend on Bukkit. The Gradle plugin adds a task to the consuming project:
+
+```kotlin
+plugins {
+    id("com.trickshotmlg.devkit.localization-scan") version "0.1.0-SNAPSHOT"
+}
+
+devkitLocalizationScan {
+    translationsDirectory.set(layout.projectDirectory.dir("src/main/resources/translations"))
+    referenceManifest.set(layout.projectDirectory.file("src/main/localization/text-references.json"))
+    baseLocale.set("en-US")
+    requiredLocales.set(listOf("en-US", "de-DE"))
+    failOn.set(listOf("MISSING_FALLBACK", "PLACEHOLDER_MISMATCH", "INVALID_RESOURCE"))
+}
+```
+
+Run `scanDevKitTranslations` directly or attach it to `check`. It writes a deterministic JSON report to `build/reports/minecraftdevkit/localization.json`. Defaults expect `src/main/resources/translations`, `src/main/localization/text-references.json`, and base locale `en-US`. The task declares its directory and manifest as inputs and the JSON report as its output; it supports Gradle configuration cache.
+
+Reference manifests can be generated from `TextCatalogManifest.write(...)`, including command descriptions, usage overrides, argument descriptions, framework error messages, and application-owned references. Dynamic translation keys must be registered explicitly; arbitrary Java source is not scanned with regexes. A fallback changes what text is displayed, but does not suppress a missing-translation finding.
 
 ## Publishing and applying
 
