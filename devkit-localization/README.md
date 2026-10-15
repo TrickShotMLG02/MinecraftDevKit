@@ -70,12 +70,14 @@ The manifest is deterministic JSON with schema version 1, keys, optional fallbac
 The CLI accepts translation files and a generated or hand-maintained manifest:
 
 ```powershell
-.\gradlew.bat :devkit-localization-cli:run --args="--translations src/main/resources/translations --references build/text-references.json --base-locale en-US --locales en-US,de-DE --format json --fail-on ERROR --output build/reports/localization.json"
+.\gradlew.bat :devkit-localization-cli:run --args="--translations ../examples/bukkit-commands-example/src/main/resources/translations --references ../examples/bukkit-commands-example/build/generated/minecraftdevkit/text-references.json --base-locale en-US --locales en-US,de-DE --format json --fail-on ERROR --output ../build/reports/localization.json"
 ```
 
 ```sh
-./gradlew :devkit-localization-cli:run --args="--translations src/main/resources/translations --references build/text-references.json --base-locale en-US --locales en-US,de-DE --format json --fail-on ERROR --output build/reports/localization.json"
+./gradlew :devkit-localization-cli:run --args="--translations ../examples/bukkit-commands-example/src/main/resources/translations --references ../examples/bukkit-commands-example/build/generated/minecraftdevkit/text-references.json --base-locale en-US --locales en-US,de-DE --format json --fail-on ERROR --output ../build/reports/localization.json"
 ```
+
+These paths are relative to the CLI subproject working directory. Replace the example paths with the translation directory and manifest for your application.
 
 The scanner exits `0` for findings below the selected strictness, `1` when strict findings are present, and `2` for invalid arguments or inputs. `--fail-on` accepts `ERROR`, `WARNING`, `none`, or comma-separated finding categories. The Gradle plugin ID `com.trickshotmlg.devkit.localization-scan` registers `scanDevKitTranslations`; configure `devkitLocalizationScan` with translation directory, reference manifest, base locale, required locales, and fail-on categories. It writes `build/reports/minecraftdevkit/localization.json` and declares its source files and report as Gradle inputs and output.
 
