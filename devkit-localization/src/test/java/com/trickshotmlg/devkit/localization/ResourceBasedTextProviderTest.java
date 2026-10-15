@@ -162,6 +162,36 @@ class ResourceBasedTextProviderTest {
     }
 
     @Test
+    void resolvesScriptRegionParentChainAndExposesResolutionProvenance() {
+        ResourceBasedTextProvider provider = ResourceBasedTextProvider.of(List.of(
+                TranslationCatalog.of(Locale.forLanguageTag("zh-Hant"), Map.of("hello", "你好")),
+                TranslationCatalog.of(Locale.forLanguageTag("en-GB"), Map.of("hello", "Hello"))),
+                Locale.forLanguageTag("en-GB"), MissingTranslationPolicy.SHOW_KEY, TextDiagnosticSink.NO_OP);
+
+        TextResolution resolution = provider.resolveWithTrace(TextRef.translated("hello"),
+                Locale.forLanguageTag("zh-Hant-TW"), Map.of());
+
+        assertEquals("你好", PLAIN.serialize(resolution.component()));
+        assertEquals(Optional.of(Locale.forLanguageTag("zh-Hant")), resolution.resolvedLocale());
+        assertEquals(TextResolution.Fallback.PARENT_LOCALE, resolution.fallback());
+        assertEquals(Optional.of("resource-catalog"), resolution.source());
+    }
+
+    @Test
+    void defaultFallbackAlsoWalksItsOwnParentChain() {
+        ResourceBasedTextProvider provider = ResourceBasedTextProvider.of(List.of(
+                TranslationCatalog.of(Locale.forLanguageTag("en"), Map.of("hello", "Hello"))),
+                Locale.forLanguageTag("en-GB"), MissingTranslationPolicy.SHOW_KEY, TextDiagnosticSink.NO_OP);
+
+        TextResolution result = provider.resolveWithTrace(TextRef.translated("hello"),
+                Locale.forLanguageTag("de-AT"), Map.of());
+
+        assertEquals("Hello", PLAIN.serialize(result.component()));
+        assertEquals(Optional.of(Locale.ENGLISH), result.resolvedLocale());
+        assertEquals(TextResolution.Fallback.DEFAULT_LOCALE, result.fallback());
+    }
+
+    @Test
     void classpathLoaderRequiresEveryConfiguredResource() {
         assertThrows(IllegalArgumentException.class, () -> ResourceBasedTextProvider.fromClasspath(
                 getClass().getClassLoader(), "missing-localization-resources", List.of(Locale.US), Locale.US,

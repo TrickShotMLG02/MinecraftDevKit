@@ -13,6 +13,12 @@ public interface TranslationSource {
     /** Loads all locale catalogs from this source. */
     Map<Locale, TranslationCatalog> load() throws IOException;
 
+    /** Source precedence for a translation at the same locale and key. */
+    default Layer layer() { return Layer.EXTERNAL; }
+
     /** Human-readable identifier used in reload diagnostics. */
     default String description() { return getClass().getSimpleName(); }
+
+    /** Supported source priorities. Locale specificity is evaluated before this priority. */
+    enum Layer { BUNDLED, EXTERNAL }
 }

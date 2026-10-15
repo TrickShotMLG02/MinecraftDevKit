@@ -26,16 +26,18 @@ public final class YamlTranslationSource implements TranslationSource {
     private static final Pattern FILE_NAME = Pattern.compile("[A-Za-z0-9_-]+\\.yml");
     private final Loader loader;
     private final String description;
+    private final Layer layer;
 
-    private YamlTranslationSource(Loader loader, String description) {
+    private YamlTranslationSource(Loader loader, String description, Layer layer) {
         this.loader = loader;
         this.description = description;
+        this.layer = layer;
     }
 
     /** Creates an external source. Files may be {@code <tag>.yml} or {@code <tag>/*.yml}. */
     public static YamlTranslationSource directory(Path directory) {
         Objects.requireNonNull(directory, "directory");
-        return new YamlTranslationSource(() -> loadDirectory(directory), "external:" + directory);
+        return new YamlTranslationSource(() -> loadDirectory(directory), "external:" + directory, Layer.EXTERNAL);
     }
 
     /**
@@ -71,7 +73,7 @@ public final class YamlTranslationSource implements TranslationSource {
                 result.put(locale, TranslationCatalog.of(locale, combined));
             }
             return Collections.unmodifiableMap(result);
-        }, "bundled:" + root);
+        }, "bundled:" + root, Layer.BUNDLED);
     }
 
     @Override
@@ -81,6 +83,9 @@ public final class YamlTranslationSource implements TranslationSource {
 
     @Override
     public String description() { return description; }
+
+    @Override
+    public Layer layer() { return layer; }
 
     private static Map<Locale, TranslationCatalog> loadDirectory(Path directory) throws IOException {
         if (!Files.exists(directory)) return Map.of();
