@@ -179,9 +179,7 @@ public final class ResourceBasedTextProvider implements TextProvider {
             if (lookup != null) {
                 template = lookup.value();
                 if (!lookup.locale().equals(requested)) {
-                    TextDiagnostic.Outcome outcome = isLanguageFallback(requested, lookup.locale())
-                            ? TextDiagnostic.Outcome.LANGUAGE_FALLBACK
-                            : TextDiagnostic.Outcome.DEFAULT_LOCALE_FALLBACK;
+                    TextDiagnostic.Outcome outcome = lookup.outcome();
                     report(new TextDiagnostic(TextDiagnostic.Kind.MISSING_TRANSLATION, translationKey, requested,
                             referenceFallbackAvailable, outcome, Optional.empty(), sourceContext));
                 }
@@ -220,24 +218,27 @@ public final class ResourceBasedTextProvider implements TextProvider {
     private Lookup findTranslation(String key, Locale requested) {
         TranslationCatalog requestedCatalog = catalogs.get(requested);
         if (requestedCatalog != null && requestedCatalog.translations().containsKey(key)) {
-            return new Lookup(requested, requestedCatalog.translations().get(key));
+            return new Lookup(requested, requestedCatalog.translations().get(key), null);
         }
         Locale requestedLanguage = languageOnly(requested);
         if (!requestedLanguage.equals(requested)) {
             TranslationCatalog languageCatalog = catalogs.get(requestedLanguage);
             if (languageCatalog != null && languageCatalog.translations().containsKey(key)) {
-                return new Lookup(requestedLanguage, languageCatalog.translations().get(key));
+                return new Lookup(requestedLanguage, languageCatalog.translations().get(key),
+                        TextDiagnostic.Outcome.LANGUAGE_FALLBACK);
             }
         }
         TranslationCatalog defaultCatalog = catalogs.get(defaultLocale);
         if (defaultCatalog.translations().containsKey(key)) {
-            return new Lookup(defaultLocale, defaultCatalog.translations().get(key));
+            return new Lookup(defaultLocale, defaultCatalog.translations().get(key),
+                    TextDiagnostic.Outcome.DEFAULT_LOCALE_FALLBACK);
         }
         Locale defaultLanguage = languageOnly(defaultLocale);
         if (!defaultLanguage.equals(defaultLocale)) {
             TranslationCatalog defaultLanguageCatalog = catalogs.get(defaultLanguage);
             if (defaultLanguageCatalog != null && defaultLanguageCatalog.translations().containsKey(key)) {
-                return new Lookup(defaultLanguage, defaultLanguageCatalog.translations().get(key));
+                return new Lookup(defaultLanguage, defaultLanguageCatalog.translations().get(key),
+                        TextDiagnostic.Outcome.DEFAULT_LOCALE_FALLBACK);
             }
         }
         return null;
@@ -249,10 +250,6 @@ public final class ResourceBasedTextProvider implements TextProvider {
         if (reported.add(identity)) {
             diagnosticSink.report(diagnostic);
         }
-    }
-
-    private static boolean isLanguageFallback(Locale requested, Locale resolved) {
-        return requested.getLanguage().equals(resolved.getLanguage());
     }
 
     private static Locale languageOnly(Locale locale) {
@@ -302,7 +299,7 @@ public final class ResourceBasedTextProvider implements TextProvider {
         }
     }
 
-    private record Lookup(Locale locale, String value) {
+    private record Lookup(Locale locale, String value, TextDiagnostic.Outcome outcome) {
     }
 
     private record DiagnosticIdentity(TextDiagnostic.Kind kind, String key, Locale locale,

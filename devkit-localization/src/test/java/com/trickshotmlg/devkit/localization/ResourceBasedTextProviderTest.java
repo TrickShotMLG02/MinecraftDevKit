@@ -150,6 +150,18 @@ class ResourceBasedTextProviderTest {
     }
 
     @Test
+    void distinguishesDefaultLocaleFallbackFromLanguageCatalogFallback() throws IOException {
+        write("de-DE.properties", "welcome=Willkommen\n");
+        write("en-US.properties", "other=Other\n");
+        List<TextDiagnostic> events = new ArrayList<>();
+        ResourceBasedTextProvider provider = provider(List.of(Locale.GERMANY, Locale.US), Locale.GERMANY,
+                MissingTranslationPolicy.SHOW_KEY, events);
+
+        assertEquals("Willkommen", resolve(provider, "welcome", "de-CH"));
+        assertEquals(TextDiagnostic.Outcome.DEFAULT_LOCALE_FALLBACK, events.get(0).outcome());
+    }
+
+    @Test
     void classpathLoaderRequiresEveryConfiguredResource() {
         assertThrows(IllegalArgumentException.class, () -> ResourceBasedTextProvider.fromClasspath(
                 getClass().getClassLoader(), "missing-localization-resources", List.of(Locale.US), Locale.US,

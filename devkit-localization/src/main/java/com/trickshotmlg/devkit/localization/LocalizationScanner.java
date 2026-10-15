@@ -25,9 +25,15 @@ public final class LocalizationScanner {
                                           LocalizationScanOptions options) {
         LocalizationReport scanned = scan(references, loaded.catalogs(), options);
         ArrayList<LocalizationFinding> combined = new ArrayList<>(scanned.findings());
-        combined.addAll(loaded.findings());
-        boolean fails = scanned.failsBuild() || loaded.findings().stream()
-                .anyMatch(f -> f.severity() == LocalizationFinding.Severity.ERROR);
+        for (LocalizationFinding finding : loaded.findings()) {
+            LocalizationFinding.Severity severity = options.failOn().contains(finding.category())
+                    ? LocalizationFinding.Severity.ERROR
+                    : finding.category() == LocalizationFinding.Category.UNUSED_TRANSLATION
+                        ? LocalizationFinding.Severity.INFO : LocalizationFinding.Severity.WARNING;
+            combined.add(new LocalizationFinding(severity, finding.category(), finding.locale(), finding.key(),
+                    finding.message(), finding.fallbackAvailable()));
+        }
+        boolean fails = combined.stream().anyMatch(finding -> options.failOn().contains(finding.category()));
         return new LocalizationReport(combined, fails);
     }
     /**
@@ -64,8 +70,14 @@ public final class LocalizationScanner {
         TranslationCatalog base = translations.get(options.baseLocale());
         for (TextCatalog.Entry ref : references.entries().values()) {
             if (options.ignoredKeys().contains(ref.key())) continue;
-            boolean baseHasKey = base != null && base.translations().containsKey(ref.key());
-            Set<String> canonical = baseHasKey ? TextFormatter.placeholders(base.translations().get(ref.key())) : Set.of();
+            String baseline = base == null ? null : base.translations().get(ref.key());
+            if (baseline == null) baseline = ref.fallback().orElseGet(() -> locales.stream()
+                    .map(translations::get)
+                    .filter(Objects::nonNull)
+                    .map(catalog -> catalog.translations().get(ref.key()))
+                    .filter(Objects::nonNull)
+                    .findFirst().orElse(null));
+            Set<String> canonical = baseline == null ? Set.of() : TextFormatter.placeholders(baseline);
             for (Locale locale : locales) {
                 TranslationCatalog catalog = translations.get(locale);
                 String value = catalog == null ? null : catalog.translations().get(ref.key());
@@ -81,7 +93,7 @@ public final class LocalizationScanner {
                         add(findings, options, LocalizationFinding.Category.MISSING_LOCALE_COVERAGE,
                                 OptionalLocale.of(locale), ref.key(), "Base locale translation is not covered", fallback);
                     }
-                } else if (baseHasKey && !TextFormatter.placeholders(value).equals(canonical)) {
+                } else if (baseline != null && !TextFormatter.placeholders(value).equals(canonical)) {
                     add(findings, options, LocalizationFinding.Category.PLACEHOLDER_MISMATCH,
                             OptionalLocale.of(locale), ref.key(), "Placeholder mismatch: expected " + canonical
                                     + " but found " + TextFormatter.placeholders(value), ref.fallback().isPresent());

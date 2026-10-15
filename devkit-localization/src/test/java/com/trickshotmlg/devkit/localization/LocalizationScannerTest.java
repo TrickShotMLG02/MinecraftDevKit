@@ -61,6 +61,46 @@ class LocalizationScannerTest {
         String json = LocalizationReportJson.write(report);
         assertTrue(json.contains("\"failsBuild\" : true"));
         assertTrue(json.contains("MISSING_FALLBACK"));
+        assertTrue(report.counts().containsKey("error"));
+        assertFalse(report.counts().containsKey("ERROR"));
         assertEquals(json, LocalizationReportJson.write(report));
+    }
+
+    @Test void comparesPlaceholdersWhenBaseLocaleTranslationIsMissing() {
+        TextCatalog references = TextCatalog.builder()
+                .add(TextRef.translated("welcome", "Hello {player}"), "notification", "welcome")
+                .build();
+        var german = TranslationCatalog.of(Locale.GERMANY, Map.of("welcome", "Hallo {player}"));
+        var french = TranslationCatalog.of(Locale.FRANCE, Map.of("welcome", "Bonjour {username}"));
+        var options = new LocalizationScanOptions(Locale.US, Set.of(Locale.US, Locale.GERMANY, Locale.FRANCE),
+                Set.of(LocalizationFinding.Category.PLACEHOLDER_MISMATCH), Set.of());
+
+        var report = LocalizationScanner.scan(references,
+                Map.of(Locale.GERMANY, german, Locale.FRANCE, french), options);
+
+        assertTrue(report.findings().stream().anyMatch(finding ->
+                finding.category() == LocalizationFinding.Category.PLACEHOLDER_MISMATCH
+                        && finding.locale().orElseThrow().equals("fr-FR")));
+    }
+
+    @Test void resourceFindingsFollowConfiguredStrictness() throws IOException {
+        Files.writeString(temp.resolve("en-US.properties"), "key=first\nkey=second\n");
+        Files.writeString(temp.resolve("de-DE.properties"), "bad=\\u12GZ\n");
+        var loaded = TranslationResourceLoader.load(temp);
+        TextCatalog references = TextCatalog.builder().build();
+
+        var warningOnly = LocalizationScanner.scan(references, loaded,
+                new LocalizationScanOptions(Locale.US, Set.of(), Set.of(), Set.of()));
+        assertFalse(warningOnly.failsBuild());
+        assertTrue(warningOnly.findings().stream().allMatch(finding ->
+                finding.severity() != LocalizationFinding.Severity.ERROR));
+
+        var strict = LocalizationScanner.scan(references, loaded,
+                new LocalizationScanOptions(Locale.US, Set.of(),
+                        Set.of(LocalizationFinding.Category.INVALID_RESOURCE), Set.of()));
+        assertTrue(strict.failsBuild());
+        assertTrue(strict.findings().stream().filter(finding ->
+                finding.category() == LocalizationFinding.Category.INVALID_RESOURCE).allMatch(finding ->
+                finding.severity() == LocalizationFinding.Severity.ERROR));
     }
 }

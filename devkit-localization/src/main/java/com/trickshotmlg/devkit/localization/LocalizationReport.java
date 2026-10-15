@@ -17,7 +17,8 @@ public final class LocalizationReport {
                 .thenComparing(f -> f.category().name())).toList();
         TreeMap<String, Integer> totals = new TreeMap<>();
         for (LocalizationFinding.Severity severity : LocalizationFinding.Severity.values()) {
-            totals.put(severity.name(), (int) this.findings.stream().filter(f -> f.severity() == severity).count());
+            totals.put(severity.name().toLowerCase(java.util.Locale.ROOT),
+                    (int) this.findings.stream().filter(f -> f.severity() == severity).count());
         }
         this.counts = java.util.Collections.unmodifiableMap(totals);
         this.failsBuild = failsBuild;
