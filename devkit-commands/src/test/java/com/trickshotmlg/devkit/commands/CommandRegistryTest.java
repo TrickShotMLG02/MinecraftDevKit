@@ -28,7 +28,7 @@ class CommandRegistryTest {
         assertEquals("requests", definition.roots().get(0).children().get(0).name());
         assertThrows(UnsupportedOperationException.class, () -> definition.roots().clear());
         CommandRegistry.Builder builder = CommandRegistry.builder();
-        builder.root("x", root -> { });
+        builder.root("x", root -> root.execute(context -> { }));
         builder.build();
         assertThrows(IllegalStateException.class, () -> builder.root("later", root -> { }));
     }
@@ -79,18 +79,18 @@ class CommandRegistryTest {
     @Test
     void rejectsDuplicateRootNamesAndAliases() {
         assertThrows(IllegalArgumentException.class, () -> CommandRegistry.builder()
-                .root("friends", root -> root.aliases("f"))
-                .root("f", root -> { }).build());
+                .root("friends", root -> root.aliases("f").execute(context -> { }))
+                .root("f", root -> root.execute(context -> { })).build());
         assertThrows(IllegalArgumentException.class, () -> CommandRegistry.builder()
-                .root("friends", root -> root.aliases("f", "f")).build());
+                .root("friends", root -> root.aliases("f", "f").execute(context -> { })).build());
     }
 
     @Test
     void rejectsDuplicateSiblingLiteralsAndAliases() {
         assertThrows(IllegalArgumentException.class, () -> CommandRegistry.builder()
                 .root("friends", root -> root
-                        .subcommand("list", child -> child.aliases("l"))
-                        .subcommand("remove", child -> child.aliases("l"))).build());
+                        .subcommand("list", child -> child.aliases("l").execute(context -> { }))
+                        .subcommand("remove", child -> child.aliases("l").execute(context -> { }))).build());
     }
 
     @Test
@@ -110,10 +110,22 @@ class CommandRegistryTest {
     }
 
     @Test
+    void rejectsNodesThatCannotBeDispatchedOrHaveTheirArgumentsConsumed() {
+        assertThrows(IllegalArgumentException.class,
+                () -> CommandRegistry.builder().root("empty", root -> { }).build());
+        assertThrows(IllegalArgumentException.class,
+                () -> CommandRegistry.builder().root("empty", root -> root
+                        .required(TARGET).subcommand("child", child -> child.execute(context -> { }))).build());
+        assertThrows(IllegalArgumentException.class,
+                () -> CommandRegistry.builder().root("empty", root -> root.required(TARGET)).build());
+    }
+
+    @Test
     void keepsLiteralBranchAlongsideArgumentBranchForCloudLiteralPrecedence() {
         CommandDefinition definition = CommandRegistry.builder().root("friends", root -> root
                 .subcommand("accept", accept -> accept
                         .required(TARGET)
+                        .execute(context -> { })
                         .subcommand("all", all -> all.execute(context -> { })))).build();
         CommandNode accept = definition.roots().get(0).children().get(0);
         assertEquals(ArgumentType.WORD, accept.arguments().get(0).argument().type());
@@ -139,7 +151,8 @@ class CommandRegistryTest {
     void commandTextMetadataAcceptsLiteralAndTranslatedReferences() {
         CommandDefinition definition = CommandRegistry.builder().root("friends", root -> root
                 .description(TextRef.translated("commands.friends.description", "Friends"))
-                .usage("Usage: /friends")).build();
+                .usage("Usage: /friends")
+                .execute(context -> { })).build();
         assertEquals("commands.friends.description", definition.roots().get(0).description().orElseThrow()
                 .translationKey().orElseThrow());
         assertEquals("Usage: /friends", ((TextRef.Literal) definition.roots().get(0).usageOverride().orElseThrow()).value());

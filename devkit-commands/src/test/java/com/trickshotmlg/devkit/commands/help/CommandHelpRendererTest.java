@@ -54,7 +54,8 @@ class CommandHelpRendererTest {
     @Test
     void respectsUsageOverridesAndResolvesThemAtRenderTime() {
         var definition = CommandRegistry.builder().root("friends", root -> root
-                .usage(com.trickshotmlg.devkit.text.TextRef.translated("commands.friends.usage", "Use /friends")))
+                .usage(com.trickshotmlg.devkit.text.TextRef.translated("commands.friends.usage", "Use /friends"))
+                .execute(context -> { }))
                 .build();
         CommandUsageRenderer renderer = new CommandUsageRenderer(new StaticTextProvider(MissingTranslationPolicy.SHOW_KEY));
         assertEquals(List.of("Use /friends"), renderer.usages(definition.roots().get(0), new TestSender()));
@@ -64,9 +65,10 @@ class CommandHelpRendererTest {
     void createsLocalizedHelpWithVisibleChildrenAndPagination() {
         var definition = CommandRegistry.builder().root("friends", root -> root
                 .description("Friend commands")
-                .subcommand("list", list -> list.description("List friends"))
-                .subcommand("add", add -> add.aliases("invite").description("Add a friend"))
-                .subcommand("remove", remove -> remove.description("Remove a friend"))).build();
+                .execute(context -> { })
+                .subcommand("list", list -> list.description("List friends").execute(context -> { }))
+                .subcommand("add", add -> add.aliases("invite").description("Add a friend").execute(context -> { }))
+                .subcommand("remove", remove -> remove.description("Remove a friend").execute(context -> { }))).build();
         CommandNode root = definition.roots().get(0);
         TestSender sender = new TestSender();
         CommandHelpRenderer renderer = new CommandHelpRenderer(new StaticTextProvider(MissingTranslationPolicy.SHOW_KEY));
@@ -85,8 +87,8 @@ class CommandHelpRendererTest {
         Permission staff = namespace.permission("staff");
         namespace.build();
         var definition = CommandRegistry.builder().root("friends", root -> root
-                .subcommand("list", list -> { })
-                .subcommand("admin", admin -> admin.permission(staff))).build();
+                .subcommand("list", list -> list.execute(context -> { }))
+                .subcommand("admin", admin -> admin.permission(staff).execute(context -> { }))).build();
         TestSender sender = new TestSender();
         List<String> lines = new CommandHelpRenderer(new StaticTextProvider(MissingTranslationPolicy.SHOW_KEY))
                 .page(definition.roots().get(0), definition.roots().get(0), "/friends", sender, 1, 10)
@@ -101,7 +103,8 @@ class CommandHelpRendererTest {
         Permission staff = namespace.permission("staff");
         namespace.build();
         var definition = CommandRegistry.builder().root("friends", root -> root
-                .subcommand("admin", admin -> admin.permission(staff).description("Secret administration"))
+                .subcommand("admin", admin -> admin.permission(staff).description("Secret administration")
+                        .execute(context -> { }))
         ).build();
         CommandNode root = definition.roots().get(0);
         CommandNode admin = root.children().get(0);

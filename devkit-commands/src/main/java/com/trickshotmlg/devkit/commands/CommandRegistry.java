@@ -70,6 +70,12 @@ public final class CommandRegistry {
     }
 
     private static void validateNode(CommandNodeBuilder node, String path) {
+        if (node.executorInternal() == null && !node.argumentsInternal().isEmpty()) {
+            throw new IllegalArgumentException("Non-executable command node cannot declare arguments at " + path);
+        }
+        if (node.executorInternal() == null && node.childrenInternal().isEmpty()) {
+            throw new IllegalArgumentException("Command node must define an executor or at least one subcommand at " + path);
+        }
         Set<String> argumentNames = new LinkedHashSet<>();
         boolean optionalSeen = false;
         for (int i = 0; i < node.argumentsInternal().size(); i++) {
