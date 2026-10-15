@@ -7,7 +7,7 @@ import com.trickshotmlg.devkit.commands.CommandContext;
 import com.trickshotmlg.devkit.commands.CommandDefinition;
 import com.trickshotmlg.devkit.commands.CommandNode;
 import com.trickshotmlg.devkit.commands.CommandSender;
-import com.trickshotmlg.devkit.commands.SenderKind;
+import com.trickshotmlg.devkit.commands.help.CommandHelpRenderer;
 import org.incendo.cloud.Command;
 import org.incendo.cloud.CommandManager;
 import org.incendo.cloud.component.CommandComponent;
@@ -21,7 +21,6 @@ import org.incendo.cloud.parser.standard.IntegerParser;
 import org.incendo.cloud.parser.standard.LongParser;
 import org.incendo.cloud.parser.standard.StringParser;
 import org.incendo.cloud.parser.standard.UUIDParser;
-import org.incendo.cloud.permission.PredicatePermission;
 import org.incendo.cloud.suggestion.Suggestion;
 
 import java.util.ArrayList;
@@ -42,10 +41,18 @@ public final class CloudCommandRegistrar<C> {
     private final CommandManager<C> manager;
     private final Function<C, CommandSender> senderAdapter;
     private final Map<Argument<?>, ParserDescriptor<? super C, ?>> customParsers = new IdentityHashMap<>();
+    private final CommandHelpRenderer helpRenderer;
 
     public CloudCommandRegistrar(CommandManager<C> manager, Function<C, CommandSender> senderAdapter) {
+        this(manager, senderAdapter, null);
+    }
+
+    /** Creates a registrar that also turns invocations of non-executable parent nodes into generated help. */
+    public CloudCommandRegistrar(CommandManager<C> manager, Function<C, CommandSender> senderAdapter,
+                                 CommandHelpRenderer helpRenderer) {
         this.manager = Objects.requireNonNull(manager, "manager");
         this.senderAdapter = Objects.requireNonNull(senderAdapter, "senderAdapter");
+        this.helpRenderer = helpRenderer;
     }
 
     /** Registers a parser descriptor for a {@link ArgumentType#CUSTOM custom argument}. */
@@ -83,21 +90,29 @@ public final class CloudCommandRegistrar<C> {
         else path.add(node);
 
         if (node.executable()) registerExecutable(root, node, path);
+        else if (helpRenderer != null && !node.children().isEmpty() && node.arguments().isEmpty()) {
+            registerHelp(root, node, path);
+        }
         for (CommandNode child : node.children()) registerNode(root, child, path);
     }
 
-    private void registerExecutable(CommandNode root, CommandNode endpoint, List<CommandNode> path) {
-        Command.Builder<C> builder = manager.commandBuilder(root.name(), root.aliases().toArray(String[]::new));
-        for (int index = 1; index < path.size(); index++) {
-            CommandNode literal = path.get(index);
-            builder = builder.literal(literal.name(), literal.aliases().toArray(String[]::new));
+    private void registerHelp(CommandNode root, CommandNode selected, List<CommandNode> path) {
+        Command.Builder<C> builder = commandBuilder(root, path);
+        if (!selected.permissionRequirements().isEmpty() || !selected.senderRequirements().isEmpty()) {
+            builder = builder.permission(new CommandAccessPermission<>(selected, senderAdapter));
         }
+        String commandPath = path.stream().map(CommandNode::name).collect(java.util.stream.Collectors.joining(" ", "/", ""));
+        manager.command(builder.handler(context -> helpRenderer.send(root, selected, commandPath,
+                Objects.requireNonNull(senderAdapter.apply(context.sender()), "senderAdapter result"), 1, 8)));
+    }
+
+    private void registerExecutable(CommandNode root, CommandNode endpoint, List<CommandNode> path) {
+        Command.Builder<C> builder = commandBuilder(root, path);
         List<Argument<?>> endpointArguments = new ArrayList<>();
         for (ArgumentBinding<?> binding : endpoint.arguments()) endpointArguments.add(binding.argument());
         for (ArgumentBinding<?> binding : endpoint.arguments()) builder = addArgument(builder, binding, endpointArguments);
         if (!endpoint.permissionRequirements().isEmpty() || !endpoint.senderRequirements().isEmpty()) {
-            builder = builder.permission(PredicatePermission.of(sender ->
-                    endpoint.isVisibleTo(Objects.requireNonNull(senderAdapter.apply(sender), "senderAdapter result"))));
+            builder = builder.permission(new CommandAccessPermission<>(endpoint, senderAdapter));
         }
         Command.Builder<C> executableBuilder = builder.handler(cloudContext -> {
             CommandSender sender = Objects.requireNonNull(senderAdapter.apply(cloudContext.sender()), "senderAdapter result");
@@ -114,6 +129,15 @@ public final class CloudCommandRegistrar<C> {
             }
         });
         manager.command(executableBuilder);
+    }
+
+    private Command.Builder<C> commandBuilder(CommandNode root, List<CommandNode> path) {
+        Command.Builder<C> builder = manager.commandBuilder(root.name(), root.aliases().toArray(String[]::new));
+        for (int index = 1; index < path.size(); index++) {
+            CommandNode literal = path.get(index);
+            builder = builder.literal(literal.name(), literal.aliases().toArray(String[]::new));
+        }
+        return builder;
     }
 
     private Command.Builder<C> addArgument(Command.Builder<C> builder, ArgumentBinding<?> binding,

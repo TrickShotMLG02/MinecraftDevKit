@@ -60,3 +60,18 @@ Each executable command path becomes a Cloud command. Literal child branches and
 The command handler runs on the execution coordinator configured for the supplied Cloud manager. Suggestions run through Cloud's suggestion pipeline. Bukkit integrations must select a coordinator compatible with the platform's thread rules and should not move Bukkit API access to an arbitrary executor.
 
 Text descriptions are deliberately not copied into Cloud's static descriptions: translated references must be resolved for the current sender when rendering help. The Cloud manager remains available to applications for advanced parsers, preprocessors, exception handling, and other Cloud features.
+
+## Generated usage, help, and errors
+
+Pass a `CommandHelpRenderer` to the registrar to make non-executable parent commands show generated help:
+
+```java
+CommandHelpRenderer help = new CommandHelpRenderer(textProvider);
+new CloudCommandRegistrar<>(cloudManager, senderAdapter, help).register(definition);
+```
+
+Usage is derived from the registered tree, including required and optional arguments, nested alternatives, aliases, and explicit `usage(TextRef)` overrides. Permissions and sender restrictions are evaluated using the same inherited checks used by Cloud dispatch, so hidden child commands are omitted from suggestions and generated help. When a node has both an argument form and literal child forms, help lists each valid form separately.
+
+Install `CloudCommandErrorHandler` once per Cloud manager. It maps Cloud's exception controller events to `CommandErrorCategory`, resolves the configured `TextRef` at the sender's locale, and reports unexpected execution failures through an injectable `CommandErrorReporter`. The default reporter uses the JDK system logger; player-facing messages never include exception details. Applications can replace any message with `CommandErrorMessages.with(category, textRef)`.
+
+Cloud exposes the expected syntax for invalid syntax and parse failures, but it does not expose the original raw input consistently. The `{input}` error placeholder is therefore empty for the built-in Cloud bridge unless a platform or custom parser supplies a more specific handler. Required-argument omissions are identified from Cloud's expected syntax; malformed values map to `INVALID_ARGUMENT`.

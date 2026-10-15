@@ -5,7 +5,10 @@ import com.trickshotmlg.devkit.commands.Arguments;
 import com.trickshotmlg.devkit.commands.CommandRegistry;
 import com.trickshotmlg.devkit.commands.CommandSender;
 import com.trickshotmlg.devkit.commands.SenderKind;
+import com.trickshotmlg.devkit.commands.help.CommandHelpRenderer;
 import com.trickshotmlg.devkit.permissions.Permission;
+import com.trickshotmlg.devkit.text.MissingTranslationPolicy;
+import com.trickshotmlg.devkit.text.StaticTextProvider;
 import net.kyori.adventure.text.Component;
 import org.incendo.cloud.CommandManager;
 import org.incendo.cloud.execution.ExecutionCoordinator;
@@ -14,6 +17,7 @@ import org.incendo.cloud.parser.standard.UUIDParser;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
@@ -139,14 +143,34 @@ class CloudCommandRegistrarTest {
                 .noneMatch("admin"::equals));
     }
 
+    @Test
+    void nonExecutableParentsSendAccessFilteredGeneratedHelp() {
+        TestManager manager = new TestManager();
+        Sender sender = new Sender();
+        var definition = CommandRegistry.builder().root("friends", root -> root
+                .description("Friend commands")
+                .subcommand("list", list -> list.execute(context -> { }))
+                .subcommand("add", add -> add.execute(context -> { }))).build();
+        var help = new CommandHelpRenderer(new StaticTextProvider(MissingTranslationPolicy.SHOW_KEY));
+        new CloudCommandRegistrar<>(manager, Sender::asCommandSender, help).register(definition);
+
+        manager.commandExecutor().executeCommand(sender, "friends").join();
+        List<String> output = sender.messages.stream()
+                .map(net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText()::serialize)
+                .toList();
+        assertTrue(output.contains("Friend commands"));
+        assertTrue(output.contains("/friends <list|add>"));
+    }
+
     private static final class Sender {
         private final Set<String> permissions = new HashSet<>();
+        private final List<Component> messages = new java.util.ArrayList<>();
         CommandSender asCommandSender() {
             return new CommandSender() {
                 @Override public SenderKind kind() { return SenderKind.PLAYER; }
                 @Override public Locale locale() { return Locale.US; }
                 @Override public boolean hasPermission(Permission permission) { return permissions.contains(permission.node()); }
-                @Override public void sendMessage(Component message) { }
+                @Override public void sendMessage(Component message) { messages.add(message); }
             };
         }
     }
