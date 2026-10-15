@@ -59,16 +59,23 @@ tasks.shadowJar {
     archiveClassifier.set("")
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
     mergeServiceFiles()
-    // Adventure is supplied by Paper. Keeping it out avoids a second incompatible copy.
-    exclude("net/kyori/**")
+    // Adventure API is supplied by Paper; keep MiniMessage bundled and isolated for localization.
+    dependencies {
+        exclude(dependency("net.kyori:adventure-api:.*"))
+        exclude(dependency("net.kyori:adventure-key:.*"))
+    }
     relocate("org.incendo.cloud", "com.trickshotmlg.devkit.examples.internal.cloud")
     relocate("io.leangen.geantyref", "com.trickshotmlg.devkit.examples.internal.geantyref")
     relocate("org.yaml.snakeyaml", "com.trickshotmlg.devkit.examples.internal.snakeyaml")
+    relocate("net.kyori.adventure.text.minimessage", "com.trickshotmlg.devkit.examples.internal.minimessage")
     from(rootProject.file("../../THIRD-PARTY-NOTICES.md")) {
         into("META-INF")
         rename { "THIRD-PARTY-NOTICES.md" }
     }
     from(rootProject.file("../../THIRD-PARTY-LICENSES/LICENSE-APACHE-2.0.txt")) {
+        into("META-INF/licenses")
+    }
+    from(rootProject.file("../../THIRD-PARTY-LICENSES/LICENSE-MIT-ADVENTURE.txt")) {
         into("META-INF/licenses")
     }
 }

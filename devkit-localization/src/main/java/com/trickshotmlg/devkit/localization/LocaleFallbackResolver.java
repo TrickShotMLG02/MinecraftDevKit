@@ -13,6 +13,8 @@ public final class LocaleFallbackResolver {
     /**
      * Normalizes a locale by removing extensions, which do not identify separate translation
      * catalogs. The language, script, region, and variant are retained.
+     * @param locale locale to normalize
+     * @return canonical locale without extensions
      */
     public static Locale normalize(Locale locale) {
         Objects.requireNonNull(locale, "locale");
@@ -24,7 +26,11 @@ public final class LocaleFallbackResolver {
         return normalized;
     }
 
-    /** Parses and canonicalizes a strict BCP 47 locale tag. */
+    /**
+     * Parses and canonicalizes a strict BCP 47 locale tag.
+     * @param languageTag locale tag to parse
+     * @return normalized locale
+     */
     public static Locale parse(String languageTag) {
         Objects.requireNonNull(languageTag, "languageTag");
         try {
@@ -41,6 +47,8 @@ public final class LocaleFallbackResolver {
     /**
      * Returns the locale followed by progressively less specific parents. Subtags are removed
      * from the right in BCP 47 order: variant, region, then script. Extensions are discarded.
+     * @param locale requested locale
+     * @return immutable ordered lookup chain
      */
     public static List<Locale> parents(Locale locale) {
         Locale current = normalize(locale);
@@ -67,6 +75,10 @@ public final class LocaleFallbackResolver {
     /**
      * Returns requested parents followed, when enabled, by configured fallback parents. Repeated
      * locales are emitted once at their first occurrence.
+     * @param requested requested locale
+     * @param defaultFallback optional configured default locale
+     * @param fallbackEnabled whether the configured default chain is included
+     * @return immutable locale lookup chain
      */
     public static List<Locale> chain(Locale requested, Locale defaultFallback, boolean fallbackEnabled) {
         LinkedHashSet<Locale> locales = new LinkedHashSet<>(parents(requested));

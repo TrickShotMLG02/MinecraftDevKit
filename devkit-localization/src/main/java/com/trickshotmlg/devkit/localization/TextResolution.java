@@ -9,6 +9,7 @@ import java.util.Optional;
 /** A rendered message together with the locale/fallback path that produced it. */
 public record TextResolution(Component component, Locale requestedLocale, Optional<Locale> resolvedLocale,
                              Fallback fallback, Optional<String> source) {
+    /** Validates the rendered message and its provenance values. */
     public TextResolution {
         Objects.requireNonNull(component, "component");
         Objects.requireNonNull(requestedLocale, "requestedLocale");

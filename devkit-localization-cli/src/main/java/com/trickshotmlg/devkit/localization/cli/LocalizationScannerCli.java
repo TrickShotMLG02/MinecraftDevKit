@@ -71,10 +71,18 @@ public final class LocalizationScannerCli {
             var catalog = TextCatalogManifest.read(references);
             List<TranslationSource> sources = new ArrayList<>();
             List<com.trickshotmlg.devkit.localization.LocalizationFinding> sourceFindings = new ArrayList<>();
-            boolean loadProperties = resourceFormat.equals("properties")
-                    || resourceFormat.equals("auto") && containsExtension(translations, ".properties");
-            boolean loadYaml = resourceFormat.equals("yaml")
-                    || resourceFormat.equals("auto") && containsExtension(translations, ".yml");
+            boolean translationDirectory = Files.isDirectory(translations);
+            if (!translationDirectory) {
+                sourceFindings.add(new com.trickshotmlg.devkit.localization.LocalizationFinding(
+                        LocalizationFinding.Severity.ERROR, LocalizationFinding.Category.INVALID_RESOURCE,
+                        java.util.Optional.empty(), translations.toString(),
+                        Files.exists(translations) ? "Translation path is not a directory"
+                                : "Translation directory does not exist", false));
+            }
+            boolean loadProperties = translationDirectory && (resourceFormat.equals("properties")
+                    || resourceFormat.equals("auto") && containsExtension(translations, ".properties"));
+            boolean loadYaml = translationDirectory && (resourceFormat.equals("yaml")
+                    || resourceFormat.equals("auto") && containsExtension(translations, ".yml"));
             if (loadProperties) {
                 var loaded = TranslationResourceLoader.load(translations);
                 Path propertiesDirectory = translations;

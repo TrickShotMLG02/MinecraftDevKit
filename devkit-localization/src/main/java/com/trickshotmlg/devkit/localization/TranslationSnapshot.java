@@ -69,9 +69,14 @@ public final class TranslationSnapshot {
         TreeMap<Locale, MutableLayers> merged = new TreeMap<>(Comparator.comparing(Locale::toLanguageTag));
         input.forEach((locale, catalog) -> {
             Locale normalized = LocaleFallbackResolver.normalize(locale);
+            Objects.requireNonNull(catalog, "catalog");
+            if (!normalized.equals(LocaleFallbackResolver.normalize(catalog.locale()))) {
+                throw new IllegalArgumentException("Catalog locale " + catalog.locale().toLanguageTag()
+                        + " does not match map key " + normalized.toLanguageTag());
+            }
             MutableLayers values = new MutableLayers();
             Map<String, String> target = layer == TranslationSource.Layer.EXTERNAL ? values.external : values.bundled;
-            target.putAll(Objects.requireNonNull(catalog, "catalog").translations());
+            target.putAll(catalog.translations());
             if (merged.putIfAbsent(normalized, values) != null) throw new IllegalArgumentException("Duplicate catalog locale " + normalized);
         });
         TreeMap<Locale, CatalogLayers> immutable = new TreeMap<>(Comparator.comparing(Locale::toLanguageTag));

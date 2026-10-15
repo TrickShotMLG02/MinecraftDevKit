@@ -12,18 +12,27 @@ import java.util.List;
  */
 @FunctionalInterface
 public interface TranslationSource {
-    /** Loads all locale catalogs from this source. */
+    /**
+     * Loads all locale catalogs from this source.
+     * @return catalog map
+     * @throws IOException if the source cannot be read or validated
+     */
     Map<Locale, TranslationCatalog> load() throws IOException;
 
-    /** Source precedence for a translation at the same locale and key. */
+    /** Source precedence for a translation at the same locale and key. @return source layer */
     default Layer layer() { return Layer.EXTERNAL; }
 
-    /** External directories that may be watched for changes; bundled sources return none. */
+    /** External directories that may be watched for changes; bundled sources return none. @return watch roots */
     default List<Path> watchDirectories() { return List.of(); }
 
-    /** Human-readable identifier used in reload diagnostics. */
+    /** Human-readable identifier used in reload diagnostics. @return source description */
     default String description() { return getClass().getSimpleName(); }
 
     /** Supported source priorities. Locale specificity is evaluated before this priority. */
-    enum Layer { BUNDLED, EXTERNAL }
+    enum Layer {
+        /** Packaged defaults distributed by the application. */
+        BUNDLED,
+        /** User-editable files that override bundled values at the same locale. */
+        EXTERNAL
+    }
 }

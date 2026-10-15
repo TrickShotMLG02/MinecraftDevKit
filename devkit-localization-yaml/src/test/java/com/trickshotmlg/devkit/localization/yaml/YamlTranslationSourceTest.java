@@ -59,6 +59,24 @@ class YamlTranslationSourceTest {
     }
 
     @Test
+    void limitsAliasesAndDocumentSize() {
+        StringBuilder aliases = new StringBuilder("base: &base {message: \"Hello\"}\n");
+        for (int index = 0; index < 24; index++) aliases.append("copy").append(index).append(": *base\n");
+        assertThrows(IOException.class, () -> YamlCatalogParser.parse(stream(aliases.toString()), "aliases.yml"));
+        assertThrows(IOException.class, () -> YamlCatalogParser.parse(stream("key: \"" + "x".repeat(1_048_577)
+                + "\"\n"), "large.yml"));
+    }
+
+    @Test
+    void bundledSourcesLoadRootFilesAndExplicitMultiFileIndexes() throws Exception {
+        var source = YamlTranslationSource.bundled(getClass().getClassLoader(), "yaml-fixture", "en", "fr");
+        var catalogs = source.load();
+        assertEquals("Hello", catalogs.get(Locale.ENGLISH).translations().get("greeting"));
+        assertEquals(Map.of("greeting", "Bonjour", "menu.open", "Ouvrir"),
+                catalogs.get(Locale.FRENCH).translations());
+    }
+
+    @Test
     void rejectsSamePriorityRootAndDirectoryCollisionsAndMalformedLocales() throws Exception {
         Files.writeString(temp.resolve("en.yml"), "a: root\n");
         Files.createDirectories(temp.resolve("en"));

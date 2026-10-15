@@ -41,7 +41,7 @@ arguments:
 friends:
   list: "Seite {page} wird angezeigt."
   add:
-    success: "{player} wurde als Freund hinzugefügt."
+    success: "<green>{player} wurde als Freund hinzugefügt."
   remove:
     success: "{player} wurde als Freund entfernt."
 requests:

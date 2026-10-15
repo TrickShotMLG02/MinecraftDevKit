@@ -14,15 +14,17 @@ plugins {
 }
 
 devkitLocalizationScan {
-    translationsDirectory.set(layout.projectDirectory.dir("src/main/resources/translations"))
+    translationsDirectory.set(layout.projectDirectory.dir("src/main/resources/lang"))
     referenceManifest.set(layout.projectDirectory.file("src/main/localization/text-references.json"))
     baseLocale.set("en-US")
+    defaultFallbackLocale.set("en-US")
+    defaultFallbackEnabled.set(true)
     requiredLocales.set(listOf("en-US", "de-DE"))
     failOn.set(listOf("MISSING_FALLBACK", "PLACEHOLDER_MISMATCH", "INVALID_RESOURCE"))
 }
 ```
 
-Run `scanDevKitTranslations` directly or attach it to `check`. It writes a deterministic JSON report to `build/reports/minecraftdevkit/localization.json`. Defaults expect `src/main/resources/translations`, `src/main/localization/text-references.json`, and base locale `en-US`. The task declares its directory and manifest as inputs and the JSON report as its output; it supports Gradle configuration cache.
+Run `scanDevKitTranslations` directly or attach it to `check`. It reads `.properties` and `.yml` files recursively, combines locale files using runtime-equivalent locale/source precedence, and writes a deterministic JSON report to `build/reports/minecraftdevkit/localization.json`. Defaults expect `src/main/resources/translations`, `src/main/localization/text-references.json`, and base/default fallback locale `en-US`. Parent-locale coverage is informational; configured default-fallback use is reported separately. The task declares its directory and manifest as inputs and the JSON report as its output; it supports Gradle configuration cache.
 
 Reference manifests can be generated from `TextCatalogManifest.write(...)`, including command descriptions, usage overrides, argument descriptions, framework error messages, and application-owned references. Dynamic translation keys must be registered explicitly; arbitrary Java source is not scanned with regexes. A fallback changes what text is displayed, but does not suppress a missing-translation finding.
 

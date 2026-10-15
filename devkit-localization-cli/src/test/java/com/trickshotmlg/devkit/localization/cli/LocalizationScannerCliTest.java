@@ -60,4 +60,33 @@ class LocalizationScannerCliTest {
         assertEquals(1, exit);
         assertTrue(stdout.toString().contains("INVALID_RESOURCE"));
     }
+
+    @Test void missingTranslationDirectoryIsReportedAsInvalidResource() throws Exception {
+        Path refs = temp.resolve("missing-dir-refs.json");
+        TextCatalogManifest.write(TextCatalog.builder().build(), refs);
+        ByteArrayOutputStream stdout = new ByteArrayOutputStream();
+        int exit = LocalizationScannerCli.run(new String[]{"--translations", temp.resolve("absent").toString(),
+                        "--references", refs.toString(), "--format", "json"},
+                new PrintStream(stdout), new PrintStream(new ByteArrayOutputStream()));
+
+        assertEquals(1, exit);
+        assertTrue(stdout.toString().contains("INVALID_RESOURCE"));
+        assertTrue(stdout.toString().contains("Translation directory does not exist"));
+    }
+
+    @Test void translationFileUsedAsDirectoryProducesOneInvalidResourceFinding() throws Exception {
+        Path notDirectory = temp.resolve("translations.yml");
+        Files.writeString(notDirectory, "hello: \"Hello\"\n");
+        Path refs = temp.resolve("file-path-refs.json");
+        TextCatalogManifest.write(TextCatalog.builder().build(), refs);
+        ByteArrayOutputStream stdout = new ByteArrayOutputStream();
+        int exit = LocalizationScannerCli.run(new String[]{"--translations", notDirectory.toString(),
+                        "--references", refs.toString(), "--resource-format", "yaml", "--format", "json"},
+                new PrintStream(stdout), new PrintStream(new ByteArrayOutputStream()));
+
+        String report = stdout.toString();
+        assertEquals(1, exit);
+        assertEquals(1, report.split("INVALID_RESOURCE", -1).length - 1);
+        assertTrue(report.contains("Translation path is not a directory"));
+    }
 }

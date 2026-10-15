@@ -1,6 +1,6 @@
 # MinecraftDevKit Bukkit Commands Example
 
-This is an independent JavaPlugin build demonstrating the command, permission, localization, and scanner APIs together. It resolves MinecraftDevKit artifacts through Maven Local and does not include Gradle project dependencies on the repository root.
+This is an independent JavaPlugin build demonstrating command, permission, reloadable YAML localization, and scanner APIs together. It resolves MinecraftDevKit artifacts through Maven Local and does not include Gradle project dependencies on the repository root.
 
 ## Prerequisites and build
 
@@ -22,9 +22,39 @@ cd examples/bukkit-commands-example
 ./gradlew clean build
 ```
 
-The build compiles Java definitions, generates a text-reference manifest from the compiled command tree, strictly scans the English and German catalogs, generates and merges Bukkit permission metadata, and creates one deployable shaded plugin at `build/libs/minecraftdevkit-bukkit-commands-example-0.1.0-SNAPSHOT.jar`.
+The build compiles Java definitions, generates a text-reference manifest from the compiled command tree, strictly scans the English and German catalogs plus partial regional locales, generates and merges Bukkit permission metadata, and creates one deployable shaded plugin at `build/libs/minecraftdevkit-bukkit-commands-example-0.1.0-SNAPSHOT.jar`.
 
-The dependencies are `com.trickshotmlg.devkit:devkit-bukkit-commands`, `devkit-localization`, and `devkit-permissions`, all resolved from Maven Local. The Paper API is `compileOnly`. Cloud v2 is relocated into the plugin JAR. Adventure is supplied by Paper and excluded from the shaded JAR. Third-party notices and the Apache 2.0 license text are included in `META-INF`.
+The dependencies are `com.trickshotmlg.devkit:devkit-bukkit-commands`, `devkit-localization`, `devkit-localization-yaml`, and `devkit-permissions`, all resolved from Maven Local. The Paper API is `compileOnly`. Cloud v2 and SnakeYAML are relocated into the plugin JAR. Adventure is supplied by Paper and excluded from the shaded JAR. Third-party notices and the Apache 2.0 license text are included in `META-INF`.
+
+## Reloadable YAML localization
+
+The plugin loads bundled resources from `src/main/resources/lang` and creates editable defaults under:
+
+```text
+plugins/MinecraftDevKitCommandsExample/lang/
+├── en.yml
+├── en-GB.yml
+├── de.yml
+└── de-AT.yml
+```
+
+`en-GB.yml` and `de-AT.yml` intentionally contain only overrides. A requested regional locale checks its exact external file, exact bundled file, then its parent locale, checking external before bundled at each locale. After requested parents, the configured global fallback is `en`, followed by the optional `TextRef` fallback and missing-key policy. External values replace bundled values only at the same locale and key. The caller supplies the sender locale; this example does not store per-player language preferences.
+
+The same `LocalizationService` instance is passed to `BukkitCommandAdapter` and response helpers. YAML templates support MiniMessage formatting; `{player}` and other dynamic values are inserted as plain components, so text supplied by a player is not parsed as formatting. Editing an external file does not require rebuilding the plugin.
+
+The service enables its optional file watcher and also exposes `reloadAsync()`. `/friends admin reload` requests a reload asynchronously, then reports the result on the server thread. If any source fails to parse, it reports the error and keeps the last valid catalog active. The plugin closes the service and watcher during shutdown.
+
+To verify a live edit, start the example on a test server and change `plugins/MinecraftDevKitCommandsExample/lang/en.yml`, for example:
+
+```yaml
+friends:
+  add:
+    success: "<green>Friend {player} was added by an external override."
+```
+
+Run `/friends add Steve` as a player with the required permission. The changed text should appear without restart. To test manual reload instead of watcher detection, edit the file and run `/friends admin reload`; the confirmation reports the loaded entry and locale counts. To test rollback, temporarily break the YAML indentation, request reload, then run `/friends add Steve` again: the previous valid message should still display.
+
+The build's scanner reads the same YAML resources without a server. Its strict locales are `en`, `en-GB`, `de`, and `de-AT`; parent-locale coverage is reported as informational. The example enables the Gradle scanner through `check`.
 
 ## Demonstrated API
 

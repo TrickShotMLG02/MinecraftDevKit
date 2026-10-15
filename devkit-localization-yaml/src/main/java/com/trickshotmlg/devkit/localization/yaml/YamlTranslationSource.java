@@ -8,6 +8,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.LinkOption;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -99,6 +100,7 @@ public final class YamlTranslationSource implements TranslationSource {
         TreeMap<Locale, Map<String, String>> values = new TreeMap<>(Comparator.comparing(Locale::toLanguageTag));
         try (Stream<Path> paths = Files.walk(directory)) {
             for (Path file : paths.filter(Files::isRegularFile)
+                    .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
                     .filter(path -> path.getFileName().toString().endsWith(".yml"))
                     .sorted(Comparator.comparing(path -> directory.relativize(path).toString()))
                     .toList()) {
@@ -122,7 +124,9 @@ public final class YamlTranslationSource implements TranslationSource {
     private static List<String> readIndex(ClassLoader loader, String resource) throws IOException {
         try (InputStream input = loader.getResourceAsStream(resource)) {
             if (input == null) return null;
-            List<String> names = new String(input.readAllBytes(), StandardCharsets.UTF_8).lines()
+            byte[] bytes = input.readNBytes(32_769);
+            if (bytes.length > 32_768) throw new IOException("Bundled translation index exceeds 32 KiB: " + resource);
+            List<String> names = new String(bytes, StandardCharsets.UTF_8).lines()
                     .map(String::trim).filter(line -> !line.isEmpty() && !line.startsWith("#")).toList();
             if (names.isEmpty()) throw new IOException("Bundled translation index is empty: " + resource);
             for (String name : names) {

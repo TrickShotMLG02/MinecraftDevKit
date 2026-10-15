@@ -179,6 +179,7 @@ public final class ResourceBasedTextProvider implements TextProvider {
         TextFormatter.validate(placeholders);
 
         String template;
+        boolean markup = false;
         TextResolution.Fallback fallback;
         Optional<Locale> resolvedLocale;
         Optional<String> key = reference.translationKey();
@@ -192,6 +193,7 @@ public final class ResourceBasedTextProvider implements TextProvider {
             Lookup lookup = findTranslation(translationKey, requested);
             if (lookup != null) {
                 template = lookup.value();
+                markup = true;
                 fallback = lookup.fallback();
                 resolvedLocale = Optional.of(lookup.locale());
                 if (fallback != TextResolution.Fallback.NONE) {
@@ -232,7 +234,7 @@ public final class ResourceBasedTextProvider implements TextProvider {
                 }
             }
         }
-        return new TextResolution(TextFormatter.render(template, placeholders), requested, resolvedLocale,
+        return new TextResolution(TranslationTemplateRenderer.render(template, placeholders, markup), requested, resolvedLocale,
                 fallback, resolvedLocale.map(ignored -> "resource-catalog"));
     }
 

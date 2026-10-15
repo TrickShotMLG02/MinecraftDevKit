@@ -29,4 +29,4 @@ The index is UTF-8. Blank lines and lines beginning with `#` are ignored. Index 
 
 Only mappings and string leaf values are accepted. Quote values that YAML could parse as booleans, numbers, or null. The parser rejects duplicate YAML keys, unsupported tags, aliases beyond the configured safe limit, nesting deeper than 32 levels, and files larger than 1 MiB.
 
-This module only parses source files. Locale fallback, source precedence, live reload, and runtime diagnostics belong to `devkit-localization` and are added through its shared service API.
+This module parses YAML sources and exposes them through the shared `TranslationSource` contract. `LocalizationService` in `devkit-localization` combines its bundled/external layers, resolves locale fallback, atomically reloads catalogs, and emits runtime diagnostics. The YAML module contains no Bukkit dependency.

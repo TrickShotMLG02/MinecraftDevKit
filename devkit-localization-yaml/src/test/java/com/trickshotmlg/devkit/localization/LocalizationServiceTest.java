@@ -5,6 +5,7 @@ import com.trickshotmlg.devkit.text.MissingTranslationPolicy;
 import com.trickshotmlg.devkit.text.TextProvider;
 import com.trickshotmlg.devkit.text.TextRef;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -107,6 +108,20 @@ class LocalizationServiceTest {
     }
 
     @Test
+    void trustedCatalogMarkupRendersButPlaceholderMarkupRemainsPlainText() throws Exception {
+        Path folder = Files.createDirectories(temp.resolve("markup"));
+        Files.writeString(folder.resolve("en.yml"), "message: \"<red>Hello {player}</red>\"\n");
+        LocalizationService service = service(folder);
+        try {
+            assertTrue(service.reload().successful());
+            var result = service.resolve(TextRef.translated("message"), Locale.ENGLISH,
+                    Map.of("player", "<green>Steve</green>"));
+            assertEquals("Hello <green>Steve</green>", PLAIN.serialize(result));
+            assertEquals(NamedTextColor.RED, result.color());
+        } finally { service.close(); }
+    }
+
+    @Test
     void failedLaterSourceDoesNotPublishPartialCandidate() throws Exception {
         Path folder = Files.createDirectories(temp.resolve("lang"));
         Files.writeString(folder.resolve("en.yml"), "hello: \"Stable\"\n");
@@ -203,6 +218,49 @@ class LocalizationServiceTest {
                 Thread.sleep(25);
             }
             assertEquals("Hallo", resolve(service, "hello", "de-AT"));
+        } finally { service.close(); }
+    }
+
+    @Test
+    void watcherReloadsDeletionButIgnoresUnrelatedFiles() throws Exception {
+        Path folder = Files.createDirectories(temp.resolve("watch-delete"));
+        Path file = folder.resolve("en.yml");
+        Files.writeString(file, "hello: \"Present\"\n");
+        LocalizationService service = service(folder);
+        try {
+            assertTrue(service.reload().successful());
+            service.startWatching(Duration.ofMillis(80));
+            long before = service.generation();
+            Files.writeString(folder.resolve("notes.txt"), "not a translation");
+            Thread.sleep(300);
+            assertEquals(before, service.generation());
+
+            Files.delete(file);
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(8);
+            while (System.nanoTime() < deadline && service.generation() == before) Thread.sleep(25);
+            assertTrue(service.generation() > before);
+            assertEquals("hello", resolve(service, "hello", "en"));
+        } finally { service.close(); }
+    }
+
+    @Test
+    void watcherReloadsWhenLocaleDirectoryIsRemoved() throws Exception {
+        Path folder = Files.createDirectories(temp.resolve("watch-directory-delete"));
+        Path german = Files.createDirectories(folder.resolve("de"));
+        Files.writeString(german.resolve("friends.yml"), "hello: \"Hallo\"\n");
+        LocalizationService service = service(folder);
+        try {
+            assertTrue(service.reload().successful());
+            assertEquals("Hallo", resolve(service, "hello", "de"));
+            service.startWatching(Duration.ofMillis(80));
+            long before = service.generation();
+
+            Files.move(german, temp.resolve("removed-de"));
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(8);
+            while (System.nanoTime() < deadline && service.generation() == before) Thread.sleep(25);
+
+            assertTrue(service.generation() > before);
+            assertEquals("hello", resolve(service, "hello", "de"));
         } finally { service.close(); }
     }
 

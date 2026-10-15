@@ -78,6 +78,7 @@ public final class LocalizationService implements TextProvider, AutoCloseable {
     public ReloadResult reload() {
         ensureOpen();
         synchronized (reloadLock) {
+            ensureOpen();
             try {
                 TranslationSnapshot candidate = TranslationSnapshot.load(sources);
                 TranslationSnapshot previous = active.get();
@@ -128,6 +129,7 @@ public final class LocalizationService implements TextProvider, AutoCloseable {
         TextFormatter.validate(placeholders);
         TranslationSnapshot snapshot = active.get();
         String template;
+        boolean markup = false;
         TextResolution.Fallback fallback;
         Optional<Locale> resolvedLocale;
         Optional<String> source;
@@ -143,6 +145,7 @@ public final class LocalizationService implements TextProvider, AutoCloseable {
                     defaultFallbackLocale, defaultFallbackEnabled);
             if (lookup != null) {
                 template = lookup.value();
+                markup = true;
                 fallback = lookup.fallback();
                 resolvedLocale = Optional.of(lookup.locale());
                 source = lookup.sources().stream().findFirst()
@@ -185,7 +188,7 @@ public final class LocalizationService implements TextProvider, AutoCloseable {
                 }
             }
         }
-        return new TextResolution(TextFormatter.render(template, placeholders), requested,
+        return new TextResolution(TranslationTemplateRenderer.render(template, placeholders, markup), requested,
                 resolvedLocale, fallback, source);
     }
 
@@ -224,7 +227,9 @@ public final class LocalizationService implements TextProvider, AutoCloseable {
 
     @Override
     public void close() {
-        if (!closed.compareAndSet(false, true)) return;
+        synchronized (reloadLock) {
+            if (!closed.compareAndSet(false, true)) return;
+        }
         stopWatching();
         if (ownedExecutor != null) ownedExecutor.shutdownNow();
     }
@@ -295,7 +300,6 @@ public final class LocalizationService implements TextProvider, AutoCloseable {
                                       Optional<String> placeholder) { }
 
     private final class Watcher implements AutoCloseable, Runnable {
-        private final List<Path> roots;
         private final Duration debounce;
         private final AtomicBoolean running = new AtomicBoolean(true);
         private final WatchService watchService;
@@ -303,7 +307,6 @@ public final class LocalizationService implements TextProvider, AutoCloseable {
         private final Thread thread;
 
         Watcher(List<Path> roots, Duration debounce) throws IOException {
-            this.roots = roots;
             this.debounce = debounce;
             watchService = FileSystems.getDefault().newWatchService();
             for (Path root : roots) {
@@ -317,7 +320,8 @@ public final class LocalizationService implements TextProvider, AutoCloseable {
 
         private void registerTree(Path root) throws IOException {
             try (var paths = Files.walk(root)) {
-                for (Path path : paths.filter(Files::isDirectory).toList()) register(path);
+                for (Path path : paths.filter(candidate -> Files.isDirectory(candidate,
+                        java.nio.file.LinkOption.NOFOLLOW_LINKS)).toList()) register(path);
             }
         }
 
@@ -340,8 +344,20 @@ public final class LocalizationService implements TextProvider, AutoCloseable {
                             Path changed = directory.resolve((Path) event.context());
                             if (event.kind() == StandardWatchEventKinds.ENTRY_CREATE && Files.isDirectory(changed)) {
                                 try { registerTree(changed); }
-                                catch (IOException failure) { watcherFailureHandler.accept(failure); }
+                                catch (IOException failure) { reportWatcherFailure(failure); }
                                 // Files may have been written before the new directory was registered.
+                                try (var nested = Files.walk(changed)) {
+                                    if (nested.anyMatch(path -> Files.isRegularFile(path,
+                                            java.nio.file.LinkOption.NOFOLLOW_LINKS)
+                                            && path.getFileName().toString().endsWith(".yml"))) {
+                                        dirty = true;
+                                        lastChange = System.nanoTime();
+                                    }
+                                } catch (IOException failure) { reportWatcherFailure(failure); }
+                            }
+                            if (event.kind() == StandardWatchEventKinds.ENTRY_DELETE
+                                    && !changed.getFileName().toString().endsWith(".yml")) {
+                                // A removed locale directory may have contained many translation files.
                                 dirty = true;
                                 lastChange = System.nanoTime();
                             }
@@ -354,10 +370,10 @@ public final class LocalizationService implements TextProvider, AutoCloseable {
                     }
                     if (dirty && System.nanoTime() - lastChange >= debounce.toNanos()) {
                         reloadAsync().thenAccept(result -> {
-                            if (!result.successful()) watcherFailureHandler.accept(new IOException(
+                            if (!result.successful()) reportWatcherFailure(new IOException(
                                     "Automatic localization reload failed: " + result.error().orElse("unknown error")));
                         }).exceptionally(failure -> {
-                            watcherFailureHandler.accept(failure);
+                            reportWatcherFailure(failure);
                             return null;
                         });
                         dirty = false;
@@ -366,9 +382,14 @@ public final class LocalizationService implements TextProvider, AutoCloseable {
                     Thread.currentThread().interrupt();
                     break;
                 } catch (RuntimeException failure) {
-                    watcherFailureHandler.accept(failure);
+                    if (running.get()) reportWatcherFailure(failure);
                 }
             }
+        }
+
+        private void reportWatcherFailure(Throwable failure) {
+            try { watcherFailureHandler.accept(failure); }
+            catch (RuntimeException ignored) { }
         }
 
         @Override public void close() {
