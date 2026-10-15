@@ -1,0 +1,5 @@
+name: MinecraftDevKitCommandsExample
+version: 0.1.0-SNAPSHOT
+main: com.trickshotmlg.devkit.examples.friendnet.FriendNetPlugin
+api-version: '1.21'
+description: Demonstrates MinecraftDevKit Cloud commands and localization.

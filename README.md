@@ -2,7 +2,7 @@
 
 MinecraftDevKit is a modular, reusable Java development toolkit for Minecraft server plugins and mods. It is being built around platform-independent libraries with small, platform-specific adapters.
 
-> **Status:** Permission definitions and metadata generation, Cloud-backed command definitions, text/localization providers, and localization diagnostics are implemented. Bukkit/Paper runtime command registration remains planned.
+> **Status:** Permission definitions and metadata generation, Cloud-backed command definitions and dispatch, text/localization providers, localization diagnostics, and a Bukkit/Paper command adapter are implemented. A standalone end-to-end command example is available; live server testing remains a manual step.
 
 ## Goals
 
@@ -32,9 +32,9 @@ Shared modules contain ordinary Java APIs and must not depend on Bukkit, Paper, 
 | `devkit-bukkit-metadata` | Bukkit-compatible build-time metadata exporters, including permission YAML | Permission catalog exporter implemented; Java 17; does not require a server or Bukkit API |
 | `devkit-gradle-plugin` | Gradle plugins for Bukkit permission metadata and localization scanning | Implemented; Java 17; Maven Local and JitPack module publication configured; public JitPack build not verified |
 
-See the [`devkit-permissions` guide](devkit-permissions/README.md), [`devkit-commands` guide](devkit-commands/README.md), [`devkit-text` guide](devkit-text/README.md), [`devkit-localization` guide](devkit-localization/README.md), [`devkit-bukkit-commands` guide](devkit-bukkit-commands/README.md), and [`devkit-gradle-plugin` guide](devkit-gradle-plugin/README.md). The metadata plugin supports traditional Bukkit/Spigot-style `plugin.yml`; Paper's `paper-plugin.yml`, Velocity, Fabric, Forge, and NeoForge metadata are not supported. Shared command, text, and localization modules contain no Bukkit API dependency.
+See the [`devkit-permissions` guide](devkit-permissions/README.md), [`devkit-commands` guide](devkit-commands/README.md), [`devkit-text` guide](devkit-text/README.md), [`devkit-localization` guide](devkit-localization/README.md), [`devkit-bukkit-commands` guide](devkit-bukkit-commands/README.md), and [`devkit-gradle-plugin` guide](devkit-gradle-plugin/README.md). The localization guide documents the scanner CLI and Gradle task. The metadata plugin supports traditional Bukkit/Spigot-style `plugin.yml`; Paper's `paper-plugin.yml`, Velocity, Fabric, Forge, and NeoForge metadata are not supported. Shared command, text, and localization modules contain no Bukkit API dependency.
 
-The standalone [`Bukkit permissions example`](examples/bukkit-permissions-example/README.md) resolves MinecraftDevKit from JitPack and the Paper API from PaperMC, generates permission metadata during its own Gradle build, and packages a test plugin JAR for a Paper server. The repository also includes a local [Paper test server provisioner and IntelliJ run/debug profiles](tools/devservers/README.md); server download and startup are opt-in and Paper's EULA is never accepted automatically.
+The standalone [`Bukkit permissions example`](examples/bukkit-permissions-example/README.md) resolves MinecraftDevKit from JitPack and the Paper API from PaperMC, generates permission metadata during its own Gradle build, and packages a test plugin JAR for a Paper server. The standalone [`Bukkit commands example`](examples/bukkit-commands-example/README.md) resolves published-to-Maven-Local library artifacts, generates permission metadata and a localization reference manifest, strictly validates English and German translations, and packages a Cloud-backed plugin. The repository also includes a local [Paper test server provisioner and IntelliJ run/debug profiles](tools/devservers/README.md); server download and startup are opt-in and Paper's EULA is never accepted automatically.
 
 ## Installation
 
@@ -144,19 +144,19 @@ From the repository root, run the appropriate wrapper command:
 
 ## Platform compatibility
 
-The common modules are normal Java libraries and do not require a Minecraft runtime. `devkit-bukkit-metadata` and `devkit-gradle-plugin` generate Bukkit `plugin.yml` permissions without starting a server. `devkit-bukkit-commands` provides runtime command registration for Bukkit/Spigot-style JavaPlugin lifecycle and Paper's legacy manager with native Brigadier enabled when available. Modern Paper bootstrap registration and other platform adapters remain future work. Java compatibility depends on the selected module: shared modules, metadata export, and the Gradle plugin target Java 17, while Bukkit adapters target Java 21.
+The common modules are normal Java libraries and do not require a Minecraft runtime. `devkit-bukkit-metadata` and `devkit-gradle-plugin` generate Bukkit `plugin.yml` permissions without starting a server. `devkit-bukkit-commands` provides Cloud-backed runtime command registration for Bukkit/Spigot-style JavaPlugin lifecycle and Paper's legacy manager with native Brigadier enabled when available. Modern Paper bootstrap registration and other platform adapters remain future work. Java compatibility depends on the selected module: shared modules, metadata export, and the Gradle plugin target Java 17, while Bukkit adapters target Java 21.
 
 ## Roadmap
 
 - Platform-specific runtime permission integrations.
 - Paper bootstrap-time command registration and Velocity/mod-loader adapters.
 - Configuration management.
-- Messaging and localization.
+- Additional messaging and localization integrations.
 - Scheduling abstractions.
 - General utilities.
 - Additional Bukkit/Paper, Velocity, Fabric, Forge, and NeoForge integrations.
 
-Permission declarations, catalog resolution, Bukkit-compatible permission metadata export, and automatic Gradle resource integration are implemented. Runtime registration and the remaining roadmap items are planned work.
+Permission declarations, catalog resolution, Bukkit-compatible permission metadata export, command definitions and Cloud dispatch, generated help/usage, localization diagnostics, automatic Gradle resource integration, and the JavaPlugin command adapter are implemented. Paper bootstrap registration and the remaining roadmap items are planned work.
 
 ## Contributing
 

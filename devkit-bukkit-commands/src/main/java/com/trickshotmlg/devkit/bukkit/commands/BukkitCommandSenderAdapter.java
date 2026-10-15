@@ -4,6 +4,8 @@ import com.trickshotmlg.devkit.commands.CommandSender;
 import com.trickshotmlg.devkit.commands.SenderKind;
 import com.trickshotmlg.devkit.permissions.Permission;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.audience.Audience;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.entity.Player;
 
@@ -33,7 +35,9 @@ final class BukkitCommandSenderAdapter {
                 return sender.hasPermission(Objects.requireNonNull(permission, "permission").node());
             }
             @Override public void sendMessage(Component message) {
-                sender.sendMessage(Objects.requireNonNull(message, "message"));
+                Component nonNullMessage = Objects.requireNonNull(message, "message");
+                if (sender instanceof Audience audience) audience.sendMessage(nonNullMessage);
+                else sender.sendMessage(LegacyComponentSerializer.legacySection().serialize(nonNullMessage));
             }
         };
     }
