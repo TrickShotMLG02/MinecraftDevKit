@@ -4,6 +4,7 @@ include(
     "devkit-core",
     "devkit-text",
     "devkit-localization",
+    "devkit-localization-yaml",
     "devkit-localization-cli",
     "devkit-permissions",
     "devkit-commands",
