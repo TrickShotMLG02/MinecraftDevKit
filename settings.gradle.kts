@@ -8,6 +8,7 @@ include(
     "devkit-permissions",
     "devkit-commands",
     "devkit-bukkit",
+    "devkit-bukkit-commands",
     "devkit-bukkit-metadata",
     "devkit-gradle-plugin",
 )

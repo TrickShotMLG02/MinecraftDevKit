@@ -28,10 +28,11 @@ Shared modules contain ordinary Java APIs and must not depend on Bukkit, Paper, 
 | `devkit-permissions` | Platform-independent permission definitions, sections, groups, and immutable catalog resolution | Implemented; depends on `devkit-core` |
 | `devkit-commands` | Immutable typed command definitions, Cloud v2 dispatch, suggestions, generated help/usage, and localized errors | Implemented; Java 17 |
 | `devkit-bukkit` | Common Bukkit/Spigot/Paper adapters | Minimal package structure; depends on shared modules |
+| `devkit-bukkit-commands` | Cloud v2 command registration, Bukkit sender bridge, player arguments, localized messages | Implemented for JavaPlugin lifecycle; Java 21 |
 | `devkit-bukkit-metadata` | Bukkit-compatible build-time metadata exporters, including permission YAML | Permission catalog exporter implemented; Java 17; does not require a server or Bukkit API |
 | `devkit-gradle-plugin` | Gradle plugins for Bukkit permission metadata and localization scanning | Implemented; Java 17; Maven Local and JitPack module publication configured; public JitPack build not verified |
 
-See the [`devkit-permissions` guide](devkit-permissions/README.md), [`devkit-commands` guide](devkit-commands/README.md), [`devkit-text` guide](devkit-text/README.md), [`devkit-localization` guide](devkit-localization/README.md), and [`devkit-gradle-plugin` guide](devkit-gradle-plugin/README.md). The metadata plugin supports traditional Bukkit/Spigot-style `plugin.yml`; Paper's `paper-plugin.yml`, Velocity, Fabric, Forge, and NeoForge metadata are not supported. Shared command, text, and localization modules contain no Bukkit API dependency.
+See the [`devkit-permissions` guide](devkit-permissions/README.md), [`devkit-commands` guide](devkit-commands/README.md), [`devkit-text` guide](devkit-text/README.md), [`devkit-localization` guide](devkit-localization/README.md), [`devkit-bukkit-commands` guide](devkit-bukkit-commands/README.md), and [`devkit-gradle-plugin` guide](devkit-gradle-plugin/README.md). The metadata plugin supports traditional Bukkit/Spigot-style `plugin.yml`; Paper's `paper-plugin.yml`, Velocity, Fabric, Forge, and NeoForge metadata are not supported. Shared command, text, and localization modules contain no Bukkit API dependency.
 
 The standalone [`Bukkit permissions example`](examples/bukkit-permissions-example/README.md) resolves MinecraftDevKit from JitPack and the Paper API from PaperMC, generates permission metadata during its own Gradle build, and packages a test plugin JAR for a Paper server. The repository also includes a local [Paper test server provisioner and IntelliJ run/debug profiles](tools/devservers/README.md); server download and startup are opt-in and Paper's EULA is never accepted automatically.
 
@@ -143,17 +144,17 @@ From the repository root, run the appropriate wrapper command:
 
 ## Platform compatibility
 
-The common modules are normal Java libraries and do not currently require a Minecraft runtime. `devkit-bukkit-metadata` and `devkit-gradle-plugin` generate Bukkit `plugin.yml` permissions without starting a server. Runtime integration with Bukkit, Paper, Velocity, Fabric, Forge, and NeoForge requires platform-specific adapters. Java compatibility depends on the selected module: shared modules, metadata export, and the Gradle plugin target Java 17, while `devkit-bukkit` targets Java 21.
+The common modules are normal Java libraries and do not require a Minecraft runtime. `devkit-bukkit-metadata` and `devkit-gradle-plugin` generate Bukkit `plugin.yml` permissions without starting a server. `devkit-bukkit-commands` provides runtime command registration for Bukkit/Spigot-style JavaPlugin lifecycle and Paper's legacy manager with native Brigadier enabled when available. Modern Paper bootstrap registration and other platform adapters remain future work. Java compatibility depends on the selected module: shared modules, metadata export, and the Gradle plugin target Java 17, while Bukkit adapters target Java 21.
 
 ## Roadmap
 
 - Platform-specific runtime permission integrations.
-- A platform-independent command framework.
+- Paper bootstrap-time command registration and Velocity/mod-loader adapters.
 - Configuration management.
 - Messaging and localization.
 - Scheduling abstractions.
 - General utilities.
-- Bukkit/Paper, Velocity, Fabric, Forge, and NeoForge integrations.
+- Additional Bukkit/Paper, Velocity, Fabric, Forge, and NeoForge integrations.
 
 Permission declarations, catalog resolution, Bukkit-compatible permission metadata export, and automatic Gradle resource integration are implemented. Runtime registration and the remaining roadmap items are planned work.
 
