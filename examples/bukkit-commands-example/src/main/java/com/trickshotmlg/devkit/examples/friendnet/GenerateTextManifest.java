@@ -1,6 +1,9 @@
 package com.trickshotmlg.devkit.examples.friendnet;
 
 import com.trickshotmlg.devkit.commands.error.CommandErrorMessages;
+import com.trickshotmlg.devkit.commands.help.CommandHelpRenderer;
+import com.trickshotmlg.devkit.text.MissingTranslationPolicy;
+import com.trickshotmlg.devkit.text.StaticTextProvider;
 import com.trickshotmlg.devkit.text.TextCatalog;
 import com.trickshotmlg.devkit.text.TextRef;
 import com.trickshotmlg.devkit.localization.TextCatalogManifest;
@@ -26,6 +29,8 @@ public final class GenerateTextManifest {
         TextCatalog references = TextCatalog.builder()
                 .addCatalog(FriendCommands.DEFINITION.textReferences())
                 .addCatalog(CommandErrorMessages.defaults().textReferences())
+                .addCatalog(new CommandHelpRenderer(new StaticTextProvider(MissingTranslationPolicy.SHOW_KEY))
+                        .textReferences())
                 .addCatalog(application)
                 .build();
         TextCatalogManifest.write(references, Path.of(args[0]));

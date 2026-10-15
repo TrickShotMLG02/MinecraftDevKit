@@ -78,7 +78,25 @@ class CommandHelpRendererTest {
         assertTrue(text.contains("Friend commands"));
         assertTrue(text.stream().anyMatch(line -> line.contains("Remove a friend")));
         assertTrue(text.contains("Page 2 of 2"));
+        assertTrue(renderer.textReferences().entries().containsKey("commands.help.page"));
         assertThrows(IllegalArgumentException.class, () -> renderer.page(root, root, sender, 0, 2));
+    }
+
+    @Test
+    void resolvesPaginationWithTheCurrentSenderLocaleAndNamedValues() {
+        var definition = CommandRegistry.builder().root("friends", root -> root
+                .execute(context -> { })
+                .subcommand("one", child -> child.execute(context -> { }))
+                .subcommand("two", child -> child.execute(context -> { }))
+                .subcommand("three", child -> child.execute(context -> { }))).build();
+        CommandNode root = definition.roots().get(0);
+        var renderer = new CommandHelpRenderer((reference, locale, placeholders) -> Component.text(
+                locale.getLanguage() + ":" + placeholders.get("page") + "/" + placeholders.get("pages")));
+
+        List<String> lines = renderer.page(root, root, "/friends", new TestSender(Locale.GERMANY), 2, 2)
+                .stream().map(PLAIN::serialize).toList();
+
+        assertTrue(lines.contains("de:2/2"));
     }
 
     @Test
@@ -135,10 +153,13 @@ class CommandHelpRendererTest {
     }
 
     private static final class TestSender implements CommandSender {
+        private final Locale locale;
         private final Set<String> permissions = new HashSet<>();
         private final List<Component> sent = new ArrayList<>();
+        private TestSender() { this(Locale.US); }
+        private TestSender(Locale locale) { this.locale = locale; }
         @Override public SenderKind kind() { return SenderKind.PLAYER; }
-        @Override public Locale locale() { return Locale.US; }
+        @Override public Locale locale() { return locale; }
         @Override public boolean hasPermission(Permission permission) { return permissions.contains(permission.node()); }
         @Override public void sendMessage(Component message) { sent.add(message); }
     }

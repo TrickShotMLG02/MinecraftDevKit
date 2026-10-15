@@ -74,6 +74,8 @@ new CloudCommandRegistrar<>(cloudManager, senderAdapter, help).register(definiti
 
 Usage is derived from the registered tree, including required and optional arguments, nested alternatives, aliases, and explicit `usage(TextRef)` overrides. Permissions and sender restrictions are evaluated using the same inherited checks used by Cloud dispatch, so hidden child commands are omitted from suggestions and generated help. When a node has both an argument form and literal child forms, help lists each valid form separately.
 
+Generated pagination uses the translated `commands.help.page` reference with the fallback `Page {page} of {pages}`. Include `help.textReferences()` in the application's merged `TextCatalog` so the scanner checks locale coverage.
+
 Install `CloudCommandErrorHandler` once per Cloud manager. It maps Cloud's exception controller events to `CommandErrorCategory`, resolves the configured `TextRef` at the sender's locale, and reports unexpected execution failures through an injectable `CommandErrorReporter`. The default reporter uses the JDK system logger; player-facing messages never include exception details. Applications can replace any message with `CommandErrorMessages.with(category, textRef)`.
 
 Cloud exposes the expected syntax for invalid syntax and parse failures, but it does not expose the original raw input consistently. The `{input}` error placeholder is therefore empty for the built-in Cloud bridge unless a platform or custom parser supplies a more specific handler. Required-argument omissions are identified from Cloud's expected syntax; malformed values map to `INVALID_ARGUMENT`.

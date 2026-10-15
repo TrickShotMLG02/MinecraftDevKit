@@ -2,7 +2,9 @@ package com.trickshotmlg.devkit.commands.help;
 
 import com.trickshotmlg.devkit.commands.CommandNode;
 import com.trickshotmlg.devkit.commands.CommandSender;
+import com.trickshotmlg.devkit.text.TextCatalog;
 import com.trickshotmlg.devkit.text.TextProvider;
+import com.trickshotmlg.devkit.text.TextRef;
 import net.kyori.adventure.text.Component;
 
 import java.util.ArrayList;
@@ -12,12 +14,19 @@ import java.util.Objects;
 
 /** Renders localized help from the same command tree used for dispatch and usage. */
 public final class CommandHelpRenderer {
+    private static final TextRef PAGE_INDICATOR = TextRef.translated(
+            "commands.help.page", "Page {page} of {pages}");
     private final TextProvider textProvider;
     private final CommandUsageRenderer usages;
 
     public CommandHelpRenderer(TextProvider textProvider) {
         this.textProvider = Objects.requireNonNull(textProvider, "textProvider");
         this.usages = new CommandUsageRenderer(textProvider);
+    }
+
+    /** Returns translated references used by generated help output for localization validation. */
+    public TextCatalog textReferences() {
+        return TextCatalog.builder().add(PAGE_INDICATOR, "framework-help", "page-indicator").build();
     }
 
     /** Returns one immutable help page. Page indices start at one. */
@@ -54,7 +63,10 @@ public final class CommandHelpRenderer {
             }
             lines.add(line);
         }
-        if (visibleChildren.size() > pageSize) lines.add(Component.text("Page " + selectedPage + " of " + totalPages));
+        if (visibleChildren.size() > pageSize) {
+            lines.add(textProvider.resolve(PAGE_INDICATOR, sender.locale(),
+                    Map.of("page", selectedPage, "pages", totalPages)));
+        }
         return List.copyOf(lines);
     }
 
