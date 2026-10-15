@@ -1,0 +1,59 @@
+commands:
+  error:
+    unknown_command: "Unbekannter Befehl."
+    invalid_syntax: "Ungültige Befehlssyntax. Verwendung: {usage}"
+    missing_argument: "Ein erforderliches Argument fehlt."
+    invalid_argument: "Ein Argument ist ungültig: {argument}"
+    no_permission: "Du hast keine Berechtigung dafür."
+    player_only: "Dieser Befehl kann nur von einem Spieler verwendet werden."
+    console_only: "Dieser Befehl kann nur von der Konsole verwendet werden."
+    execution: "Der Befehl konnte nicht ausgeführt werden."
+  help:
+    page: "Seite {page} von {pages}"
+  friends:
+    description: "Verwalte deine Freunde"
+    list:
+      description: "Zeige deine Freunde an."
+    add:
+      description: "Füge einen Freund hinzu."
+      usage: "Verwendung: /friends add <player>"
+    remove:
+      description: "Entferne einen Freund."
+    requests:
+      description: "Zeige Freundschaftsanfragen an."
+      list:
+        description: "Zeige offene Freundschaftsanfragen an."
+      accept:
+        description: "Nimm eine Anfrage an."
+        all:
+          description: "Nimm alle offenen Anfragen an."
+      deny:
+        description: "Lehne eine Anfrage ab."
+    admin:
+      description: "Administrationswerkzeuge."
+      reload:
+        description: "Lade Übersetzungen neu."
+arguments:
+  page:
+    description: "Anzuzeigende Seite."
+  player:
+    description: "Name eines Spielers, der online ist."
+friends:
+  list: "Seite {page} wird angezeigt."
+  add:
+    success: "{player} wurde als Freund hinzugefügt."
+  remove:
+    success: "{player} wurde als Freund entfernt."
+requests:
+  list: "Du hast keine offenen Anfragen."
+  summary: "Die Anfrageübersicht ist eine Beispielantwort."
+  accept:
+    success: "Die Anfrage von {player} wurde angenommen."
+    all:
+      success: "Alle offenen Anfragen wurden angenommen."
+  deny:
+    success: "Die Anfrage von {player} wurde abgelehnt."
+localization:
+  reload:
+    success: "{count} Übersetzungen für {locales} Sprachen geladen."
+    failure: "Übersetzungen konnten nicht geladen werden: {error}"

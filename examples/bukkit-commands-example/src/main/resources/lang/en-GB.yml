@@ -1,0 +1,6 @@
+commands:
+  friends:
+    description: "Manage your mates"
+friends:
+  add:
+    success: "Added {player} to your friends list."

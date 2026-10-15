@@ -24,7 +24,8 @@ public final class GenerateTextManifest {
                 .add(TextRef.translated("requests.accept.success", "Accepted {player}'s request."), "response", "FriendCommands.requests.accept")
                 .add(TextRef.translated("requests.accept.all.success", "Accepted all pending requests."), "response", "FriendCommands.requests.accept.all")
                 .add(TextRef.translated("requests.deny.success", "Denied {player}'s request."), "response", "FriendCommands.requests.deny")
-                .add(TextRef.translated("admin.reload.success", "FriendNet example data reloaded."), "response", "FriendCommands.admin.reload")
+                .add(TextRef.translated("localization.reload.success", "Reloaded {count} translations across {locales} locales."), "response", "FriendCommands.admin.reload.success")
+                .add(TextRef.translated("localization.reload.failure", "Localization reload failed: {error}"), "response", "FriendCommands.admin.reload.failure")
                 .build();
         TextCatalog references = TextCatalog.builder()
                 .addCatalog(FriendCommands.DEFINITION.textReferences())

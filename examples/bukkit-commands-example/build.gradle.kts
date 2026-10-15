@@ -14,6 +14,7 @@ dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     implementation("com.trickshotmlg.devkit:devkit-bukkit-commands:0.1.0-SNAPSHOT")
     implementation("com.trickshotmlg.devkit:devkit-localization:0.1.0-SNAPSHOT")
+    implementation("com.trickshotmlg.devkit:devkit-localization-yaml:0.1.0-SNAPSHOT")
     implementation("com.trickshotmlg.devkit:devkit-permissions:0.1.0-SNAPSHOT")
 }
 
@@ -25,10 +26,12 @@ minecraftDevKit {
 }
 
 devkitLocalizationScan {
-    translationsDirectory.set(layout.projectDirectory.dir("src/main/resources/translations"))
+    translationsDirectory.set(layout.projectDirectory.dir("src/main/resources/lang"))
     referenceManifest.set(layout.buildDirectory.file("generated/minecraftdevkit/text-references.json"))
-    baseLocale.set("en-US")
-    requiredLocales.set(listOf("en-US", "de-DE"))
+    baseLocale.set("en")
+    requiredLocales.set(listOf("en", "en-GB", "de", "de-AT"))
+    defaultFallbackLocale.set("en")
+    defaultFallbackEnabled.set(true)
     failOn.set(listOf("MISSING_FALLBACK", "MISSING_TRANSLATION", "MISSING_LOCALE_COVERAGE",
         "PLACEHOLDER_MISMATCH", "INVALID_RESOURCE", "DUPLICATE_REFERENCE"))
 }
@@ -60,6 +63,7 @@ tasks.shadowJar {
     exclude("net/kyori/**")
     relocate("org.incendo.cloud", "com.trickshotmlg.devkit.examples.internal.cloud")
     relocate("io.leangen.geantyref", "com.trickshotmlg.devkit.examples.internal.geantyref")
+    relocate("org.yaml.snakeyaml", "com.trickshotmlg.devkit.examples.internal.snakeyaml")
     from(rootProject.file("../../THIRD-PARTY-NOTICES.md")) {
         into("META-INF")
         rename { "THIRD-PARTY-NOTICES.md" }

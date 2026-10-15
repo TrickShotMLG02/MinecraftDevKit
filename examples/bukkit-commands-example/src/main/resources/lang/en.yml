@@ -1,0 +1,59 @@
+commands:
+  error:
+    unknown_command: "Unknown command."
+    invalid_syntax: "Invalid command syntax. Usage: {usage}"
+    missing_argument: "A required argument is missing."
+    invalid_argument: "One of the arguments is invalid: {argument}"
+    no_permission: "You do not have permission to do that."
+    player_only: "This command can only be used by a player."
+    console_only: "This command can only be used from the console."
+    execution: "The command could not be completed."
+  help:
+    page: "Page {page} of {pages}"
+  friends:
+    description: "Manage your friends"
+    list:
+      description: "List your friends."
+    add:
+      description: "Add a friend."
+      usage: "Usage: /friends add <player>"
+    remove:
+      description: "Remove a friend."
+    requests:
+      description: "View friend requests."
+      list:
+        description: "List pending friend requests."
+      accept:
+        description: "Accept a request."
+        all:
+          description: "Accept all pending requests."
+      deny:
+        description: "Deny a request."
+    admin:
+      description: "Administrative tools."
+      reload:
+        description: "Reload localization files."
+arguments:
+  page:
+    description: "Page number to display."
+  player:
+    description: "Online player name."
+friends:
+  list: "Showing page {page}."
+  add:
+    success: "Added {player} as a friend."
+  remove:
+    success: "Removed {player} as a friend."
+requests:
+  list: "You have no pending requests."
+  summary: "Request overview is an example response."
+  accept:
+    success: "Accepted {player}'s request."
+    all:
+      success: "Accepted all pending requests."
+  deny:
+    success: "Denied {player}'s request."
+localization:
+  reload:
+    success: "Reloaded {count} translations across {locales} locales."
+    failure: "Localization reload failed: {error}"

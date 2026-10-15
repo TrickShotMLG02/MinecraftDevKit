@@ -70,8 +70,7 @@ public final class FriendCommands {
                                 .description(TextRef.translated("commands.friends.admin.description"))
                                 .subcommand("reload", reload -> reload.permission(FriendPermissions.RELOAD)
                                         .description(TextRef.translated("commands.friends.admin.reload.description"))
-                                        .execute(context -> ExampleMessages.send(context, "admin.reload.success",
-                                                "FriendNet example data reloaded.")))))
+                                        .execute(ExampleMessages::reload))))
                 .build();
     }
 }

@@ -1,0 +1,3 @@
+commands:
+  friends:
+    description: "Verwalte deine Freundinnen und Freunde."
