@@ -46,6 +46,8 @@ public record TextDiagnostic(
     public enum Outcome {
         /** A language-only catalog provided the value. */
         LANGUAGE_FALLBACK,
+        /** A script, region, or variant parent locale provided the value. */
+        PARENT_LOCALE_FALLBACK,
         /** The configured default locale provided the value. */
         DEFAULT_LOCALE_FALLBACK,
         /** The reference's own fallback provided the value. */

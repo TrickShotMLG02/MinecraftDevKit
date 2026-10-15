@@ -54,7 +54,7 @@ class ResourceBasedTextProviderTest {
         assertEquals("Österreichisch", resolve(provider, "exact", "de-AT"));
         assertEquals("Deutsch", resolve(provider, "languageOnly", "de-AT"));
         assertEquals("Default", resolve(provider, "defaultOnly", "de-AT"));
-        assertEquals(List.of(TextDiagnostic.Outcome.LANGUAGE_FALLBACK,
+        assertEquals(List.of(TextDiagnostic.Outcome.PARENT_LOCALE_FALLBACK,
                         TextDiagnostic.Outcome.DEFAULT_LOCALE_FALLBACK),
                 events.stream().map(TextDiagnostic::outcome).toList());
     }

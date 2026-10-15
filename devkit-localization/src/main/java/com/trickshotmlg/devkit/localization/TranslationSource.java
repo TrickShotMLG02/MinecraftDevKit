@@ -3,6 +3,8 @@ package com.trickshotmlg.devkit.localization;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Locale;
+import java.nio.file.Path;
+import java.util.List;
 
 /**
  * A reloadable source of immutable locale catalogs. A source combines its own files at one
@@ -15,6 +17,9 @@ public interface TranslationSource {
 
     /** Source precedence for a translation at the same locale and key. */
     default Layer layer() { return Layer.EXTERNAL; }
+
+    /** External directories that may be watched for changes; bundled sources return none. */
+    default List<Path> watchDirectories() { return List.of(); }
 
     /** Human-readable identifier used in reload diagnostics. */
     default String description() { return getClass().getSimpleName(); }

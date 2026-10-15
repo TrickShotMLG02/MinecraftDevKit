@@ -248,7 +248,7 @@ public final class ResourceBasedTextProvider implements TextProvider {
                 }
                 if (isRequestedParent) {
                     return new Lookup(candidate, catalog.translations().get(key),
-                            TextDiagnostic.Outcome.LANGUAGE_FALLBACK, TextResolution.Fallback.PARENT_LOCALE);
+                            TextDiagnostic.Outcome.PARENT_LOCALE_FALLBACK, TextResolution.Fallback.PARENT_LOCALE);
                 }
                 return new Lookup(candidate, catalog.translations().get(key),
                         TextDiagnostic.Outcome.DEFAULT_LOCALE_FALLBACK, TextResolution.Fallback.DEFAULT_LOCALE);

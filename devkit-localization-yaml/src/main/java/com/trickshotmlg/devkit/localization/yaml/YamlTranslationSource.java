@@ -27,17 +27,20 @@ public final class YamlTranslationSource implements TranslationSource {
     private final Loader loader;
     private final String description;
     private final Layer layer;
+    private final List<Path> watchDirectories;
 
-    private YamlTranslationSource(Loader loader, String description, Layer layer) {
+    private YamlTranslationSource(Loader loader, String description, Layer layer, List<Path> watchDirectories) {
         this.loader = loader;
         this.description = description;
         this.layer = layer;
+        this.watchDirectories = List.copyOf(watchDirectories);
     }
 
     /** Creates an external source. Files may be {@code <tag>.yml} or {@code <tag>/*.yml}. */
     public static YamlTranslationSource directory(Path directory) {
         Objects.requireNonNull(directory, "directory");
-        return new YamlTranslationSource(() -> loadDirectory(directory), "external:" + directory, Layer.EXTERNAL);
+        return new YamlTranslationSource(() -> loadDirectory(directory), "external:" + directory,
+                Layer.EXTERNAL, List.of(directory));
     }
 
     /**
@@ -73,7 +76,7 @@ public final class YamlTranslationSource implements TranslationSource {
                 result.put(locale, TranslationCatalog.of(locale, combined));
             }
             return Collections.unmodifiableMap(result);
-        }, "bundled:" + root, Layer.BUNDLED);
+        }, "bundled:" + root, Layer.BUNDLED, List.of());
     }
 
     @Override
@@ -86,6 +89,9 @@ public final class YamlTranslationSource implements TranslationSource {
 
     @Override
     public Layer layer() { return layer; }
+
+    @Override
+    public List<Path> watchDirectories() { return watchDirectories; }
 
     private static Map<Locale, TranslationCatalog> loadDirectory(Path directory) throws IOException {
         if (!Files.exists(directory)) return Map.of();

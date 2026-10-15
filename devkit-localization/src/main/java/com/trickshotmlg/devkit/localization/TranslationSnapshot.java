@@ -82,6 +82,12 @@ public final class TranslationSnapshot {
     /** Returns available locales in BCP 47 tag order. */
     public List<Locale> locales() { return List.copyOf(catalogs.keySet()); }
 
+    @Override public boolean equals(Object other) {
+        return this == other || other instanceof TranslationSnapshot snapshot && catalogs.equals(snapshot.catalogs);
+    }
+
+    @Override public int hashCode() { return catalogs.hashCode(); }
+
     /** Returns the effective, external-over-bundled view for one exact locale. */
     public Map<String, String> translations(Locale locale) {
         CatalogLayers layers = catalogs.get(LocaleFallbackResolver.normalize(locale));
