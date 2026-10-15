@@ -1,2 +1,2 @@
-/** Platform-independent command contracts will live in this package. */
+/** Platform-independent command definitions and typed argument descriptors. */
 package com.trickshotmlg.devkit.commands;
