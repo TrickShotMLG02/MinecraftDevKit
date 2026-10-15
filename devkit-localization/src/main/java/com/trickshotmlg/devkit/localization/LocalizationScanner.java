@@ -5,6 +5,7 @@ import com.trickshotmlg.devkit.text.TextFormatter;
 
 import java.util.ArrayList;
 import java.util.Locale;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -112,12 +113,114 @@ public final class LocalizationScanner {
         boolean fails = findings.stream().anyMatch(f -> options.failOn().contains(f.category()));
         return new LocalizationReport(findings, fails);
     }
+
+    /**
+     * Scans using the same locale and bundled/external precedence rules as runtime resolution.
+     * Parent locale use is informational by default; configured global fallback use is a warning.
+     */
+    public static LocalizationReport scan(TextCatalog references, TranslationSnapshot snapshot,
+                                          LocalizationScanOptions options, Locale defaultFallback,
+                                          boolean defaultFallbackEnabled) {
+        return scan(references, snapshot, options, defaultFallback, defaultFallbackEnabled, List.of());
+    }
+
+    /** Scans a snapshot and includes parsing findings produced while loading its sources. */
+    public static LocalizationReport scan(TextCatalog references, TranslationSnapshot snapshot,
+                                          LocalizationScanOptions options, Locale defaultFallback,
+                                          boolean defaultFallbackEnabled,
+                                          java.util.Collection<LocalizationFinding> sourceFindings) {
+        Objects.requireNonNull(references, "references");
+        Objects.requireNonNull(snapshot, "snapshot");
+        Objects.requireNonNull(options, "options");
+        Objects.requireNonNull(sourceFindings, "sourceFindings");
+        Locale fallback = defaultFallback == null ? null : LocaleFallbackResolver.normalize(defaultFallback);
+        ArrayList<LocalizationFinding> findings = new ArrayList<>();
+        Set<Locale> locales = new TreeSet<>(java.util.Comparator.comparing(Locale::toLanguageTag));
+        locales.addAll(options.requiredLocales());
+        locales.add(options.baseLocale());
+        locales.addAll(snapshot.locales());
+        for (TextCatalog.DeclarationConflict conflict : references.conflicts()) {
+            if (!options.ignoredKeys().contains(conflict.key())) add(findings, options,
+                    LocalizationFinding.Category.DUPLICATE_REFERENCE, OptionalLocale.none(), conflict.key(),
+                    "Conflicting fallback declarations at " + conflict.source(), false);
+        }
+
+        for (TextCatalog.Entry reference : references.entries().values()) {
+            if (options.ignoredKeys().contains(reference.key())) continue;
+            TranslationSnapshot.Lookup base = snapshot.lookup(reference.key(), options.baseLocale(), fallback,
+                    defaultFallbackEnabled);
+            String baseline = base == null ? reference.fallback().orElse(null) : base.value();
+            if (baseline == null) {
+                baseline = locales.stream().map(locale -> snapshot.lookup(reference.key(), locale, fallback,
+                                defaultFallbackEnabled))
+                        .filter(Objects::nonNull).map(TranslationSnapshot.Lookup::value).findFirst().orElse(null);
+            }
+            Set<String> canonical = baseline == null ? Set.of() : TextFormatter.placeholders(baseline);
+            for (Locale locale : locales) {
+                TranslationSnapshot.Lookup resolved = snapshot.lookup(reference.key(), locale, fallback,
+                        defaultFallbackEnabled);
+                if (resolved == null) {
+                    boolean hasFallback = reference.fallback().isPresent();
+                    add(findings, options, hasFallback ? LocalizationFinding.Category.MISSING_TRANSLATION
+                                    : LocalizationFinding.Category.MISSING_FALLBACK,
+                            OptionalLocale.of(locale), reference.key(), hasFallback
+                                    ? "Missing translation; TextRef fallback available"
+                                    : "Missing translation and no fallback", hasFallback);
+                    if (options.requiredLocales().contains(locale) && !locale.equals(options.baseLocale())) {
+                        add(findings, options, LocalizationFinding.Category.MISSING_LOCALE_COVERAGE,
+                                OptionalLocale.of(locale), reference.key(), "No translation in this locale or its fallback chain",
+                                hasFallback);
+                    }
+                    continue;
+                }
+                if (resolved.fallback() == TextResolution.Fallback.PARENT_LOCALE) {
+                    add(findings, options, LocalizationFinding.Category.PARENT_LOCALE_FALLBACK,
+                            OptionalLocale.of(locale), reference.key(), "Resolved from parent locale "
+                                    + resolved.locale().toLanguageTag(), reference.fallback().isPresent());
+                } else if (resolved.fallback() == TextResolution.Fallback.DEFAULT_LOCALE) {
+                    add(findings, options, LocalizationFinding.Category.DEFAULT_LOCALE_FALLBACK,
+                            OptionalLocale.of(locale), reference.key(), "Resolved from configured default locale "
+                                    + resolved.locale().toLanguageTag(), reference.fallback().isPresent());
+                    if (options.requiredLocales().contains(locale) && !locale.equals(options.baseLocale())) {
+                        add(findings, options, LocalizationFinding.Category.MISSING_LOCALE_COVERAGE,
+                                OptionalLocale.of(locale), reference.key(), "Covered only by configured default locale",
+                                reference.fallback().isPresent());
+                    }
+                }
+                if (baseline != null && !TextFormatter.placeholders(resolved.value()).equals(canonical)) {
+                    add(findings, options, LocalizationFinding.Category.PLACEHOLDER_MISMATCH,
+                            OptionalLocale.of(locale), reference.key(), "Placeholder mismatch: expected " + canonical
+                                    + " but found " + TextFormatter.placeholders(resolved.value()),
+                            reference.fallback().isPresent());
+                }
+            }
+        }
+
+        for (Locale locale : snapshot.locales()) {
+            for (String key : snapshot.translations(locale).keySet()) {
+                if (!references.entries().containsKey(key) && !options.ignoredKeys().contains(key)) {
+                    add(findings, options, LocalizationFinding.Category.UNUSED_TRANSLATION,
+                            OptionalLocale.of(locale), key, "Translation key is not referenced", false);
+                }
+            }
+        }
+        for (LocalizationFinding finding : sourceFindings) {
+            LocalizationFinding.Severity severity = options.failOn().contains(finding.category())
+                    ? LocalizationFinding.Severity.ERROR : finding.category() == LocalizationFinding.Category.UNUSED_TRANSLATION
+                    ? LocalizationFinding.Severity.INFO : LocalizationFinding.Severity.WARNING;
+            findings.add(new LocalizationFinding(severity, finding.category(), finding.locale(), finding.key(),
+                    finding.message(), finding.fallbackAvailable()));
+        }
+        boolean fails = findings.stream().anyMatch(finding -> options.failOn().contains(finding.category()));
+        return new LocalizationReport(findings, fails);
+    }
     private static void add(ArrayList<LocalizationFinding> findings, LocalizationScanOptions options,
                             LocalizationFinding.Category category, OptionalLocale locale,
                             String key, String message, boolean fallback) {
         LocalizationFinding.Severity severity = options.failOn().contains(category)
                 ? LocalizationFinding.Severity.ERROR
                 : category == LocalizationFinding.Category.UNUSED_TRANSLATION
+                    || category == LocalizationFinding.Category.PARENT_LOCALE_FALLBACK
                     ? LocalizationFinding.Severity.INFO : LocalizationFinding.Severity.WARNING;
         findings.add(new LocalizationFinding(severity, category, locale.value, key, message, fallback));
     }

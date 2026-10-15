@@ -19,5 +19,6 @@ public record LocalizationFinding(Severity severity, Category category, Optional
     public enum Severity { ERROR, WARNING, INFO }
     /** Machine-readable reason for a finding. */
     public enum Category { MISSING_TRANSLATION, MISSING_FALLBACK, MISSING_LOCALE_COVERAGE,
-        UNUSED_TRANSLATION, PLACEHOLDER_MISMATCH, INVALID_RESOURCE, DUPLICATE_REFERENCE }
+        UNUSED_TRANSLATION, PLACEHOLDER_MISMATCH, INVALID_RESOURCE, DUPLICATE_REFERENCE,
+        PARENT_LOCALE_FALLBACK, DEFAULT_LOCALE_FALLBACK }
 }

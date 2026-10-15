@@ -1,6 +1,6 @@
 # MinecraftDevKit Bukkit Permissions Gradle Plugin
 
-The `devkit-gradle-plugin` module provides `com.trickshotmlg.devkit.bukkit-permissions` and `com.trickshotmlg.devkit.localization-scan`. The first loads a compiled Java `PermissionCatalog`, exports traditional Bukkit/Spigot `plugin.yml` permission metadata, and merges that metadata during normal Gradle resource processing. The second validates UTF-8 localization catalogs against a JSON text-reference manifest.
+The `devkit-gradle-plugin` module provides `com.trickshotmlg.devkit.bukkit-permissions` and `com.trickshotmlg.devkit.localization-scan`. The first loads a compiled Java `PermissionCatalog`, exports traditional Bukkit/Spigot `plugin.yml` permission metadata, and merges that metadata during normal Gradle resource processing. The second validates UTF-8 `.properties` and YAML localization catalogs against a JSON text-reference manifest, using hierarchical locale fallback.
 
 This plugin does not generate Paper `paper-plugin.yml`, command metadata, runtime registrations, or metadata for Velocity, Fabric, Forge, or NeoForge. It has no server runtime requirement.
 

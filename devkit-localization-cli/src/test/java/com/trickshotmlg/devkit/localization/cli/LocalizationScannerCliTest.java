@@ -29,4 +29,35 @@ class LocalizationScannerCliTest {
         assertEquals(0, LocalizationScannerCli.run(new String[]{"--help"}, System.out, System.err));
         assertEquals(2, LocalizationScannerCli.run(new String[]{"--bogus", "x"}, System.out, new PrintStream(new ByteArrayOutputStream())));
     }
+
+    @Test void scansYamlWithLocaleFallbackAndCanFailSpecificallyOnGlobalFallback() throws Exception {
+        Path translations = Files.createDirectory(temp.resolve("yaml"));
+        Files.writeString(translations.resolve("en.yml"), "messages:\n  hello: \"Hello\"\n");
+        Files.writeString(translations.resolve("de.yml"), "messages:\n  other: \"Anders\"\n");
+        Path refs = temp.resolve("yaml-refs.json");
+        TextCatalogManifest.write(TextCatalog.builder().add(TextRef.translated("messages.hello"), "test", "hello")
+                .build(), refs);
+        ByteArrayOutputStream stdout = new ByteArrayOutputStream();
+        int exit = LocalizationScannerCli.run(new String[]{"--translations", translations.toString(),
+                        "--references", refs.toString(), "--resource-format", "yaml", "--base-locale", "en",
+                        "--locales", "de", "--fallback-locale", "en", "--fail-on", "DEFAULT_LOCALE_FALLBACK",
+                        "--format", "json"}, new PrintStream(stdout), new PrintStream(new ByteArrayOutputStream()));
+
+        assertEquals(1, exit);
+        assertTrue(stdout.toString().contains("DEFAULT_LOCALE_FALLBACK"));
+    }
+
+    @Test void malformedYamlIsReturnedAsAnInvalidResourceFinding() throws Exception {
+        Path translations = Files.createDirectory(temp.resolve("bad-yaml"));
+        Files.writeString(translations.resolve("en.yml"), "messages: [broken\n");
+        Path refs = temp.resolve("bad-refs.json");
+        TextCatalogManifest.write(TextCatalog.builder().build(), refs);
+        ByteArrayOutputStream stdout = new ByteArrayOutputStream();
+        int exit = LocalizationScannerCli.run(new String[]{"--translations", translations.toString(),
+                        "--references", refs.toString(), "--resource-format", "yaml", "--format", "json"},
+                new PrintStream(stdout), new PrintStream(new ByteArrayOutputStream()));
+
+        assertEquals(1, exit);
+        assertTrue(stdout.toString().contains("INVALID_RESOURCE"));
+    }
 }

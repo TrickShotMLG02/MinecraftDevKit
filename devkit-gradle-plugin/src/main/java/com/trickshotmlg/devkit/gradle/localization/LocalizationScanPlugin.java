@@ -13,6 +13,8 @@ public final class LocalizationScanPlugin implements Plugin<Project> {
             task.getTranslationsDirectory().set(extension.getTranslationsDirectory());
             task.getReferenceManifest().set(extension.getReferenceManifest());
             task.getBaseLocale().set(extension.getBaseLocale());
+            task.getDefaultFallbackLocale().set(extension.getDefaultFallbackLocale());
+            task.getDefaultFallbackEnabled().set(extension.getDefaultFallbackEnabled());
             task.getRequiredLocales().set(extension.getRequiredLocales());
             task.getFailOn().set(extension.getFailOn());
             task.getReportFile().set(project.getLayout().getBuildDirectory().file("reports/minecraftdevkit/localization.json"));

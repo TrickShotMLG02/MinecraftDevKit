@@ -32,6 +32,34 @@ class LocalizationScanPluginFunctionalTest {
         assertTrue(result.getOutput().contains("Localization validation failed"));
         assertTrue(Files.exists(project.resolve("build/reports/minecraftdevkit/localization.json")));
     }
+    @Test void scansYamlAndReportsPartialRegionalCoverageAsInheritance() throws IOException {
+        Path project = temp.resolve("yaml-localization-" + System.nanoTime());
+        Files.createDirectories(project.resolve("translations/en-GB"));
+        Files.writeString(project.resolve("settings.gradle.kts"), "rootProject.name = \"consumer\"\n");
+        Files.writeString(project.resolve("build.gradle.kts"), """
+                plugins { id("com.trickshotmlg.devkit.localization-scan") }
+                devkitLocalizationScan {
+                    translationsDirectory.set(layout.projectDirectory.dir("translations"))
+                    referenceManifest.set(layout.projectDirectory.file("references.json"))
+                    baseLocale.set("en")
+                    defaultFallbackLocale.set("en")
+                    requiredLocales.set(listOf("en", "en-GB"))
+                    failOn.set(listOf("MISSING_FALLBACK", "INVALID_RESOURCE"))
+                }
+                """);
+        Files.writeString(project.resolve("translations/en.yml"), "messages:\n  hello: \"Hello\"\n");
+        Files.writeString(project.resolve("translations/en-GB/commands.yml"), "commands:\n  mate: \"Hi mate\"\n");
+        Files.writeString(project.resolve("references.json"), """
+                {"schemaVersion":1,"references":[{"key":"messages.hello","categories":["test"],"sources":["fixture"]}],"conflicts":[]}
+                """);
+
+        BuildResult result = run(project, "scanDevKitTranslations");
+
+        assertEquals(TaskOutcome.SUCCESS, result.task(":scanDevKitTranslations").getOutcome());
+        String report = Files.readString(project.resolve("build/reports/minecraftdevkit/localization.json"));
+        assertTrue(report.contains("PARENT_LOCALE_FALLBACK"));
+        assertFalse(report.contains("MISSING_FALLBACK"));
+    }
     private Path createProject(String properties) throws IOException {
         Path project = temp.resolve("localization-" + System.nanoTime());
         Files.createDirectories(project.resolve("translations"));

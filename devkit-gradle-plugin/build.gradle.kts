@@ -5,6 +5,7 @@ plugins {
 dependencies {
     implementation(project(":devkit-bukkit-metadata"))
     implementation(project(":devkit-localization"))
+    implementation(project(":devkit-localization-yaml"))
     implementation("org.yaml:snakeyaml:2.7")
     testImplementation(gradleTestKit())
 }

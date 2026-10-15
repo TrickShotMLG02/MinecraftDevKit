@@ -114,4 +114,49 @@ class LocalizationScannerTest {
                 finding.category() == LocalizationFinding.Category.INVALID_RESOURCE).allMatch(finding ->
                 finding.severity() == LocalizationFinding.Severity.ERROR));
     }
+
+    @Test void snapshotScannerRecognizesRegionalParentCoverageAndReportsFallbackKind() throws IOException {
+        TextCatalog references = TextCatalog.builder().add(TextRef.translated("hello"), "command", "hello").build();
+        TranslationSnapshot snapshot = TranslationSnapshot.load(java.util.List.of(new TranslationSource() {
+            @Override public Map<Locale, TranslationCatalog> load() {
+                return Map.of(Locale.ENGLISH, TranslationCatalog.of(Locale.ENGLISH, Map.of("hello", "Hello")),
+                        Locale.GERMAN, TranslationCatalog.of(Locale.GERMAN, Map.of("hello", "Hallo")));
+            }
+        }));
+        var options = new LocalizationScanOptions(Locale.ENGLISH, Set.of(Locale.forLanguageTag("de-AT")),
+                Set.of(LocalizationFinding.Category.MISSING_FALLBACK), Set.of());
+
+        LocalizationReport report = LocalizationScanner.scan(references, snapshot, options,
+                Locale.ENGLISH, true);
+
+        assertFalse(report.failsBuild());
+        assertTrue(report.findings().stream().anyMatch(finding ->
+                finding.category() == LocalizationFinding.Category.PARENT_LOCALE_FALLBACK
+                        && finding.locale().orElseThrow().equals("de-AT")
+                        && finding.severity() == LocalizationFinding.Severity.INFO));
+        assertFalse(report.findings().stream().anyMatch(finding ->
+                finding.category() == LocalizationFinding.Category.MISSING_FALLBACK
+                        && finding.locale().orElseThrow().equals("de-AT")));
+    }
+
+    @Test void snapshotScannerSeparatesGlobalFallbackFromUnresolvedKey() throws IOException {
+        TextCatalog references = TextCatalog.builder().add(TextRef.translated("hello"), "command", "hello").build();
+        TranslationSnapshot snapshot = TranslationSnapshot.bundled(Map.of(Locale.ENGLISH,
+                TranslationCatalog.of(Locale.ENGLISH, Map.of("hello", "Hello"))));
+        var options = new LocalizationScanOptions(Locale.ENGLISH, Set.of(Locale.GERMAN),
+                Set.of(LocalizationFinding.Category.DEFAULT_LOCALE_FALLBACK), Set.of());
+
+        LocalizationReport enabled = LocalizationScanner.scan(references, snapshot, options,
+                Locale.ENGLISH, true);
+        LocalizationReport disabled = LocalizationScanner.scan(references, snapshot, options,
+                Locale.ENGLISH, false);
+
+        assertTrue(enabled.failsBuild());
+        assertTrue(enabled.findings().stream().anyMatch(finding ->
+                finding.category() == LocalizationFinding.Category.DEFAULT_LOCALE_FALLBACK
+                        && finding.locale().orElseThrow().equals("de")));
+        assertTrue(disabled.findings().stream().anyMatch(finding ->
+                finding.category() == LocalizationFinding.Category.MISSING_FALLBACK
+                        && finding.locale().orElseThrow().equals("de")));
+    }
 }

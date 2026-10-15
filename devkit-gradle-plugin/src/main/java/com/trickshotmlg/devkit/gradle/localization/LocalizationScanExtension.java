@@ -13,12 +13,16 @@ public abstract class LocalizationScanExtension {
         getTranslationsDirectory().convention(layout.getProjectDirectory().dir("src/main/resources/translations"));
         getReferenceManifest().convention(layout.getProjectDirectory().file("src/main/localization/text-references.json"));
         getBaseLocale().convention("en-US");
+        getDefaultFallbackLocale().convention("en-US");
+        getDefaultFallbackEnabled().convention(true);
         getRequiredLocales().convention(java.util.List.of("en-US"));
         getFailOn().convention(java.util.List.of("MISSING_FALLBACK", "PLACEHOLDER_MISMATCH", "INVALID_RESOURCE", "DUPLICATE_REFERENCE"));
     }
     public abstract DirectoryProperty getTranslationsDirectory();
     public abstract RegularFileProperty getReferenceManifest();
     public abstract org.gradle.api.provider.Property<String> getBaseLocale();
+    public abstract org.gradle.api.provider.Property<String> getDefaultFallbackLocale();
+    public abstract org.gradle.api.provider.Property<Boolean> getDefaultFallbackEnabled();
     public abstract ListProperty<String> getRequiredLocales();
     public abstract ListProperty<String> getFailOn();
 }
