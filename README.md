@@ -30,7 +30,7 @@ Shared modules contain ordinary Java APIs and must not depend on Bukkit, Paper, 
 
 See the [`devkit-permissions` guide](devkit-permissions/README.md), [`devkit-bukkit-metadata` guide](devkit-bukkit-metadata/README.md), and [`devkit-gradle-plugin` guide](devkit-gradle-plugin/README.md). The Gradle plugin supports traditional Bukkit/Spigot-style `plugin.yml`; Paper's `paper-plugin.yml`, Velocity, Fabric, Forge, and NeoForge metadata are not supported. No platform API dependency is included in the permissions module.
 
-The standalone [`Bukkit permissions example`](examples/bukkit-permissions-example/README.md) consumes the Maven Local publications, generates permission metadata during its own Gradle build, and packages a test plugin JAR for a Paper server.
+The standalone [`Bukkit permissions example`](examples/bukkit-permissions-example/README.md) resolves MinecraftDevKit from JitPack and the Paper API from PaperMC, generates permission metadata during its own Gradle build, and packages a test plugin JAR for a Paper server. The repository also includes a local [Paper test server provisioner and IntelliJ run/debug profiles](tools/devservers/README.md); server download and startup are opt-in and Paper's EULA is never accepted automatically.
 
 ## Installation
 

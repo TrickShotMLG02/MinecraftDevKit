@@ -1,0 +1,16 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Paper Server for Debug" type="GradleRunConfiguration" factoryName="Gradle">
+    <ExternalSystemSettings>
+      <option name="executionName" value="Paper Server for Debug" />
+      <option name="externalProjectPath" value="$PROJECT_DIR$/examples/bukkit-permissions-example" />
+      <option name="taskNames">
+        <list>
+          <option value="debugPaperServer" />
+        </list>
+      </option>
+      <option name="vmOptions" value="" />
+      <option name="scriptParameters" value="" />
+    </ExternalSystemSettings>
+    <method v="2" />
+  </configuration>
+</component>

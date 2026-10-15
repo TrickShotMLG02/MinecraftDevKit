@@ -38,11 +38,12 @@ Catalog static initialization runs during the build. Keep it lightweight and ind
 
 ## Testing on Paper
 
-1. Build with JDK 21 and copy the shaded JAR from `build/libs` into the Paper server's `plugins` directory.
-2. Start a Paper 1.21.8 server. Confirm that the startup log reports the catalog node and group counts.
-3. Join as a normal non-operator and run `/mdkperms`. The player should have the `friendnet.default` node and its basic children, but not the extended or staff permissions.
-4. Grant operator status in the server console (or test as an operator) and run `/mdkperms` again. Bukkit's `op` default should grant `friendnet.admin`, whose positive child declarations cover every catalog permission except `friendnet.proxy.handshake`.
-5. Use LuckPerms for explicit group-node assignments, for example:
+The repository includes a Paper server provisioner and IntelliJ run/debug profiles. See [`tools/devservers/README.md`](../../tools/devservers/README.md) for setup. From this example directory, run `.\gradlew.bat provisionPaperServer`, review and accept the Minecraft EULA manually, then use `.\gradlew.bat runPaperServer`. The run task builds and deploys the plugin automatically.
+
+1. Start Paper 1.21.8. Confirm that the startup log reports the catalog node and group counts.
+2. Join as a normal non-operator and run `/mdkperms`. The player should have the `friendnet.default` node and its basic children, but not the extended or staff permissions.
+3. Grant operator status in the server console (or test as an operator) and run `/mdkperms` again. Bukkit's `op` default should grant `friendnet.admin`, whose positive child declarations cover every catalog permission except `friendnet.proxy.handshake`.
+4. Use LuckPerms for explicit group-node assignments, for example:
 
    ```text
    /lp user Alice permission set friendnet.default.extended true
@@ -51,7 +52,7 @@ Catalog static initialization runs during the build. Keep it lightweight and ind
 
    Relog or refresh permissions as needed, then run `/mdkperms`. The extended node grants the flattened `DEFAULT` and `EXTENDED` selections. The moderator node includes inherited extended grants and staff grants, while its generated children omit `friendnet.friends.requests.accept.all`.
 
-6. Verify the exclusion is not a global denial by assigning that node independently:
+5. Verify the exclusion is not a global denial by assigning that node independently:
 
    ```text
    /lp user Bob permission set friendnet.friends.requests.accept.all true

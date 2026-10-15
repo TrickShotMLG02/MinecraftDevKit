@@ -1,6 +1,7 @@
 # Gradle
 .gradle/
 **/build/
+.devservers/
 
 # Compiled and generated files
 *.class

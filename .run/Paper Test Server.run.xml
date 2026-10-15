@@ -1,0 +1,16 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Paper Test Server" type="GradleRunConfiguration" factoryName="Gradle">
+    <ExternalSystemSettings>
+      <option name="executionName" value="Paper Test Server" />
+      <option name="externalProjectPath" value="$PROJECT_DIR$/examples/bukkit-permissions-example" />
+      <option name="taskNames">
+        <list>
+          <option value="runPaperServer" />
+        </list>
+      </option>
+      <option name="vmOptions" value="" />
+      <option name="scriptParameters" value="" />
+    </ExternalSystemSettings>
+    <method v="2" />
+  </configuration>
+</component>
