@@ -56,6 +56,7 @@ public final class LocalizationScanner {
                     + locale.toLanguageTag() + " does not match catalog locale " + catalog.locale().toLanguageTag());
         });
         for (TextCatalog.DeclarationConflict conflict : references.conflicts()) {
+            if (options.ignoredKeys().contains(conflict.key())) continue;
             add(findings, options, LocalizationFinding.Category.DUPLICATE_REFERENCE,
                     OptionalLocale.none(), conflict.key(), "Conflicting fallback declarations at " + conflict.source(), false);
         }

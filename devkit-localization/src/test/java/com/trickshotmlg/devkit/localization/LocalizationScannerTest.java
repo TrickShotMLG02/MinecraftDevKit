@@ -37,6 +37,17 @@ class LocalizationScannerTest {
                 LocalizationScanOptions.defaults(Locale.US, Set.of(Locale.US)));
         assertTrue(report.findings().stream().anyMatch(f -> f.category() == LocalizationFinding.Category.DUPLICATE_REFERENCE));
     }
+    @Test void ignoredKeysSuppressConflictingReferenceDeclarations() {
+        TextCatalog refs = TextCatalog.builder().add(TextRef.translated("legacy.key", "First"), "a", "one")
+                .add(TextRef.translated("legacy.key", "Second"), "b", "two").build();
+        var options = new LocalizationScanOptions(Locale.US, Set.of(),
+                Set.of(LocalizationFinding.Category.DUPLICATE_REFERENCE), Set.of("legacy.key"));
+
+        var report = LocalizationScanner.scan(refs, Map.of(), options);
+
+        assertFalse(report.failsBuild());
+        assertTrue(report.findings().stream().noneMatch(finding -> finding.key().equals("legacy.key")));
+    }
     @Test void detectsMalformedResourcesInvalidLocalesAndDuplicateProperties() throws IOException {
         Files.writeString(temp.resolve("en-US.properties"), "key=first\nkey=second\n");
         Files.writeString(temp.resolve("not_a_locale.properties"), "x=y\n");
