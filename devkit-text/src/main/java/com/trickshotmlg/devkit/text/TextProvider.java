@@ -4,6 +4,8 @@ import net.kyori.adventure.text.Component;
 
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 
 /** Resolves text references for a locale and optional named placeholder values. */
 @FunctionalInterface
@@ -29,5 +31,20 @@ public interface TextProvider {
      */
     default Component resolve(TextRef reference, Locale locale) {
         return resolve(reference, locale, Map.of());
+    }
+
+    /**
+     * Resolves a reference while associating diagnostics with an optional source identifier.
+     *
+     * @param reference text reference
+     * @param locale requested locale
+     * @param placeholders placeholder values
+     * @param sourceContext optional stable identifier for the caller
+     * @return rendered component
+     */
+    default Component resolve(TextRef reference, Locale locale, Map<String, ?> placeholders,
+                              Optional<String> sourceContext) {
+        Objects.requireNonNull(sourceContext, "sourceContext");
+        return resolve(reference, locale, placeholders);
     }
 }
