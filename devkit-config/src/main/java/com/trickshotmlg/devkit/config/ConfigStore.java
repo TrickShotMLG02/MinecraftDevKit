@@ -92,9 +92,17 @@ public final class ConfigStore {
 
     /** Source adapters atomically replace a fully validated candidate as one reload operation. */
     public void replaceFromReload(Map<String, ?> values) {
+        replaceFromReload(values, generation());
+    }
+
+    /** Atomically replaces the store only if no programmatic update happened since the caller's read. */
+    public void replaceFromReload(Map<String, ?> values, long expectedGeneration) {
         List<ConfigChange<?>> changes;
         synchronized (mutationLock) {
             ConfigSnapshot previous = active.get();
+            if (previous.generation() != expectedGeneration) {
+                throw new java.util.ConcurrentModificationException("Configuration changed while a reload candidate was being prepared");
+            }
             Map<String, Object> validated = validateValues(schema, new LinkedHashMap<>(values), true);
             long nextGeneration = previous.generation() + 1;
             changes = changes(previous, validated, ConfigChange.Origin.RELOAD, nextGeneration);
@@ -106,7 +114,9 @@ public final class ConfigStore {
 
     private void notifyListeners(List<ConfigChange<?>> changes) {
         for (ConfigChange<?> change : changes) for (Consumer<ConfigChange<?>> listener : listeners) {
-            try { listener.accept(change); } catch (RuntimeException exception) { listenerFailureHandler.accept(exception); }
+            try { listener.accept(change); } catch (RuntimeException exception) {
+                try { listenerFailureHandler.accept(exception); } catch (RuntimeException ignored) { /* published state remains authoritative */ }
+            }
         }
     }
 

@@ -18,12 +18,13 @@ import java.util.Objects;
 import java.util.HexFormat;
 
 /** Long-lived YAML configuration handle with explicit, conflict-aware atomic persistence. */
-public final class YamlConfigHandle {
+public final class YamlConfigHandle implements AutoCloseable {
     private final Path file;
     private final YamlConfigFile yaml;
     private final ConfigStore store;
     private volatile Map<String, Object> unknownValues;
     private volatile String diskFingerprint;
+    private volatile YamlConfigWatcher watcher;
 
     private YamlConfigHandle(Path file, YamlConfigFile yaml, YamlConfigLoadResult loaded, String fingerprint) {
         this.file = file.toAbsolutePath().normalize();
@@ -57,6 +58,70 @@ public final class YamlConfigHandle {
     public Path file() { return file; }
     public ConfigStore store() { return store; }
     public Map<String, Object> unknownValues() { return unknownValues; }
+
+    /** Reloads the full file and publishes it only when parsing and schema validation both pass. */
+    public synchronized YamlReloadResult reload() { return reload(YamlReloadPolicy.REJECT_IF_DIRTY); }
+
+    /** Reloads with an explicit policy for pending in-memory changes. */
+    public synchronized YamlReloadResult reload(YamlReloadPolicy policy) {
+        Objects.requireNonNull(policy, "policy");
+        long expectedGeneration = store.generation();
+        if (store.isDirty() && policy == YamlReloadPolicy.REJECT_IF_DIRTY) {
+            return reloadFailure(true, "configuration has unsaved in-memory changes", java.util.List.of());
+        }
+        try {
+            YamlConfigLoadResult candidate = yaml.load(file);
+            boolean changed = !store.snapshot().values().equals(candidate.store().snapshot().values())
+                    || !unknownValues.equals(candidate.unknownValues());
+            store.replaceFromReload(candidate.store().snapshot().values(), expectedGeneration);
+            unknownValues = candidate.unknownValues();
+            diskFingerprint = fingerprint(file);
+            return new YamlReloadResult(true, changed, false, file, store.generation(), candidate.issues(), java.util.Optional.empty());
+        } catch (java.util.ConcurrentModificationException exception) {
+            return reloadFailure(true, exception.getMessage(), java.util.List.of());
+        } catch (IOException | RuntimeException exception) {
+            java.util.List<com.trickshotmlg.devkit.config.ConfigIssue> issues = exception instanceof YamlConfigException yamlException
+                    ? yamlException.issues() : exception instanceof com.trickshotmlg.devkit.config.ConfigValidationException validation
+                    ? validation.issues() : java.util.List.of();
+            return reloadFailure(false, exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage(), issues);
+        }
+    }
+
+    /** Performs reload work on the caller-provided executor, whose lifecycle remains caller-owned. */
+    public java.util.concurrent.CompletionStage<YamlReloadResult> reloadAsync(YamlReloadPolicy policy,
+                                                                               java.util.concurrent.Executor executor) {
+        Objects.requireNonNull(executor, "executor");
+        return java.util.concurrent.CompletableFuture.supplyAsync(() -> reload(policy), executor);
+    }
+
+    /** Starts an opt-in watcher for this file; callbacks run on the watch reload worker. */
+    public synchronized void startWatching(java.time.Duration debounce,
+                                           java.util.function.Consumer<YamlReloadResult> resultConsumer,
+                                           java.util.function.Consumer<Throwable> failureConsumer) throws IOException {
+        if (watcher != null) throw new IllegalStateException("Configuration file watching is already active");
+        YamlConfigWatcher candidate = new YamlConfigWatcher(this, debounce, resultConsumer, failureConsumer);
+        try {
+            candidate.start();
+            watcher = candidate;
+        } catch (IOException | RuntimeException exception) {
+            candidate.close();
+            throw exception;
+        }
+    }
+
+    /** Stops the optional file watcher and releases its thread and WatchService. */
+    public synchronized void stopWatching() {
+        YamlConfigWatcher current = watcher;
+        watcher = null;
+        if (current != null) current.close();
+    }
+
+    @Override public void close() { stopWatching(); }
+
+    private YamlReloadResult reloadFailure(boolean conflict, String message,
+                                           java.util.List<com.trickshotmlg.devkit.config.ConfigIssue> issues) {
+        return new YamlReloadResult(false, false, conflict, file, store.generation(), issues, java.util.Optional.ofNullable(message));
+    }
 
     /**
      * Saves a complete normalized YAML document through a same-directory temporary file and an
