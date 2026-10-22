@@ -136,6 +136,19 @@ class TaskScopeLifecycleTest {
         scheduler.close();
     }
 
+    @Test void backendRejectionReportsZeroCallbackExecutions() {
+        IllegalStateException rejected = new IllegalStateException("backend unavailable");
+        List<TaskFailure> failures = new ArrayList<>();
+        TaskScheduler scheduler = TaskSchedulers.create((target, schedule, callback) -> { throw rejected; }, failures::add);
+
+        TaskHandle task = scheduler.sync().later(TickDelay.ONE, () -> fail("rejected task ran"));
+        assertEquals(TaskState.FAILED, task.state());
+        assertEquals(1, failures.size());
+        assertSame(rejected, failures.get(0).cause());
+        assertEquals(0, failures.get(0).executionCount());
+        scheduler.close();
+    }
+
     private static final class ManualBackend implements TaskBackend {
         private final List<Entry> entries = new ArrayList<>();
         @Override public synchronized BackendTask schedule(TaskExecutionTarget target, TaskSchedule schedule, Runnable callback) {

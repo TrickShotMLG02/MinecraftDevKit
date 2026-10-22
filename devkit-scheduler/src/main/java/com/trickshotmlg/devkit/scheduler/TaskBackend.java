@@ -9,5 +9,12 @@ package com.trickshotmlg.devkit.scheduler;
  */
 @FunctionalInterface
 public interface TaskBackend {
+    /**
+     * Schedules one managed callback. The managed wrapper tolerates the callback running before this method returns.
+     * @param target execution context requested by the caller
+     * @param schedule tick schedule
+     * @param callback guarded callback to dispatch
+     * @return native cancellation action
+     */
     BackendTask schedule(TaskExecutionTarget target, TaskSchedule schedule, Runnable callback);
 }

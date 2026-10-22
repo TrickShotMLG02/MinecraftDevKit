@@ -16,6 +16,7 @@ public final class AsyncTaskResult<T> {
     private final TaskHandle computation;
     private final CompletableFuture<T> result = new CompletableFuture<>();
     private final AtomicBoolean cancellationRequested = new AtomicBoolean();
+    private final AtomicBoolean continuationRegistered = new AtomicBoolean();
     private final AtomicReference<TaskHandle> continuation = new AtomicReference<>();
 
     private AsyncTaskResult(TaskScope scope, Callable<T> action) {
@@ -42,18 +43,30 @@ public final class AsyncTaskResult<T> {
         return new AsyncTaskResult<>(scope, action);
     }
 
-    /** The computation handle. Its terminal state does not include a subsequently registered continuation. */
+    /**
+     * The computation handle. Its terminal state does not include a subsequently registered continuation.
+     * @return handle for the asynchronous computation
+     */
     public TaskHandle task() { return computation; }
 
-    /** Completion of the background computation; it never blocks the calling thread. */
+    /**
+     * Completion of the background computation; it never blocks the calling thread.
+     * @return read-only completion stage
+     */
     public CompletionStage<T> result() { return result.minimalCompletionStage(); }
 
     /**
      * Schedules {@code action} in the scheduler's synchronous context after successful computation.
      * The continuation is cancelled if this result is cancelled or its owning scope closes first.
+     * Only one synchronous continuation may be registered on a result.
+     * @param action server-context callback
+     * @return this result for fluent failure handling
      */
     public AsyncTaskResult<T> thenSync(Consumer<? super T> action) {
         Objects.requireNonNull(action, "action");
+        if (!continuationRegistered.compareAndSet(false, true)) {
+            throw new IllegalStateException("Only one synchronous continuation may be registered");
+        }
         result.whenComplete((value, error) -> {
             if (error != null || cancellationRequested.get()) return;
             try {
@@ -69,7 +82,11 @@ public final class AsyncTaskResult<T> {
         return this;
     }
 
-    /** Registers a nonblocking failure observer, invoked by the completion stage's completing/registration thread. */
+    /**
+     * Registers a nonblocking failure observer, invoked by the completion stage's completing or registration thread.
+     * @param action failure observer
+     * @return this result
+     */
     public AsyncTaskResult<T> onFailure(Consumer<? super Throwable> action) {
         Objects.requireNonNull(action, "action");
         result.whenComplete((value, error) -> {
@@ -80,16 +97,24 @@ public final class AsyncTaskResult<T> {
         return this;
     }
 
-    /** Cancels the computation if still pending/running and any queued synchronous continuation. */
+    /**
+     * Cancels pending computation and any queued synchronous continuation. If the computation result
+     * is already complete, that value remains available, but cancellation prevents a later handoff.
+     * @return {@code true} if this pipeline accepted its first cancellation request
+     */
     public boolean cancel() {
         if (!cancellationRequested.compareAndSet(false, true)) return false;
-        boolean changed = computation.cancel();
+        computation.cancel();
         TaskHandle scheduled = continuation.get();
-        if (scheduled != null) changed |= scheduled.cancel();
+        if (scheduled != null) scheduled.cancel();
         result.completeExceptionally(new CancellationException("Asynchronous task was cancelled"));
-        return changed;
+        return true;
     }
 
+    /**
+     * Whether cancellation was requested for this result pipeline.
+     * @return true after the first accepted cancellation request
+     */
     public boolean isCancelled() { return cancellationRequested.get() || computation.state() == TaskState.CANCELLED; }
 
     private static Throwable unwrap(Throwable error) {

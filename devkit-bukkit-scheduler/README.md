@@ -1,0 +1,56 @@
+# devkit-bukkit-scheduler
+
+Java 21 Paper/Bukkit adapter for the platform-independent `devkit-scheduler` module. It uses the plugin-owned native `BukkitScheduler`; it does not create an executor or a thread per task. Paper API is compile-only and is not bundled in the published module.
+
+Compiled against Paper API `1.21.11-R0.1-SNAPSHOT`. Other Paper/Spigot versions have not been verified. This adapter targets the traditional Bukkit primary server thread and is **not Folia compatible**. Folia's entity and region ownership requires a future adapter with explicit ownership targets, not fallback to its global scheduler.
+
+## Setup
+
+```kotlin
+repositories {
+    maven("https://repo.papermc.io/repository/maven-public/")
+    mavenCentral()
+}
+
+dependencies {
+    implementation("com.trickshotmlg.devkit:devkit-bukkit-scheduler:<version>")
+    compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+}
+```
+
+## Plugin lifecycle and task usage
+
+```java
+public final class ExamplePlugin extends JavaPlugin {
+    private BukkitTaskScheduler tasks;
+    private TaskScope featureTasks;
+
+    @Override public void onEnable() {
+        tasks = BukkitTaskScheduler.create(this);
+        featureTasks = tasks.scope();
+
+        tasks.sync().later(TickDelay.of(20), () -> getLogger().info("One second at nominal TPS"));
+        featureTasks.sync().repeat(TickDelay.ZERO, TickPeriod.of(20), context -> {
+            updateServerState();
+            if (shouldStop()) context.cancel();
+        });
+
+        tasks.async().submit(() -> loadDataFromDisk())
+            .thenSync(data -> applyDataToServer(data))
+            .onFailure(error -> getLogger().log(Level.SEVERE, "Load failed", error));
+    }
+
+    @Override public void onDisable() {
+        if (featureTasks != null) featureTasks.close();
+        if (tasks != null) tasks.close();
+    }
+}
+```
+
+`run` schedules as soon as Bukkit permits (synchronous work runs on a later server tick); `nextTick` requests a one-tick delay. `later` and `repeat` use server ticks, not milliseconds. Twenty ticks is nominally one second at 20 TPS, and server lag increases wall time. Async callbacks must not touch Bukkit world, entity, inventory, or player state unless that specific API documents off-thread safety. `thenSync` performs the handoff without blocking and is cancelled with its result scope.
+
+The adapter registers a plugin-disable listener, closes its scheduler when that plugin disables, unregisters the listener on close, and releases its plugin reference. Explicit `onDisable` closure remains recommended. Calling the handle's `cancel()` keeps wrapper state consistent. If external code cancels tasks directly with `BukkitScheduler.cancelTasks(plugin)`, the wrapper cannot observe those external cancellations until the scheduler itself closes or a callback reaches the wrapper.
+
+Native Bukkit task cancellation does not interrupt a callback already running. Do not schedule long-running work on the sync context. Async code uses Bukkit's native async scheduler and must be independently thread-safe. External cancellation does not necessarily interrupt a running callback either.
+
+The adapter does not declare or claim Folia support. A Folia implementation must add location/entity ownership scheduling APIs and cannot treat a global scheduler as universally safe for server state.

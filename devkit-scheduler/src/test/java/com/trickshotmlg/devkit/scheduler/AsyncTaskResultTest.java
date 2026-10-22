@@ -90,6 +90,14 @@ class AsyncTaskResultTest {
         scheduler.close();
     }
 
+    @Test void onlyOneOwnedServerContinuationMayBeRegistered() {
+        ManualBackend backend = new ManualBackend();
+        TaskScheduler scheduler = TaskSchedulers.create(backend, failure -> fail(failure.cause()));
+        AsyncTaskResult<Integer> result = scheduler.async().submit(() -> 1).thenSync(value -> { });
+        assertThrows(IllegalStateException.class, () -> result.thenSync(value -> { }));
+        scheduler.close();
+    }
+
     private static final class ManualBackend implements TaskBackend {
         private final List<Entry> entries = new ArrayList<>();
         @Override public synchronized BackendTask schedule(TaskExecutionTarget target, TaskSchedule schedule, Runnable callback) {

@@ -52,7 +52,11 @@ public final class BukkitTaskScheduler implements TaskScheduler, Listener {
         this.delegate = Objects.requireNonNull(delegate, "delegate");
     }
 
-    /** Creates a scheduler whose tasks are owned by and cancelled with {@code plugin}. */
+    /**
+     * Creates a scheduler whose tasks are owned by and cancelled with {@code plugin}.
+     * @param plugin owning JavaPlugin or Bukkit plugin
+     * @return new plugin-scoped scheduler
+     */
     public static BukkitTaskScheduler create(Plugin plugin) {
         BukkitTaskScheduler scheduler = new BukkitTaskScheduler(plugin);
         try {
@@ -64,6 +68,9 @@ public final class BukkitTaskScheduler implements TaskScheduler, Listener {
         }
     }
 
+    /** Closes this scheduler when Bukkit reports that its owning plugin is disabling.
+     * @param event plugin disable event
+     */
     @EventHandler
     public void onPluginDisable(PluginDisableEvent event) {
         closeForPlugin(event.getPlugin());

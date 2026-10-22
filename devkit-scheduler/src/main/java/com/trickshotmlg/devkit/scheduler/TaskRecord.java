@@ -10,8 +10,8 @@ final class TaskRecord implements TaskHandle {
     private final long id;
     private final TaskExecutionTarget target;
     private final TaskSchedule schedule;
-    private final TaskScope scope;
-    private final TaskCallback callback;
+    private volatile TaskScope scope;
+    private TaskCallback callback;
     private final TaskFailureHandler failureHandler;
     private final TaskFailurePolicy failurePolicy;
     private final CompletableFuture<Void> completion = new CompletableFuture<>();
@@ -35,8 +35,8 @@ final class TaskRecord implements TaskHandle {
     void setTerminalCallback(Runnable action) {
         boolean alreadyTerminal;
         synchronized (this) {
-            terminalCallback = Objects.requireNonNull(action);
             alreadyTerminal = state.terminal();
+            if (!alreadyTerminal) terminalCallback = Objects.requireNonNull(action);
         }
         if (alreadyTerminal) action.run();
     }
@@ -45,21 +45,23 @@ final class TaskRecord implements TaskHandle {
         Objects.requireNonNull(task, "task");
         boolean cancel;
         synchronized (this) {
-            backendTask = task;
-            cancel = state.terminal();
+            cancel = state == TaskState.CANCELLED || state == TaskState.FAILED;
+            if (!state.terminal()) backendTask = task;
         }
         if (cancel) safeCancel(task);
     }
 
     void dispatch() {
+        TaskCallback invocation;
         synchronized (this) {
             if (state.terminal()) return;
             if (state == TaskState.RUNNING) return; // never overlap one repeating callback
             state = TaskState.RUNNING;
             executionCount++;
+            invocation = callback;
         }
         try {
-            callback.run(new Context(this));
+            invocation.run(new Context(this, scope));
             if (schedule instanceof TaskSchedule.Once) finishSuccessfully();
             else {
                 synchronized (this) {
@@ -91,6 +93,10 @@ final class TaskRecord implements TaskHandle {
             if (state != TaskState.RUNNING) return;
             state = TaskState.COMPLETED;
             terminal = terminalCallback;
+            terminalCallback = null;
+            callback = null;
+            backendTask = null;
+            scope = null;
         }
         completion.complete(null);
         notifyTerminal(terminal);
@@ -109,7 +115,11 @@ final class TaskRecord implements TaskHandle {
             state = TaskState.FAILED;
             terminal = terminalCallback;
             nativeTask = backendTask;
-            count = Math.max(1, executionCount);
+            terminalCallback = null;
+            callback = null;
+            backendTask = null;
+            scope = null;
+            count = executionCount;
         }
         if (nativeTask != null) safeCancel(nativeTask);
         completion.completeExceptionally(error);
@@ -138,6 +148,10 @@ final class TaskRecord implements TaskHandle {
             state = TaskState.CANCELLED;
             nativeTask = backendTask;
             terminal = terminalCallback;
+            terminalCallback = null;
+            callback = null;
+            backendTask = null;
+            scope = null;
         }
         if (nativeTask != null) safeCancel(nativeTask);
         completion.completeExceptionally(new CancellationException("Task " + id + " was cancelled"));
@@ -161,10 +175,11 @@ final class TaskRecord implements TaskHandle {
 
     private static final class Context implements TaskContext {
         private final TaskRecord task;
-        private Context(TaskRecord task) { this.task = task; }
+        private final TaskScope scope;
+        private Context(TaskRecord task, TaskScope scope) { this.task = task; this.scope = scope; }
         @Override public TaskHandle task() { return task; }
         @Override public TaskExecutionTarget target() { return task.target; }
-        @Override public TaskScope scope() { return task.scope; }
+        @Override public TaskScope scope() { return scope; }
         @Override public long executionCount() { return task.executionCount(); }
         @Override public void cancel() { task.cancel(); }
     }

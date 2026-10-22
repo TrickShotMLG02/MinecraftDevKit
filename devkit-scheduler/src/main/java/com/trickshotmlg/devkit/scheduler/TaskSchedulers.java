@@ -6,12 +6,21 @@ import java.util.Objects;
 public final class TaskSchedulers {
     private TaskSchedulers() { }
 
-    /** Creates a scheduler that reports callback failures to the current thread's uncaught exception handler. */
+    /**
+     * Creates a scheduler that reports failures to the current thread's uncaught exception handler.
+     * @param backend platform scheduling implementation
+     * @return managed scheduler
+     */
     public static TaskScheduler create(TaskBackend backend) {
         return create(backend, TaskSchedulers::reportUncaught);
     }
 
-    /** Creates a scheduler that owns tasks submitted to {@code backend}. */
+    /**
+     * Creates a scheduler that owns tasks submitted to {@code backend}.
+     * @param backend platform scheduling implementation
+     * @param failureHandler receives callback and backend failures; a throwing handler is reported to the thread's uncaught handler
+     * @return managed scheduler
+     */
     public static TaskScheduler create(TaskBackend backend, TaskFailureHandler failureHandler) {
         return new ManagedTaskScheduler(Objects.requireNonNull(backend, "backend"),
                 Objects.requireNonNull(failureHandler, "failureHandler"));

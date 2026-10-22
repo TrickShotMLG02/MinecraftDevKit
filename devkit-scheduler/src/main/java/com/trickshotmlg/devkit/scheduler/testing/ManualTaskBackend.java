@@ -39,15 +39,24 @@ public final class ManualTaskBackend implements TaskBackend {
         }
     }
 
-    /** Advances virtual server time without executing callbacks. */
+    /** Advances virtual server time without executing callbacks.
+     * @param ticks non-negative number of virtual ticks
+     */
     public void advanceTicks(long ticks) {
         if (ticks < 0) throw new IllegalArgumentException("ticks must not be negative");
         synchronized (lock) { currentTick = Math.addExact(currentTick, ticks); }
     }
 
+    /**
+     * Returns current virtual server tick.
+     * @return current virtual tick
+     */
     public long currentTick() { synchronized (lock) { return currentTick; } }
 
-    /** Runs one snapshot of currently due tasks for a target in deterministic due-time order. */
+    /** Runs one snapshot of currently due tasks for a target in deterministic due-time order.
+     * @param target context whose due tasks to execute
+     * @return number of callbacks dispatched
+     */
     public int runDue(TaskExecutionTarget target) {
         Objects.requireNonNull(target, "target");
         List<Entry> due = new ArrayList<>();
@@ -83,12 +92,16 @@ public final class ManualTaskBackend implements TaskBackend {
         return executions;
     }
 
-    /** Runs due synchronous and asynchronous callbacks in that order, one snapshot per target. */
+    /** Runs due synchronous and asynchronous callbacks in that order, one snapshot per target.
+     * @return number of callbacks dispatched
+     */
     public int runAllDue() {
         return runDue(TaskExecutionTarget.SYNC) + runDue(TaskExecutionTarget.ASYNC);
     }
 
-    /** Number of queued tasks, including delayed and repeating tasks, for assertions. */
+    /** Number of queued tasks, including delayed and repeating tasks, for assertions.
+     * @return queued entry count
+     */
     public int pendingTaskCount() {
         synchronized (lock) { return sync.size() + async.size(); }
     }
