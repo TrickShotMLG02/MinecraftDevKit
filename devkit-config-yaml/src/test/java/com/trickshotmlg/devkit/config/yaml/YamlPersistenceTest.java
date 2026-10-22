@@ -151,4 +151,23 @@ class YamlPersistenceTest {
         assertEquals("local-change", handle.store().get(value));
         assertTrue(handle.store().isDirty());
     }
+
+    @Test void unknownYamlTimestampAndBinaryScalarsCannotBeMutatedThroughAccessors() throws Exception {
+        Path file = temp.resolve("unknown-scalars.yml");
+        Files.writeString(file, "friends:\n  max: 100\nfuture:\n  timestamp: 2025-01-02T03:04:05Z\n  payload: !!binary AQID\n");
+        YamlConfigHandle handle = YamlConfigHandle.load(file, schema);
+
+        java.util.Date timestamp = (java.util.Date) handle.unknownValues().get("future.timestamp");
+        timestamp.setTime(0);
+        byte[] payload = (byte[]) handle.unknownValues().get("future.payload");
+        payload[0] = 99;
+
+        java.util.Date rereadTimestamp = (java.util.Date) handle.unknownValues().get("future.timestamp");
+        byte[] rereadPayload = (byte[]) handle.unknownValues().get("future.payload");
+        assertNotEquals(0, rereadTimestamp.getTime());
+        assertArrayEquals(new byte[] {1, 2, 3}, rereadPayload);
+        YamlReloadResult unchanged = handle.reload();
+        assertTrue(unchanged.success(), unchanged.error().orElse(""));
+        assertFalse(unchanged.changed());
+    }
 }

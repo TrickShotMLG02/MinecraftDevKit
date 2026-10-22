@@ -269,13 +269,44 @@ public final class YamlConfigFile {
         }
     }
 
-    private static Object freeze(Object value) {
+    static Map<String, Object> freezeUnknownValues(Map<String, ?> values) {
+        LinkedHashMap<String, Object> copy = new LinkedHashMap<>();
+        values.forEach((path, value) -> copy.put(path, freeze(value)));
+        return Collections.unmodifiableMap(copy);
+    }
+
+    static boolean valuesEqual(Object first, Object second) {
+        if (first == second) return true;
+        if (first == null || second == null) return false;
+        if (first instanceof byte[] a && second instanceof byte[] b) return java.util.Arrays.equals(a, b);
+        if (first instanceof Map<?, ?> a && second instanceof Map<?, ?> b) {
+            if (!a.keySet().equals(b.keySet())) return false;
+            for (Object key : a.keySet()) if (!valuesEqual(a.get(key), b.get(key))) return false;
+            return true;
+        }
+        if (first instanceof List<?> a && second instanceof List<?> b) {
+            if (a.size() != b.size()) return false;
+            for (int index = 0; index < a.size(); index++) if (!valuesEqual(a.get(index), b.get(index))) return false;
+            return true;
+        }
+        if (first instanceof java.util.Set<?> a && second instanceof java.util.Set<?> b) return a.equals(b);
+        return first.equals(second);
+    }
+
+    static Object freeze(Object value) {
         if (value instanceof Map<?, ?> map) {
             LinkedHashMap<Object, Object> copy = new LinkedHashMap<>();
-            map.forEach((key, item) -> copy.put(key, freeze(item)));
+            map.forEach((key, item) -> copy.put(freeze(key), freeze(item)));
             return Collections.unmodifiableMap(copy);
         }
         if (value instanceof List<?> list) return list.stream().map(YamlConfigFile::freeze).toList();
+        if (value instanceof java.util.Set<?> set) {
+            java.util.LinkedHashSet<Object> copy = new java.util.LinkedHashSet<>();
+            set.forEach(item -> copy.add(freeze(item)));
+            return Collections.unmodifiableSet(copy);
+        }
+        if (value instanceof java.util.Date date) return new java.util.Date(date.getTime());
+        if (value instanceof byte[] bytes) return bytes.clone();
         return value;
     }
 

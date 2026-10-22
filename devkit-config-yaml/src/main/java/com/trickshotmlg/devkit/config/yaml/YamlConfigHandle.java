@@ -68,7 +68,7 @@ public final class YamlConfigHandle implements AutoCloseable {
 
     public Path file() { return file; }
     public ConfigStore store() { return store; }
-    public Map<String, Object> unknownValues() { return unknownValues; }
+    public Map<String, Object> unknownValues() { return YamlConfigFile.freezeUnknownValues(unknownValues); }
 
     /** Reloads the full file and publishes it only when parsing and schema validation both pass. */
     public synchronized YamlReloadResult reload() { return reload(YamlReloadPolicy.REJECT_IF_DIRTY); }
@@ -83,7 +83,7 @@ public final class YamlConfigHandle implements AutoCloseable {
         try {
             YamlConfigLoadResult candidate = yaml.load(file);
             boolean changed = !store.snapshot().values().equals(candidate.store().snapshot().values())
-                    || !unknownValues.equals(candidate.unknownValues());
+                    || !YamlConfigFile.valuesEqual(unknownValues, candidate.unknownValues());
             store.replaceFromReload(candidate.store().snapshot().values(), expectedGeneration);
             unknownValues = candidate.unknownValues();
             diskFingerprint = candidate.sourceFingerprint().orElseThrow(

@@ -18,8 +18,12 @@ public record YamlConfigLoadResult(ConfigStore store, Map<String, Object> unknow
     }
 
     public YamlConfigLoadResult {
-        unknownValues = java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(unknownValues));
+        unknownValues = YamlConfigFile.freezeUnknownValues(unknownValues);
         issues = List.copyOf(issues);
         sourceFingerprint = java.util.Objects.requireNonNull(sourceFingerprint, "sourceFingerprint");
+    }
+
+    @Override public Map<String, Object> unknownValues() {
+        return YamlConfigFile.freezeUnknownValues(unknownValues);
     }
 }
