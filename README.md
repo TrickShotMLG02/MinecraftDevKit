@@ -2,7 +2,7 @@
 
 MinecraftDevKit is a modular, reusable Java development toolkit for Minecraft server plugins and mods. It is being built around platform-independent libraries with small, platform-specific adapters.
 
-> **Status:** Typed permission definitions and metadata generation, Cloud-backed command definitions and dispatch, reloadable YAML localization, and typed YAML configuration with atomic snapshots, persistence, migrations, and optional watching are implemented. Bukkit/Paper examples are build-verified; live server testing remains a manual step.
+> **Status:** Typed permission definitions and metadata generation, Cloud-backed command definitions and dispatch, reloadable YAML localization, typed YAML configuration with atomic snapshots and migrations, and the managed Bukkit/Paper inventory GUI adapter are implemented. Bukkit/Paper examples are build-verified; live server testing remains a manual step.
 
 ## Goals
 
@@ -32,14 +32,17 @@ Shared modules contain ordinary Java APIs and must not depend on Bukkit, Paper, 
 | `devkit-commands` | Immutable typed command definitions, Cloud v2 dispatch, suggestions, generated help/usage, and localized errors | Implemented; Java 17 |
 | `devkit-bukkit` | Common Bukkit/Spigot/Paper adapters | Minimal package structure; depends on shared modules |
 | `devkit-bukkit-commands` | Cloud v2 command registration, Bukkit sender bridge, player arguments, localized messages | Implemented for JavaPlugin lifecycle; Java 21 |
+| `devkit-bukkit-gui` | Managed Bukkit/Paper chest menus, isolated player sessions, safe interaction handling, pagination, controls, skull profiles, and reactive refresh | Implemented against Paper 1.21.11; Java 21 |
 | `devkit-bukkit-metadata` | Bukkit-compatible build-time metadata exporters, including permission YAML | Permission catalog exporter implemented; Java 17; does not require a server or Bukkit API |
 | `devkit-gradle-plugin` | Gradle plugins for Bukkit permission metadata and localization scanning | Implemented; Java 17; Maven Local and JitPack module publication configured; public JitPack build not verified |
 
-See the [`devkit-permissions` guide](devkit-permissions/README.md), [`devkit-commands` guide](devkit-commands/README.md), [`devkit-text` guide](devkit-text/README.md), [`devkit-localization` guide](devkit-localization/README.md), [`devkit-localization-yaml` guide](devkit-localization-yaml/README.md), [`devkit-config` guide](devkit-config/README.md), [`devkit-config-yaml` guide](devkit-config-yaml/README.md), [`devkit-bukkit-commands` guide](devkit-bukkit-commands/README.md), and [`devkit-gradle-plugin` guide](devkit-gradle-plugin/README.md). Configuration comments and formatting are normalized only when explicit full-document save is invoked; unknown fields are retained. Shared configuration, command, text, and localization modules contain no Bukkit API dependency.
+See the [`devkit-permissions` guide](devkit-permissions/README.md), [`devkit-commands` guide](devkit-commands/README.md), [`devkit-text` guide](devkit-text/README.md), [`devkit-localization` guide](devkit-localization/README.md), [`devkit-localization-yaml` guide](devkit-localization-yaml/README.md), [`devkit-config` guide](devkit-config/README.md), [`devkit-config-yaml` guide](devkit-config-yaml/README.md), [`devkit-bukkit-commands` guide](devkit-bukkit-commands/README.md), [`devkit-bukkit-gui` guide](devkit-bukkit-gui/README.md), and [`devkit-gradle-plugin` guide](devkit-gradle-plugin/README.md). Configuration comments and formatting are normalized only when explicit full-document save is invoked; unknown fields are retained. Shared configuration, command, text, and localization modules contain no Bukkit API dependency.
 
 The standalone [`Bukkit permissions example`](examples/bukkit-permissions-example/README.md) supports explicit Maven Local and JitPack dependency modes, generates permission metadata during its own Gradle build, and packages a test plugin JAR for a Paper server. The standalone [`Bukkit commands example`](examples/bukkit-commands-example/README.md) supports the same repository modes, generates permission metadata and a localization reference manifest, validates English/German YAML catalogs with partial regional overrides, and packages a Cloud-backed plugin with reloadable external translations. The repository also includes a local [Paper test server provisioner and IntelliJ run/debug profiles](tools/devservers/README.md); server download and startup are opt-in and Paper's EULA is never accepted automatically.
 
 The independent [`Bukkit configuration example`](examples/bukkit-config-example/README.md) demonstrates typed settings, schema validation, programmatic updates, safe persistence, reload conflicts, and schema migration using the existing Cloud command adapter.
+
+The standalone [`Bukkit GUI example`](examples/bukkit-gui-example/README.md) demonstrates localized chest menus, protected inventory interaction, per-player navigation/state, online player pagination, controls, async skull profiles, and Paper event-driven refresh using the published GUI module from Maven Local.
 
 ## Installation
 
@@ -149,7 +152,7 @@ From the repository root, run the appropriate wrapper command:
 
 ## Platform compatibility
 
-The common modules are normal Java libraries and do not require a Minecraft runtime. `devkit-bukkit-metadata` and `devkit-gradle-plugin` generate Bukkit `plugin.yml` permissions without starting a server. `devkit-bukkit-commands` provides Cloud-backed runtime command registration for Bukkit/Spigot-style JavaPlugin lifecycle and Paper's legacy manager with native Brigadier enabled when available. Modern Paper bootstrap registration and other platform adapters remain future work. Java compatibility depends on the selected module: shared modules, metadata export, and the Gradle plugin target Java 17, while Bukkit adapters target Java 21.
+The common modules are normal Java libraries and do not require a Minecraft runtime. `devkit-bukkit-metadata` and `devkit-gradle-plugin` generate Bukkit `plugin.yml` permissions without starting a server. `devkit-bukkit-commands` provides Cloud-backed runtime command registration for Bukkit/Spigot-style JavaPlugin lifecycle and Paper's legacy manager with native Brigadier enabled when available. `devkit-bukkit-gui` is compiled against Paper 1.21.11 and uses Bukkit's JavaPlugin lifecycle and main-thread scheduler; older server versions, other platforms, Folia scheduling, and live-server behavior have not been verified. Modern Paper bootstrap command registration and other platform adapters remain future work. Java compatibility depends on the selected module: shared modules, metadata export, and the Gradle plugin target Java 17, while Bukkit adapters target Java 21.
 
 ## Roadmap
 
