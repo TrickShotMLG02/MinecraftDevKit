@@ -162,7 +162,7 @@ public final class ConfigStore {
             }
         }
         if (issues.stream().anyMatch(issue -> issue.severity() == ConfigIssue.Severity.ERROR)) throw new ConfigValidationException(issues);
-        return Map.copyOf(values);
+        return java.util.Collections.unmodifiableMap(new LinkedHashMap<>(values));
     }
 
     private static <T> void decodeAndValidate(ConfigKey<T> key, Object raw, Map<String, Object> values, List<ConfigIssue> issues) {
