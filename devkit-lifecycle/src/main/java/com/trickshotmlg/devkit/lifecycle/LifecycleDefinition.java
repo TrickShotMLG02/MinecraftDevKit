@@ -35,6 +35,7 @@ public final class LifecycleDefinition {
 
     Map<String, LifecycleNodeDefinition> nodes() { return nodes; }
     List<LifecycleNodeDefinition> registrationOrder() { return registrationOrder; }
+    List<LifecycleNodeDefinition> startupOrderInternal() { return startupOrder; }
 
     private static List<LifecycleNodeDefinition> sort(Map<String, LifecycleNodeDefinition> nodes,
                                                        List<LifecycleNodeDefinition> registered) {
