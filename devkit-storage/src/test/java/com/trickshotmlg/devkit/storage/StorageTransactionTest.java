@@ -94,6 +94,44 @@ class StorageTransactionTest {
         }
     }
 
+    @Test void failedRollbackDoesNotCommitWorkWhileRestoringAutoCommit() throws Exception {
+        Path database = temporary.resolve("rollback-failure.db");
+        SQLiteDataSource sqlite = new SQLiteDataSource();
+        sqlite.setUrl("jdbc:sqlite:" + database);
+        try (var connection = sqlite.getConnection(); var statement = connection.createStatement()) {
+            statement.execute("CREATE TABLE values_table(value INTEGER)");
+        }
+        IllegalStateException original = new IllegalStateException("same failure instance");
+        DataSource rollbackFailing = (DataSource) Proxy.newProxyInstance(DataSource.class.getClassLoader(),
+                new Class<?>[]{DataSource.class}, (proxy, method, args) -> {
+                    if (method.getName().equals("getConnection")) {
+                        Connection delegate = (Connection) method.invoke(sqlite, args);
+                        return Proxy.newProxyInstance(Connection.class.getClassLoader(), new Class<?>[]{Connection.class},
+                                (connectionProxy, connectionMethod, connectionArgs) -> {
+                                    if (connectionMethod.getName().equals("rollback")) throw original;
+                                    try { return connectionMethod.invoke(delegate, connectionArgs); }
+                                    catch (java.lang.reflect.InvocationTargetException failure) { throw failure.getCause(); }
+                                });
+                    }
+                    try { return method.invoke(sqlite, args); }
+                    catch (java.lang.reflect.InvocationTargetException failure) { throw failure.getCause(); }
+                });
+
+        try (Storage storage = Storage.builder().dataSource(rollbackFailing).build()) {
+            StorageException failure = assertThrows(StorageException.class, () -> storage.transaction(transaction -> {
+                transaction.update("INSERT INTO values_table VALUES (1)", SqlParameters.none());
+                throw original;
+            }));
+            assertSame(original, failure.getCause(), "rollback cleanup must not replace the primary callback failure");
+        }
+
+        try (var connection = sqlite.getConnection(); var statement = connection.createStatement();
+             var result = statement.executeQuery("SELECT count(*) FROM values_table")) {
+            assertTrue(result.next());
+            assertEquals(0, result.getInt(1), "failed rollback must not be turned into an implicit commit");
+        }
+    }
+
     @Test void concurrentAtomicIncrementsDoNotLoseUpdates() throws Exception {
         try (Storage storage = Storage.sqlite(temporary.resolve("concurrent.db"))) {
             storage.update("CREATE TABLE counter(value INTEGER NOT NULL)", SqlParameters.none());

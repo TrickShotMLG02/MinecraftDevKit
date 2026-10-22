@@ -225,6 +225,10 @@ final class JdbcStorage implements Storage {
             throw new IllegalStateException("Use the supplied Transaction for all SQL inside its callback");
     }
 
+    private static void suppress(Throwable primary, Throwable secondary) {
+        if (primary != secondary) primary.addSuppressed(secondary);
+    }
+
     @Override public <T> T transaction(TransactionWork<T> work) {
         Objects.requireNonNull(work, "work");
         ensureOpen();
@@ -234,6 +238,7 @@ final class JdbcStorage implements Storage {
             boolean originalAutoCommit = connection.getAutoCommit();
             TransactionImpl transaction = null;
             Throwable primaryFailure = null;
+            boolean discardConnection = false;
             T value = null;
             transactionActive.set(true);
             try {
@@ -245,13 +250,26 @@ final class JdbcStorage implements Storage {
             } catch (Throwable failure) {
                 primaryFailure = failure;
                 try { connection.rollback(); }
-                catch (Throwable rollbackFailure) { failure.addSuppressed(rollbackFailure); }
+                catch (Throwable rollbackFailure) {
+                    suppress(failure, rollbackFailure);
+                    discardConnection = true;
+                }
             } finally {
                 if (transaction != null) transaction.invalidate();
-                try { connection.setAutoCommit(originalAutoCommit); }
-                catch (Throwable restoreFailure) {
-                    if (primaryFailure != null) primaryFailure.addSuppressed(restoreFailure);
-                    else primaryFailure = restoreFailure;
+                if (!discardConnection) {
+                    try { connection.setAutoCommit(originalAutoCommit); }
+                    catch (Throwable restoreFailure) {
+                        if (primaryFailure != null) suppress(primaryFailure, restoreFailure);
+                        else primaryFailure = restoreFailure;
+                        discardConnection = true;
+                    }
+                }
+                if (discardConnection) {
+                    try { connection.abort(Runnable::run); }
+                    catch (Throwable abortFailure) {
+                        if (primaryFailure != null) suppress(primaryFailure, abortFailure);
+                        else primaryFailure = abortFailure;
+                    }
                 }
                 transactionActive.remove();
             }
