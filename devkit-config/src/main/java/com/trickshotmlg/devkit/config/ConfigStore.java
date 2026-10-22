@@ -90,6 +90,14 @@ public final class ConfigStore {
         }
     }
 
+    /** Marks the current generation dirty without changing effective values (for migrated documents). */
+    public void markUnsaved() {
+        synchronized (mutationLock) {
+            ConfigSnapshot current = active.get();
+            active.set(new ConfigSnapshot(schema, current.values(), current.generation() + 1));
+        }
+    }
+
     /** Source adapters atomically replace a fully validated candidate as one reload operation. */
     public void replaceFromReload(Map<String, ?> values) {
         replaceFromReload(values, generation());

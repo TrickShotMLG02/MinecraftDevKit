@@ -32,14 +32,24 @@ public final class YamlConfigFile {
     private final ConfigSchema schema;
     private final UnknownKeyPolicy unknownKeyPolicy;
     private final long maxBytes;
+    private final ConfigMigrationRegistry migrations;
 
     public YamlConfigFile(ConfigSchema schema) { this(schema, UnknownKeyPolicy.PRESERVE_AND_WARN, DEFAULT_MAX_BYTES); }
     public YamlConfigFile(ConfigSchema schema, UnknownKeyPolicy unknownKeyPolicy) {
-        this(schema, unknownKeyPolicy, DEFAULT_MAX_BYTES);
+        this(schema, unknownKeyPolicy, DEFAULT_MAX_BYTES, ConfigMigrationRegistry.builder().build());
     }
     public YamlConfigFile(ConfigSchema schema, UnknownKeyPolicy unknownKeyPolicy, long maxBytes) {
+        this(schema, unknownKeyPolicy, maxBytes, ConfigMigrationRegistry.builder().build());
+    }
+    public YamlConfigFile(ConfigSchema schema, UnknownKeyPolicy unknownKeyPolicy,
+                          ConfigMigrationRegistry migrations) {
+        this(schema, unknownKeyPolicy, DEFAULT_MAX_BYTES, migrations);
+    }
+    public YamlConfigFile(ConfigSchema schema, UnknownKeyPolicy unknownKeyPolicy, long maxBytes,
+                          ConfigMigrationRegistry migrations) {
         this.schema = Objects.requireNonNull(schema, "schema");
         this.unknownKeyPolicy = Objects.requireNonNull(unknownKeyPolicy, "unknownKeyPolicy");
+        this.migrations = Objects.requireNonNull(migrations, "migrations");
         if (maxBytes < 1 || maxBytes >= Integer.MAX_VALUE) throw new IllegalArgumentException("maxBytes must be between 1 and Integer.MAX_VALUE");
         this.maxBytes = maxBytes;
     }
@@ -51,10 +61,24 @@ public final class YamlConfigFile {
         try (InputStream input = Files.newInputStream(file)) { bytes = input.readNBytes(Math.toIntExact(Math.min(maxBytes + 1, Integer.MAX_VALUE))); }
         if (bytes.length > maxBytes) throw new IOException("Configuration exceeds " + maxBytes + " bytes: " + file);
         Map<String, Object> flattened = parse(bytes, file.toString(), maxBytes);
+        LinkedHashMap<String, Object> candidate = new LinkedHashMap<>(flattened);
+        int sourceVersion = readVersion(candidate.remove("config-version"), file);
+        if (sourceVersion > schema.version()) throw new YamlConfigException("Configuration version " + sourceVersion
+                + " is newer than supported schema version " + schema.version() + " in " + file, List.of());
+        int migrationVersion = sourceVersion;
+        while (migrationVersion < schema.version()) {
+            ConfigMigration migration = migrations.migrationFrom(migrationVersion);
+            if (migration == null) throw new YamlConfigException("No configuration migration from version "
+                    + migrationVersion + " to " + (migrationVersion + 1) + " in " + file, List.of());
+            try { migration.migrate(new MutableConfigValues(candidate)); }
+            catch (Exception exception) { throw new YamlConfigException("Configuration migration " + migrationVersion
+                    + " -> " + (migrationVersion + 1) + " failed in " + file + ": " + exception.getMessage(), exception, List.of()); }
+            migrationVersion++;
+        }
         LinkedHashMap<String, Object> known = new LinkedHashMap<>();
         TreeMap<String, Object> unknown = new TreeMap<>();
         ArrayList<ConfigIssue> issues = new ArrayList<>();
-        flattened.forEach((path, value) -> {
+        candidate.forEach((path, value) -> {
             if (schema.key(path).isPresent()) known.put(path, value);
             else {
                 unknown.put(path, freeze(value));
@@ -71,7 +95,8 @@ public final class YamlConfigFile {
             throw new YamlConfigException("Unknown configuration values in " + file, issues);
         }
         try {
-            return new YamlConfigLoadResult(ConfigStore.fromValues(schema, known), Collections.unmodifiableMap(unknown), issues);
+            return new YamlConfigLoadResult(ConfigStore.fromValues(schema, known), Collections.unmodifiableMap(unknown), issues,
+                    sourceVersion < schema.version(), sourceVersion);
         } catch (RuntimeException exception) {
             throw new YamlConfigException("Configuration validation failed in " + file + ": " + safeMessage(exception), exception,
                     exception instanceof com.trickshotmlg.devkit.config.ConfigValidationException validation ? validation.issues() : List.of());
@@ -93,14 +118,18 @@ public final class YamlConfigFile {
     /** Deterministically serializes only schema keys that have defaults. */
     public String defaultsYaml() {
         TreeMap<String, Object> flattened = new TreeMap<>();
+        flattened.put("config-version", schema.version());
         for (ConfigKey<?> key : schema.keys().values()) key.defaultValue().ifPresent(value -> flattened.put(key.path(), encode(key, value)));
         return dump(nest(flattened));
     }
+
+    int schemaVersion() { return schema.version(); }
 
     /** Serializes a store and preserved unknown values; persistence is added by the file handle API. */
     public String serialize(ConfigStore store, Map<String, ?> unknownValues) {
         if (store.schema() != schema) throw new IllegalArgumentException("Store belongs to a different schema");
         TreeMap<String, Object> flat = new TreeMap<>();
+        flat.put("config-version", schema.version());
         store.snapshot().values().forEach((path, value) -> flat.put(path, encode(schema.key(path).orElseThrow(), value)));
         unknownValues.forEach((path, value) -> {
             if (schema.key(path).isPresent()) throw new IllegalArgumentException("Unknown-value map collides with schema key '" + path + "'");
@@ -195,6 +224,17 @@ public final class YamlConfigFile {
 
     private static String safeMessage(RuntimeException exception) {
         return exception instanceof com.trickshotmlg.devkit.config.ConfigValidationException ? exception.getMessage() : exception.getClass().getSimpleName();
+    }
+
+    private static int readVersion(Object raw, Path file) throws YamlConfigException {
+        if (raw == null) return 1;
+        try {
+            int version = com.trickshotmlg.devkit.config.ConfigCodecs.INTEGER.decode(raw);
+            if (version < 1) throw new IllegalArgumentException("version must be positive");
+            return version;
+        } catch (RuntimeException exception) {
+            throw new YamlConfigException("Invalid config-version in " + file + ": expected a positive integer", exception, List.of());
+        }
     }
 
     private static Object freeze(Object value) {

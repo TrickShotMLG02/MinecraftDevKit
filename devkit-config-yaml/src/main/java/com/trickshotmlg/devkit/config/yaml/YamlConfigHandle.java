@@ -25,6 +25,8 @@ public final class YamlConfigHandle implements AutoCloseable {
     private volatile Map<String, Object> unknownValues;
     private volatile String diskFingerprint;
     private volatile YamlConfigWatcher watcher;
+    private volatile boolean migrationPending;
+    private volatile int sourceVersion;
 
     private YamlConfigHandle(Path file, YamlConfigFile yaml, YamlConfigLoadResult loaded, String fingerprint) {
         this.file = file.toAbsolutePath().normalize();
@@ -32,6 +34,9 @@ public final class YamlConfigHandle implements AutoCloseable {
         store = loaded.store();
         unknownValues = loaded.unknownValues();
         diskFingerprint = fingerprint;
+        migrationPending = loaded.migrated();
+        sourceVersion = loaded.sourceVersion();
+        if (migrationPending) store.markUnsaved();
     }
 
     /** Opens and validates an existing configuration file. */
@@ -41,6 +46,11 @@ public final class YamlConfigHandle implements AutoCloseable {
     /** Opens with an explicitly configured unknown-key policy. */
     public static YamlConfigHandle load(Path file, ConfigSchema schema, UnknownKeyPolicy policy) throws IOException {
         return load(file, new YamlConfigFile(schema, policy));
+    }
+    /** Opens with explicit unknown-key and migration policies. */
+    public static YamlConfigHandle load(Path file, ConfigSchema schema, UnknownKeyPolicy policy,
+                                        ConfigMigrationRegistry migrations) throws IOException {
+        return load(file, new YamlConfigFile(schema, policy, migrations));
     }
     private static YamlConfigHandle load(Path file, YamlConfigFile yaml) throws IOException {
         Path normalized = file.toAbsolutePath().normalize();
@@ -76,6 +86,9 @@ public final class YamlConfigHandle implements AutoCloseable {
             store.replaceFromReload(candidate.store().snapshot().values(), expectedGeneration);
             unknownValues = candidate.unknownValues();
             diskFingerprint = fingerprint(file);
+            migrationPending = candidate.migrated();
+            sourceVersion = candidate.sourceVersion();
+            if (migrationPending) store.markUnsaved();
             return new YamlReloadResult(true, changed, false, file, store.generation(), candidate.issues(), java.util.Optional.empty());
         } catch (java.util.ConcurrentModificationException exception) {
             return reloadFailure(true, exception.getMessage(), java.util.List.of());
@@ -154,6 +167,9 @@ public final class YamlConfigHandle implements AutoCloseable {
                 // Validate the exact serialized document before it can replace the active file.
                 Path verification = temporary;
                 yaml.load(verification);
+                if (migrationPending) {
+                    createMigrationBackup(sourceVersion);
+                }
                 try {
                     Files.move(temporary, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
                 } catch (AtomicMoveNotSupportedException exception) {
@@ -161,6 +177,8 @@ public final class YamlConfigHandle implements AutoCloseable {
                 }
             } finally { Files.deleteIfExists(temporary); }
             diskFingerprint = fingerprint(file);
+            migrationPending = false;
+            sourceVersion = yaml.schemaVersion();
             try { store.markPersisted(savedGeneration); } catch (IllegalStateException concurrentChange) {
                 return new YamlSaveResult(true, true, false, file, savedGeneration, store.generation(),
                         java.util.Optional.of("saved this generation; a newer in-memory generation remains dirty"));
@@ -181,5 +199,18 @@ public final class YamlConfigHandle implements AutoCloseable {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(file));
             return HexFormat.of().formatHex(digest);
         } catch (NoSuchAlgorithmException impossible) { throw new IllegalStateException("SHA-256 unavailable", impossible); }
+    }
+
+    private void createMigrationBackup(int version) throws IOException {
+        Path backup = file.resolveSibling(file.getFileName() + ".v" + version + ".bak");
+        if (Files.exists(backup)) throw new IOException("Migration backup already exists; refusing to overwrite " + backup.getFileName());
+        Path temporaryBackup = Files.createTempFile(file.getParent(), backup.getFileName().toString(), ".tmp");
+        try {
+            Files.copy(file, temporaryBackup, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
+            try { Files.move(temporaryBackup, backup, StandardCopyOption.ATOMIC_MOVE); }
+            catch (AtomicMoveNotSupportedException exception) {
+                throw new IOException("Filesystem does not support atomic migration backup creation", exception);
+            }
+        } finally { Files.deleteIfExists(temporaryBackup); }
     }
 }

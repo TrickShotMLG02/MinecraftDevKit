@@ -18,7 +18,7 @@ class YamlConfigFileTest {
     private final ConfigKey<Integer> MAX = ConfigKey.integer("friends.max", 100).range(1, 1000).build();
     private final ConfigKey<Boolean> ENABLED = ConfigKey.bool("friends.requests.enabled", true).build();
     private final ConfigKey<Duration> TIMEOUT = ConfigKey.duration("friends.requests.timeout", Duration.ofMinutes(5)).build();
-    private final ConfigSchema schema = ConfigSchema.builder().version(2).register(MAX, ENABLED, TIMEOUT).build();
+    private final ConfigSchema schema = ConfigSchema.builder().register(MAX, ENABLED, TIMEOUT).build();
 
     @Test void loadsNestedValuesAndPreservesUnknownSettingsWithWarnings() throws Exception {
         Path file = temp.resolve("config.yml");
