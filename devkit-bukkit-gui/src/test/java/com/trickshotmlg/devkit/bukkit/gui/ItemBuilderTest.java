@@ -10,4 +10,10 @@ class ItemBuilderTest {
         assertThrows(NullPointerException.class, () -> ItemBuilder.of(null));
         assertThrows(NullPointerException.class, () -> ItemBuilder.from(null));
     }
+
+    @Test
+    void glowFalseExplicitlySuppressesNaturalEnchantmentGlint() {
+        assertEquals(Boolean.TRUE, ItemBuilder.glintOverride(true));
+        assertEquals(Boolean.FALSE, ItemBuilder.glintOverride(false));
+    }
 }

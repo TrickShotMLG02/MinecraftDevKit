@@ -77,8 +77,9 @@ public final class ItemBuilder {
         return edit(meta -> meta.addEnchant(enchantment, level, true));
     }
     public ItemBuilder glow(boolean enabled) {
-        return edit(meta -> meta.setEnchantmentGlintOverride(enabled ? Boolean.TRUE : null));
+        return edit(meta -> meta.setEnchantmentGlintOverride(glintOverride(enabled)));
     }
+    static Boolean glintOverride(boolean enabled) { return enabled ? Boolean.TRUE : Boolean.FALSE; }
     public ItemBuilder unbreakable(boolean value) { return edit(meta -> meta.setUnbreakable(value)); }
     public ItemBuilder hide(ItemFlag... flags) {
         Objects.requireNonNull(flags, "flags");
