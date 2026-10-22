@@ -12,6 +12,7 @@ import java.util.Optional;
 public final class ConfigSchema {
     private final Map<String, ConfigKey<?>> keys;
     private final int version;
+    private final List<ConfigConstraint> constraints;
 
     private ConfigSchema(Builder builder) {
         LinkedHashMap<String, ConfigKey<?>> copy = new LinkedHashMap<>();
@@ -20,16 +21,19 @@ public final class ConfigSchema {
         validatePathCollisions(copy.keySet());
         keys = Collections.unmodifiableMap(copy);
         version = builder.version;
+        constraints = List.copyOf(builder.constraints);
     }
 
     public static Builder builder() { return new Builder(); }
     public Map<String, ConfigKey<?>> keys() { return keys; }
     public Optional<ConfigKey<?>> key(String path) { return Optional.ofNullable(keys.get(path)); }
     public int version() { return version; }
+    public List<ConfigConstraint> constraints() { return constraints; }
 
     /** Mutable schema builder used only during definition. */
     public static final class Builder {
         private final Map<String, ConfigKey<?>> keys = new LinkedHashMap<>();
+        private final List<ConfigConstraint> constraints = new ArrayList<>();
         private int version = 1;
         public Builder register(ConfigKey<?> key) {
             Objects.requireNonNull(key, "key");
@@ -44,6 +48,8 @@ public final class ConfigSchema {
             this.version = version;
             return this;
         }
+        /** Adds a cross-field check evaluated against each complete candidate state. */
+        public Builder validate(ConfigConstraint constraint) { constraints.add(Objects.requireNonNull(constraint, "constraint")); return this; }
         public ConfigSchema build() { return new ConfigSchema(this); }
     }
 
