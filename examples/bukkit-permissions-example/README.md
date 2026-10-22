@@ -67,24 +67,24 @@ Catalog static initialization runs during the build. Keep it lightweight and ind
 The repository includes a Paper server provisioner and IntelliJ run/debug profiles. See [`tools/devservers/README.md`](../../tools/devservers/README.md) for setup. From this example directory, run `.\gradlew.bat provisionPaperServer`, review and accept the Minecraft EULA manually, then use `.\gradlew.bat runPaperServer`. The run task builds and deploys the plugin automatically.
 
 1. Start Paper 1.21.8. Confirm that the startup log reports the catalog node and group counts.
-2. Join as a normal non-operator and run `/mdkperms`. The player should have the `friendnet.default` node and its basic children, but not the extended or staff permissions.
-3. Grant operator status in the server console (or test as an operator) and run `/mdkperms` again. Bukkit's `op` default should grant `friendnet.admin`, whose positive child declarations cover every catalog permission except `friendnet.proxy.handshake`.
+2. Join as a normal non-operator and run `/mdkperms`. The player should have the `mdkperms.default` node and its basic children, but not the extended or staff permissions.
+3. Grant operator status in the server console (or test as an operator) and run `/mdkperms` again. Bukkit's `op` default should grant `mdkperms.admin`, whose positive child declarations cover every catalog permission except `mdkperms.proxy.handshake`.
 4. Use LuckPerms for explicit group-node assignments, for example:
 
    ```text
-   /lp user Alice permission set friendnet.default.extended true
-   /lp user Bob permission set friendnet.moderator true
+   /lp user Alice permission set mdkperms.default.extended true
+   /lp user Bob permission set mdkperms.moderator true
    ```
 
-   Relog or refresh permissions as needed, then run `/mdkperms`. The extended node grants the flattened `DEFAULT` and `EXTENDED` selections. The moderator node includes inherited extended grants and staff grants, while its generated children omit `friendnet.friends.requests.accept.all`.
+   Relog or refresh permissions as needed, then run `/mdkperms`. The extended node grants the flattened `DEFAULT` and `EXTENDED` selections. The moderator node includes inherited extended grants and staff grants, while its generated children omit `mdkperms.friends.requests.accept.all`.
 
 5. Verify the exclusion is not a global denial by assigning that node independently:
 
    ```text
-   /lp user Bob permission set friendnet.friends.requests.accept.all true
+   /lp user Bob permission set mdkperms.friends.requests.accept.all true
    ```
 
-   `/mdkperms check friendnet.friends.requests.accept.all` may now report `TRUE` despite the moderator group's omission. This is expected: an exclusion removes a grant from that group; it does not override independent LuckPerms assignments or other Bukkit permission sources.
+   `/mdkperms check mdkperms.friends.requests.accept.all` may now report `TRUE` despite the moderator group's omission. This is expected: an exclusion removes a grant from that group; it does not override independent LuckPerms assignments or other Bukkit permission sources.
 
 `/mdkperms check <permission.node>` checks any node through Bukkit's `Player.hasPermission` and is useful for inspecting additional explicit assignments.
 
@@ -92,12 +92,12 @@ The repository includes a Paper server provisioner and IntelliJ run/debug profil
 
 | Test identity / setup | Expected checks |
 | --- | --- |
-| Normal non-operator, no permission plugin assignment | `friendnet.default` and basic friend/request permissions are true; extended, moderator, admin, and staff checks are false. |
-| Operator | `friendnet.admin` and all ordinary catalog permissions other than `friendnet.proxy.handshake` are true through the admin node. The proxy handshake remains false absent an independent assignment. |
-| LuckPerms user assigned `friendnet.default.extended` | Extended group node and its flattened basic + extended grants are true. Group inheritance grants effective permissions; it does not itself add a separate parent-node child relationship. |
-| LuckPerms user assigned `friendnet.moderator` | Basic, extended, and staff permissions are true except `friendnet.friends.requests.accept.all`, which the moderator definition excludes. |
-| Moderator with explicit `friendnet.friends.requests.accept.all=true` | The check becomes true from the independent assignment. The group exclusion is not an explicit deny. |
-| Non-operator with explicit `friendnet.proxy.handshake=true` | The check is true even though ADMIN excludes that node from its own grants; exclusions do not revoke external grants. |
+| Normal non-operator, no permission plugin assignment | `mdkperms.default` and basic friend/request permissions are true; extended, moderator, admin, and staff checks are false. |
+| Operator | `mdkperms.admin` and all ordinary catalog permissions other than `mdkperms.proxy.handshake` are true through the admin node. The proxy handshake remains false absent an independent assignment. |
+| LuckPerms user assigned `mdkperms.default.extended` | Extended group node and its flattened basic + extended grants are true. Group inheritance grants effective permissions; it does not itself add a separate parent-node child relationship. |
+| LuckPerms user assigned `mdkperms.moderator` | Basic, extended, and staff permissions are true except `mdkperms.friends.requests.accept.all`, which the moderator definition excludes. |
+| Moderator with explicit `mdkperms.friends.requests.accept.all=true` | The check becomes true from the independent assignment. The group exclusion is not an explicit deny. |
+| Non-operator with explicit `mdkperms.proxy.handshake=true` | The check is true even though ADMIN excludes that node from its own grants; exclusions do not revoke external grants. |
 
 Native Bukkit defaults, operator status, permission attachments, and LuckPerms may combine to produce results beyond the catalog's group sets. The command reports Bukkit's actual effective check, not an independent MinecraftDevKit authorization decision.
 

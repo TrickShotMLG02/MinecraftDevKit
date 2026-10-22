@@ -9,7 +9,7 @@ import com.trickshotmlg.devkit.permissions.PermissionSection;
 
 /** Java source of truth for the example plugin's permission metadata. */
 public final class FriendPermissions {
-    private static final PermissionNamespace NS = PermissionNamespace.create("friendnet");
+    private static final PermissionNamespace NS = PermissionNamespace.create("mdkperms");
 
     private FriendPermissions() { }
 
