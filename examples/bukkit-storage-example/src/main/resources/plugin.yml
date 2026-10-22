@@ -1,0 +1,5 @@
+name: MinecraftDevKitStorageExample
+version: 0.1.0
+main: com.trickshotmlg.devkit.examples.storage.StorageExamplePlugin
+api-version: '1.21'
+description: Demonstrates MinecraftDevKit JDBC storage on Paper.

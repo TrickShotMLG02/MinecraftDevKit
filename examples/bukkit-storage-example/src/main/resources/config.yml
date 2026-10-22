@@ -1,0 +1,12 @@
+config-version: 1
+database:
+  type: SQLITE
+  sqlite:
+    filename: players.db
+  mysql:
+    host: localhost
+    port: 3306
+    database: minecraft
+    username: minecraft
+    password: ''
+    pool-size: 8

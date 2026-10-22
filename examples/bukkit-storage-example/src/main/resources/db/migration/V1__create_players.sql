@@ -1,0 +1,4 @@
+CREATE TABLE players (
+    uuid VARCHAR(36) PRIMARY KEY,
+    coins BIGINT NOT NULL DEFAULT 0
+);
