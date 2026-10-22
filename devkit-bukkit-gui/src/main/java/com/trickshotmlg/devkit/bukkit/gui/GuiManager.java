@@ -44,7 +44,7 @@ public final class GuiManager implements Listener, AutoCloseable {
         Objects.requireNonNull(menu, "menu");
         GuiSession old = sessions.remove(player.getUniqueId());
         if (old != null) old.close();
-        GuiSession session = new GuiSession(player, menu, textProvider);
+        GuiSession session = new GuiSession(player, menu, textProvider, this);
         sessions.put(player.getUniqueId(), session);
         render(session);
         player.openInventory(session.inventory());
@@ -60,6 +60,58 @@ public final class GuiManager implements Listener, AutoCloseable {
         requireMainThread();
         if (isCurrent(session)) render(session);
     }
+    public void refreshSlot(GuiSession session, int slot) {
+        requireMainThread();
+        if (!isCurrent(session)) return;
+        if (slot < 0 || slot >= session.menu().size()) throw new IllegalArgumentException("Slot outside current menu: " + slot);
+        GuiComponent component = session.menu().components().get(slot);
+        if (component == null) { session.inventory().clear(slot); return; }
+        refreshSlotIfCurrent(session, slot, component);
+    }
+    public void navigate(GuiSession session, GuiMenu child) {
+        scheduleNavigation(session, () -> {
+            session.history().push(session.menu());
+            switchMenu(session, child);
+        });
+    }
+    public void replace(GuiSession session, GuiMenu menu) {
+        scheduleNavigation(session, () -> switchMenu(session, menu));
+    }
+    public void back(GuiSession session) {
+        scheduleNavigation(session, () -> {
+            if (!session.history().isEmpty()) switchMenu(session, session.history().pop());
+        });
+    }
+    public void close(GuiSession session) {
+        scheduleNavigation(session, () -> {
+            sessions.remove(session.viewerId(), session);
+            session.close();
+            if (session.viewer().isOnline()) session.viewer().closeInventory();
+        });
+    }
+    private void switchMenu(GuiSession session, GuiMenu menu) {
+        session.transitioning(true);
+        try {
+            session.menu(menu);
+            session.inventory(null);
+            render(session);
+            session.viewer().openInventory(session.inventory());
+        } finally {
+            session.transitioning(false);
+        }
+    }
+    private void scheduleNavigation(GuiSession session, Runnable operation) {
+        requireMainThread();
+        if (!isCurrent(session)) return;
+        long version = session.nextNavigationVersion();
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (!isCurrent(session) || session.navigationVersion() != version
+                    || !session.viewer().isOnline()) return;
+            try { operation.run(); }
+            catch (Throwable failure) { plugin.getLogger().log(Level.SEVERE, "GUI navigation failed", failure); }
+        });
+    }
+    void requireSessionThread() { requireMainThread(); }
     /** Refreshes a slot only while the session still displays the same component instance. */
     public void refreshSlotIfCurrent(GuiSession session, int slot, GuiComponent expected) {
         requireMainThread();
@@ -121,7 +173,7 @@ public final class GuiManager implements Listener, AutoCloseable {
         if (!component.visible(renderContext)) return;
         if (!isCurrent(session) || session.inventory() != holder.inventory) return;
         try {
-            component.click(new GuiClickContext(player, session.menu(), session, rawSlot, event.getClick(), event));
+            component.click(new GuiClickContext(player, session.menu(), session, rawSlot, event.getClick(), event, this));
         } catch (Throwable failure) {
             plugin.getLogger().log(Level.SEVERE, "GUI click handler failed for " + session.menu(), failure);
         }
