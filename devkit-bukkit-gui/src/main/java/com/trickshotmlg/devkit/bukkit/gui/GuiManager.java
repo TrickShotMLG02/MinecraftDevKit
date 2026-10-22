@@ -4,6 +4,7 @@ import com.trickshotmlg.devkit.text.TextProvider;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.Event;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
@@ -14,10 +15,17 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.plugin.EventExecutor;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.Collections;
 import java.util.UUID;
 import java.util.logging.Level;
 
@@ -26,6 +34,9 @@ public final class GuiManager implements Listener, AutoCloseable {
     private final Plugin plugin;
     private final TextProvider textProvider;
     private final Map<UUID, GuiSession> sessions = new HashMap<>();
+    private final Map<GuiMenu, List<Listener>> refreshListeners = new IdentityHashMap<>();
+    private final Set<GuiSession> pendingRefresh = Collections.newSetFromMap(new IdentityHashMap<>());
+    private BukkitTask refreshTask;
     private boolean closed;
 
     private GuiManager(Plugin plugin, TextProvider textProvider) {
@@ -46,6 +57,7 @@ public final class GuiManager implements Listener, AutoCloseable {
         if (old != null) old.close();
         GuiSession session = new GuiSession(player, menu, textProvider, this);
         sessions.put(player.getUniqueId(), session);
+        registerRefreshBindings(menu);
         render(session);
         player.openInventory(session.inventory());
         return session;
@@ -54,7 +66,7 @@ public final class GuiManager implements Listener, AutoCloseable {
     /** Refreshes all currently open instances of this immutable definition. */
     public void refreshOpen(GuiMenu menu) {
         requireMainThread();
-        for (GuiSession session : sessions.values().toArray(GuiSession[]::new)) if (session.menu() == menu) render(session);
+        for (GuiSession session : sessions.values().toArray(GuiSession[]::new)) if (session.menu() == menu) queueRefresh(session);
     }
     public void refresh(GuiSession session) {
         requireMainThread();
@@ -65,7 +77,12 @@ public final class GuiManager implements Listener, AutoCloseable {
         if (!isCurrent(session)) return;
         if (slot < 0 || slot >= session.menu().size()) throw new IllegalArgumentException("Slot outside current menu: " + slot);
         GuiComponent component = session.menu().components().get(slot);
-        if (component == null) { session.inventory().clear(slot); return; }
+        if (component == null) {
+            session.beginRender();
+            org.bukkit.inventory.ItemStack background = backgroundItem(session, slot);
+            if (!Objects.equals(session.inventory().getItem(slot), background)) session.inventory().setItem(slot, background);
+            return;
+        }
         refreshSlotIfCurrent(session, slot, component);
     }
     public void navigate(GuiSession session, GuiMenu child) {
@@ -95,6 +112,7 @@ public final class GuiManager implements Listener, AutoCloseable {
             session.menu(menu);
             session.inventory(null);
             render(session);
+            registerRefreshBindings(menu);
             session.viewer().openInventory(session.inventory());
         } finally {
             session.transitioning(false);
@@ -111,6 +129,39 @@ public final class GuiManager implements Listener, AutoCloseable {
             catch (Throwable failure) { plugin.getLogger().log(Level.SEVERE, "GUI navigation failed", failure); }
         });
     }
+    private void registerRefreshBindings(GuiMenu menu) {
+        if (refreshListeners.containsKey(menu) || menu.refreshBindings().isEmpty()) return;
+        List<Listener> listeners = new ArrayList<>();
+        for (GuiRefreshBinding<?> binding : menu.refreshBindings()) {
+            Listener listener = new Listener() { };
+            EventExecutor executor = (ignored, event) -> {
+                Runnable refresh = () -> {
+                    try {
+                        if (binding.matches(event)) for (GuiSession session : sessions.values().toArray(GuiSession[]::new))
+                            if (session.menu() == menu) queueRefresh(session);
+                    } catch (Throwable failure) {
+                        plugin.getLogger().log(Level.WARNING, "GUI refresh event filter failed", failure);
+                    }
+                };
+                if (event.isAsynchronous()) executeOnMainThread(refresh);
+                else refresh.run();
+            };
+            Bukkit.getPluginManager().registerEvent(binding.eventType(), listener, EventPriority.MONITOR, executor, plugin, true);
+            listeners.add(listener);
+        }
+        refreshListeners.put(menu, List.copyOf(listeners));
+    }
+    private void queueRefresh(GuiSession session) {
+        if (!isCurrent(session)) return;
+        pendingRefresh.add(session);
+        if (refreshTask != null) return;
+        refreshTask = Bukkit.getScheduler().runTask(plugin, () -> {
+            refreshTask = null;
+            GuiSession[] pending = pendingRefresh.toArray(GuiSession[]::new);
+            pendingRefresh.clear();
+            for (GuiSession current : pending) if (isCurrent(current)) render(current);
+        });
+    }
     void requireSessionThread() { requireMainThread(); }
     /** Refreshes a slot only while the session still displays the same component instance. */
     public void refreshSlotIfCurrent(GuiSession session, int slot, GuiComponent expected) {
@@ -119,8 +170,8 @@ public final class GuiManager implements Listener, AutoCloseable {
         if (!isCurrent(session) || session.menu().components().get(slot) != expected) return;
         session.beginRender();
         GuiRenderContext context = new GuiRenderContext(session.viewer(), session.menu(), session, slot, expected);
-        if (!expected.visible(context)) { session.inventory().clear(slot); return; }
-        org.bukkit.inventory.ItemStack desired = expected.render(context);
+        org.bukkit.inventory.ItemStack desired = expected.visible(context) ? expected.render(context) : null;
+        if (desired == null) desired = backgroundItem(session, slot);
         org.bukkit.inventory.ItemStack current = session.inventory().getItem(slot);
         if (!Objects.equals(current, desired)) session.inventory().setItem(slot, desired == null ? null : desired.clone());
     }
@@ -147,21 +198,33 @@ public final class GuiManager implements Listener, AutoCloseable {
             holder.inventory = inventory;
             session.inventory(inventory);
         }
-        inventory.clear();
+        org.bukkit.inventory.ItemStack[] desired = new org.bukkit.inventory.ItemStack[menu.size()];
+        for (int slot = 0; slot < desired.length; slot++) desired[slot] = backgroundItem(session, slot);
         for (Map.Entry<Integer, GuiComponent> entry : menu.components().entrySet()) {
             GuiComponent component = entry.getValue();
             GuiRenderContext context = new GuiRenderContext(session.viewer(), menu, session, entry.getKey(), component);
             if (!component.visible(context)) continue;
             org.bukkit.inventory.ItemStack item = component.render(context);
-            if (item != null) inventory.setItem(entry.getKey(), item.clone());
+            if (item != null) desired[entry.getKey()] = item.clone();
         }
+        for (int slot = 0; slot < desired.length; slot++) {
+            org.bukkit.inventory.ItemStack current = inventory.getItem(slot);
+            if (!Objects.equals(current, desired[slot])) inventory.setItem(slot, desired[slot] == null ? null : desired[slot].clone());
+        }
+    }
+    private org.bukkit.inventory.ItemStack backgroundItem(GuiSession session, int slot) {
+        GuiMenu menu = session.menu();
+        if (menu.background() == null) return null;
+        GuiRenderContext context = new GuiRenderContext(session.viewer(), menu, session, slot);
+        org.bukkit.inventory.ItemStack item = menu.background().itemAt(
+                new GuiPatternContext(slot, slot / 9, slot % 9, menu.rows(), context));
+        return item == null ? null : item.clone();
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onClick(InventoryClickEvent event) {
         if (!(event.getView().getTopInventory().getHolder(false) instanceof ManagedHolder holder)) return;
         GuiSession session = holder.session;
-        event.setCancelled(true);
         if (!(event.getWhoClicked() instanceof Player player) || !isCurrent(session)
                 || !session.viewerId().equals(player.getUniqueId()) || session.inventory() != holder.inventory) return;
         int rawSlot = event.getRawSlot();
@@ -169,6 +232,7 @@ public final class GuiManager implements Listener, AutoCloseable {
             if (affectsTopInventory(event.getAction(), event.getClick())) event.setCancelled(true);
             return;
         }
+        event.setCancelled(true);
         GuiComponent component = session.menu().components().get(rawSlot);
         if (component == null || !component.interactive()) return;
         GuiRenderContext renderContext = new GuiRenderContext(player, session.menu(), session);
@@ -205,13 +269,7 @@ public final class GuiManager implements Listener, AutoCloseable {
     }
 
     private static boolean affectsTopInventory(InventoryAction action, org.bukkit.event.inventory.ClickType click) {
-        return switch (action) {
-            case MOVE_TO_OTHER_INVENTORY, HOTBAR_SWAP, HOTBAR_MOVE_AND_READD, COLLECT_TO_CURSOR,
-                    SWAP_WITH_CURSOR, PLACE_ALL, PLACE_ONE, PLACE_SOME, DROP_ALL_SLOT, DROP_ONE_SLOT -> true;
-            default -> click == org.bukkit.event.inventory.ClickType.NUMBER_KEY
-                    || click == org.bukkit.event.inventory.ClickType.SWAP_OFFHAND
-                    || click == org.bukkit.event.inventory.ClickType.DOUBLE_CLICK;
-        };
+        return action == InventoryAction.MOVE_TO_OTHER_INVENTORY || action == InventoryAction.COLLECT_TO_CURSOR;
     }
     private boolean isCurrent(GuiSession session) { return !closed && session != null && !session.closed() && sessions.get(session.viewerId()) == session; }
     private void ensureOpen() { if (closed) throw new IllegalStateException("GuiManager is closed"); }
@@ -223,6 +281,11 @@ public final class GuiManager implements Listener, AutoCloseable {
         requireMainThread();
         closed = true;
         org.bukkit.event.HandlerList.unregisterAll(this);
+        for (List<Listener> listeners : refreshListeners.values()) for (Listener listener : listeners)
+            org.bukkit.event.HandlerList.unregisterAll(listener);
+        refreshListeners.clear();
+        pendingRefresh.clear();
+        if (refreshTask != null) { refreshTask.cancel(); refreshTask = null; }
         for (GuiSession session : sessions.values().toArray(GuiSession[]::new)) {
             Player player = session.viewer();
             session.close();
