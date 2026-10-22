@@ -45,6 +45,7 @@ public final class ConfigStore {
     /** Applies and validates all transaction updates before publishing any of them. */
     public void update(Consumer<Transaction> operation) {
         Objects.requireNonNull(operation, "operation");
+        rejectReentrantMutation();
         List<ConfigChange<?>> changes;
         synchronized (mutationLock) {
             ConfigSnapshot previous = active.get();
@@ -84,6 +85,7 @@ public final class ConfigStore {
 
     /** Marks current generation as persisted after a successful adapter save. */
     public void markPersisted(long savedGeneration) {
+        rejectReentrantMutation();
         synchronized (mutationLock) {
             if (generation() != savedGeneration) throw new IllegalStateException("Configuration changed during save");
             persistedGeneration = savedGeneration;
@@ -92,6 +94,7 @@ public final class ConfigStore {
 
     /** Marks the current generation dirty without changing effective values (for migrated documents). */
     public void markUnsaved() {
+        rejectReentrantMutation();
         synchronized (mutationLock) {
             ConfigSnapshot current = active.get();
             active.set(new ConfigSnapshot(schema, current.values(), current.generation() + 1));
@@ -105,6 +108,7 @@ public final class ConfigStore {
 
     /** Atomically replaces the store only if no programmatic update happened since the caller's read. */
     public void replaceFromReload(Map<String, ?> values, long expectedGeneration) {
+        rejectReentrantMutation();
         List<ConfigChange<?>> changes;
         synchronized (mutationLock) {
             ConfigSnapshot previous = active.get();
@@ -148,6 +152,17 @@ public final class ConfigStore {
 
     private void requireKey(ConfigKey<?> key) {
         if (schema.key(key.path()).orElse(null) != key) throw new IllegalArgumentException("Key is not registered in this schema: " + key.path());
+    }
+
+    /**
+     * Mutation callbacks and validators run while the mutation monitor is held. Java monitors are
+     * reentrant, so allowing a nested store mutation would publish an inner state that the outer
+     * transaction could then overwrite using its stale candidate map.
+     */
+    private void rejectReentrantMutation() {
+        if (Thread.holdsLock(mutationLock)) {
+            throw new IllegalStateException("Nested configuration mutations are not supported; update the active transaction instead");
+        }
     }
 
     static Map<String, Object> validateValues(ConfigSchema schema, Map<String, ?> input, boolean rejectUnknown) {

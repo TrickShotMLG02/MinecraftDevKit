@@ -60,4 +60,19 @@ class ConfigStoreTest {
                 () -> ConfigStore.fromValues(schema, Map.of(secret.path(), 42)));
         assertFalse(invalid.getMessage().contains("42"));
     }
+
+    @Test void nestedUpdateCannotPublishAChangeThatTheOuterTransactionThenLoses() {
+        ConfigStore store = ConfigStore.defaults(SCHEMA);
+
+        IllegalStateException failure = assertThrows(IllegalStateException.class, () -> store.update(transaction -> {
+            transaction.set(LIMIT, 15);
+            store.set(ENABLED, false);
+        }));
+
+        assertTrue(failure.getMessage().contains("Nested"));
+        assertEquals(10, store.get(LIMIT));
+        assertTrue(store.get(ENABLED));
+        assertEquals(0, store.generation());
+        assertFalse(store.isDirty());
+    }
 }
