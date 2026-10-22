@@ -28,11 +28,11 @@ public final class ConfirmGui {
         public GuiMenu build() {
             GuiStateKey<Boolean> completed = GuiStateKey.of("confirm.completed", false);
             GuiButton.Builder confirmButton = GuiButton.builder().item(confirm).onClick(context -> {
-                if (context.session().get(completed)) return;
-                onConfirm.accept(context);
+                if (!canAttempt(context.session().get(completed))) return;
                 context.session().set(completed, true);
+                onConfirm.accept(context);
                 context.close();
-            });
+            }).enabledWhen(context -> !context.session().get(completed)).disabledItem(GuiItems.grayPane());
             if (permission != null) confirmButton.permission(permission);
             return GuiMenu.chest(3).title(title)
                     .item(13, GuiItems.of(Material.PAPER, "Are you sure?"))
@@ -41,4 +41,6 @@ public final class ConfirmGui {
                     .build();
         }
     }
+
+    static boolean canAttempt(boolean alreadyAttempted) { return !alreadyAttempted; }
 }
