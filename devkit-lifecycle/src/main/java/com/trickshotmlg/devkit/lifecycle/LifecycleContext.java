@@ -28,6 +28,9 @@ public final class LifecycleContext {
     /** Gets a declared service dependency that has started successfully. */
     public <T> T require(ServiceKey<T> key) { return manager.requireDependency(node, key); }
 
+    /** Gets the current service itself, for example from its reload hook. */
+    public <T> T service(ServiceKey<T> key) { return manager.requireCurrentService(node, key); }
+
     /** Registers a resource for automatic close. It is cleaned if startup fails or when this node stops. */
     public <T extends AutoCloseable> T manage(T resource) {
         Objects.requireNonNull(resource, "resource");

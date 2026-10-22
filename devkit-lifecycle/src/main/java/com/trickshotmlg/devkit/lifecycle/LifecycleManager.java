@@ -192,6 +192,19 @@ public final class LifecycleManager implements AutoCloseable {
         }
     }
 
+    <T> T requireCurrentService(LifecycleNodeDefinition requester, ServiceKey<T> key) {
+        Objects.requireNonNull(key, "key");
+        if (!requester.key().equals(key) || !requester.service()) {
+            throw new IllegalArgumentException("Lifecycle node '" + requester.name()
+                    + "' cannot access itself through service key '" + key.name() + "'");
+        }
+        synchronized (stateLock) {
+            Object value = services.get(key.name());
+            if (value == null) throw new IllegalStateException("Current service '" + key.name() + "' is not available");
+            return checkedValue(key, value);
+        }
+    }
+
     private <T> T checkedValue(ServiceKey<T> key, Object value) {
         LifecycleNodeDefinition node = definition.nodes().get(key.name());
         if (node == null || !(node.key() instanceof ServiceKey<?> registered)

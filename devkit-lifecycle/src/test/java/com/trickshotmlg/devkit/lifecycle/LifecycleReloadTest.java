@@ -51,4 +51,17 @@ class LifecycleReloadTest {
                 () -> running.components().put("other", ServiceState.FAILED));
         manager.close();
     }
+
+    @Test void serviceReloadHookCanAccessItsOwnTypedService() {
+        ServiceKey<Service> key = ServiceKey.of("service", Service.class);
+        List<String> calls = new ArrayList<>();
+        LifecycleManager manager = LifecycleManager.builder()
+                .service(key, context -> new Service("active"))
+                .reload(key, context -> calls.add(context.service(key).name()))
+                .build();
+        manager.start();
+        assertTrue(manager.reload().successful());
+        assertEquals(List.of("active"), calls);
+        manager.close();
+    }
 }
