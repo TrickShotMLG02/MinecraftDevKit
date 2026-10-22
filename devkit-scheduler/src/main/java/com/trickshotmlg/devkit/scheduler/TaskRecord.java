@@ -69,20 +69,48 @@ final class TaskRecord implements TaskHandle {
                 }
             }
         } catch (Throwable error) {
-            if (schedule instanceof TaskSchedule.Repeating
-                    && failurePolicy == TaskFailurePolicy.CONTINUE_ON_FAILURE) {
-                continueAfterFailure(error);
-            } else fail(error);
+            failCallback(error);
         }
     }
 
-    private void continueAfterFailure(Throwable error) {
+    /**
+     * Handles an exception from a callback that had already entered RUNNING. Cancellation may
+     * have won the state race while user code was executing; it must remain terminal, but the
+     * exception still needs to be observable instead of disappearing in fail()'s terminal guard.
+     */
+    private void failCallback(Throwable error) {
+        Runnable terminal = null;
+        BackendTask nativeTask = null;
+        boolean terminalFailure = false;
         long count;
         synchronized (this) {
-            if (state != TaskState.RUNNING) return;
-            failure = error;
-            state = TaskState.ACTIVE;
-            count = executionCount;
+            if (state == TaskState.CANCELLED) {
+                failure = error;
+                count = executionCount;
+            } else if (state == TaskState.RUNNING) {
+                failure = error;
+                count = executionCount;
+                if (schedule instanceof TaskSchedule.Repeating
+                        && failurePolicy == TaskFailurePolicy.CONTINUE_ON_FAILURE) {
+                    state = TaskState.ACTIVE;
+                } else {
+                    state = TaskState.FAILED;
+                    terminal = terminalCallback;
+                    nativeTask = backendTask;
+                    terminalCallback = null;
+                    callback = null;
+                    backendTask = null;
+                    scope = null;
+                    terminalFailure = true;
+                }
+            } else {
+                return;
+            }
+        }
+        if (nativeTask != null) safeCancel(nativeTask);
+        if (terminalFailure) {
+            completion.completeExceptionally(error);
+            notifyTerminal(terminal);
         }
         reportFailure(count, error);
     }

@@ -113,6 +113,40 @@ class TaskScopeLifecycleTest {
         scheduler.close();
     }
 
+    @Test void callbackFailureIsReportedWhenCancellationRacesWithRunningCallback() throws Exception {
+        ManualBackend backend = new ManualBackend();
+        List<TaskFailure> failures = new ArrayList<>();
+        TaskScheduler scheduler = TaskSchedulers.create(backend, failures::add);
+        CountDownLatch callbackEntered = new CountDownLatch(1);
+        CountDownLatch allowFailure = new CountDownLatch(1);
+        IllegalStateException expected = new IllegalStateException("failure while unwinding");
+        TaskHandle task = scheduler.sync().run(() -> {
+            callbackEntered.countDown();
+            try {
+                if (!allowFailure.await(5, TimeUnit.SECONDS)) throw new AssertionError("test timed out");
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError(interrupted);
+            }
+            throw expected;
+        });
+
+        Thread dispatch = new Thread(() -> backend.run(0));
+        dispatch.start();
+        assertTrue(callbackEntered.await(5, TimeUnit.SECONDS));
+        assertTrue(task.cancel());
+        allowFailure.countDown();
+        dispatch.join(5000);
+
+        assertFalse(dispatch.isAlive());
+        assertEquals(TaskState.CANCELLED, task.state(), "cancellation remains the terminal state");
+        assertSame(expected, task.failure());
+        assertEquals(1, failures.size(), "the callback failure must not be swallowed");
+        assertSame(expected, failures.get(0).cause());
+        assertEquals(0, scheduler.scope().activeTaskCount());
+        scheduler.close();
+    }
+
     @Test void continueOnFailureKeepsRepeatingTaskActiveWhenExplicitlyRequested() {
         ManualBackend backend = new ManualBackend();
         List<TaskFailure> failures = new ArrayList<>();
