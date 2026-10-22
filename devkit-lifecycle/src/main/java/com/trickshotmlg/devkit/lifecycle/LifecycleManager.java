@@ -17,6 +17,8 @@ public final class LifecycleManager implements AutoCloseable {
     private final Object stateLock = new Object();
     private final Map<String, Object> services = new LinkedHashMap<>();
     private final Map<String, ServiceState> serviceStates = new LinkedHashMap<>();
+    private final Map<String, List<OwnedResource>> nodeResources = new LinkedHashMap<>();
+    private final IdentityHashMap<AutoCloseable, Boolean> resourceIdentities = new IdentityHashMap<>();
     private final List<LifecycleNodeDefinition> started = new ArrayList<>();
     private LifecycleState state = LifecycleState.NEW;
     private Operation operation = Operation.NONE;
@@ -36,6 +38,7 @@ public final class LifecycleManager implements AutoCloseable {
     public void start() {
         begin(Operation.START);
         LifecycleNodeDefinition current = null;
+        LifecycleContext currentContext = null;
         try {
             synchronized (stateLock) {
                 if (state != LifecycleState.NEW) throw invalidTransition("start", state);
@@ -46,26 +49,38 @@ public final class LifecycleManager implements AutoCloseable {
                     current = node;
                     setNodeState(node.name(), ServiceState.STARTING);
                     LifecycleContext context = new LifecycleContext(this, node);
+                    currentContext = context;
+                    Object serviceValue = null;
                     if (node.service()) {
-                        Object value = node.factory().create(context);
-                        if (value == null) throw new IllegalStateException("Factory for service '" + node.name() + "' returned null");
-                        if (!node.serviceType().isInstance(value)) {
+                        serviceValue = node.factory().create(context);
+                        if (serviceValue == null) throw new IllegalStateException("Factory for service '" + node.name() + "' returned null");
+                        if (!node.serviceType().isInstance(serviceValue)) {
                             throw new IllegalStateException("Factory for service '" + node.name() + "' returned "
-                                    + value.getClass().getName() + ", expected " + node.serviceType().getName());
+                                    + serviceValue.getClass().getName() + ", expected " + node.serviceType().getName());
                         }
-                        synchronized (stateLock) { services.put(node.name(), value); }
+                        if (node.cleanup() != null) {
+                            Object created = serviceValue;
+                            context.onClose(ignored -> node.cleanup().close(created, context));
+                        } else if (serviceValue instanceof AutoCloseable closeable) context.manage(closeable);
                     } else {
                         node.start().run(context);
+                        if (node.stop() != null) context.onClose(node.stop());
                     }
+                    List<OwnedResource> acquired = context.transferResources();
                     synchronized (stateLock) {
+                        if (node.service()) services.put(node.name(), serviceValue);
+                        nodeResources.put(node.name(), acquired);
                         serviceStates.put(node.name(), ServiceState.RUNNING);
                         started.add(node);
                     }
+                    currentContext = null;
                 }
                 synchronized (stateLock) { state = LifecycleState.RUNNING; }
             } catch (Throwable startupFailure) {
                 setNodeState(current == null ? "" : current.name(), ServiceState.FAILED);
-                List<Throwable> cleanupFailures = rollbackStarted();
+                List<Throwable> cleanupFailures = new ArrayList<>();
+                if (currentContext != null) cleanupFailures.addAll(currentContext.closeResources());
+                cleanupFailures.addAll(rollbackStarted());
                 synchronized (stateLock) { state = LifecycleState.FAILED; }
                 LifecycleException failure = new LifecycleException(LifecyclePhase.STARTUP,
                         current == null ? null : current.name(), "Failed to start lifecycle component '"
@@ -174,27 +189,60 @@ public final class LifecycleManager implements AutoCloseable {
         List<Throwable> failures = new ArrayList<>();
         for (LifecycleNodeDefinition node : reverse) {
             setNodeState(node.name(), ServiceState.STOPPING);
-            try {
-                LifecycleContext context = new LifecycleContext(this, node);
-                if (node.service()) {
-                    Object value;
-                    synchronized (stateLock) { value = services.get(node.name()); }
-                    if (node.cleanup() != null) node.cleanup().close(value, context);
-                    else if (value instanceof AutoCloseable closeable) closeable.close();
-                } else if (node.stop() != null) node.stop().run(context);
+            List<OwnedResource> owned;
+            synchronized (stateLock) { owned = nodeResources.remove(node.name()); }
+            List<Throwable> nodeFailures = closeResources(owned == null ? List.of() : owned);
+            if (nodeFailures.isEmpty()) {
                 setNodeState(node.name(), ServiceState.STOPPED);
-            } catch (Throwable error) {
+            } else {
+                Throwable primary = nodeFailures.get(0);
+                nodeFailures.stream().skip(1).forEach(primary::addSuppressed);
                 failures.add(new LifecycleException(LifecyclePhase.SHUTDOWN, node.name(),
-                        "Failed to stop lifecycle component '" + node.name() + "'", error));
+                        "Failed to stop lifecycle component '" + node.name() + "'", primary));
                 setNodeState(node.name(), ServiceState.FAILED);
-            } finally {
-                synchronized (stateLock) {
-                    services.remove(node.name());
-                    started.remove(node);
-                }
+            }
+            synchronized (stateLock) {
+                services.remove(node.name());
+                started.remove(node);
             }
         }
         return failures;
+    }
+
+    List<Throwable> closeResources(List<OwnedResource> resources) {
+        List<Throwable> failures = new ArrayList<>();
+        for (int index = resources.size() - 1; index >= 0; index--) {
+            OwnedResource resource = resources.get(index);
+            try { resource.close(); }
+            catch (Throwable failure) { failures.add(failure); }
+            finally {
+                synchronized (stateLock) { resourceIdentities.remove(resource.resource); }
+            }
+        }
+        return failures;
+    }
+
+    OwnedResource claimResource(AutoCloseable resource) {
+        synchronized (stateLock) {
+            if (operation != Operation.START || operationOwner != Thread.currentThread()) {
+                throw new IllegalStateException("Resources may only be registered during their startup callback");
+            }
+            if (resourceIdentities.putIfAbsent(resource, Boolean.TRUE) != null) {
+                throw new IllegalArgumentException("Resource is already owned by this lifecycle");
+            }
+            return new OwnedResource(resource);
+        }
+    }
+
+    static final class OwnedResource {
+        private final AutoCloseable resource;
+        private boolean closed;
+        private OwnedResource(AutoCloseable resource) { this.resource = resource; }
+        synchronized void close() throws Exception {
+            if (closed) return;
+            closed = true;
+            resource.close();
+        }
     }
 
     private void setNodeState(String name, ServiceState next) {
