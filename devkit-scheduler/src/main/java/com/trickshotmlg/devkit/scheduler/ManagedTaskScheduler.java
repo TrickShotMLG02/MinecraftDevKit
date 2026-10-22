@@ -2,6 +2,7 @@ package com.trickshotmlg.devkit.scheduler;
 
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.Callable;
 
 final class ManagedTaskScheduler implements TaskScheduler {
     private final ManagedTaskScope root;
@@ -124,6 +125,12 @@ final class ManagedTaskScheduler implements TaskScheduler {
         }
         @Override public TaskHandle repeat(TickDelay initialDelay, TickPeriod period, TaskCallback action) {
             return scope.schedule(target, TaskSchedule.repeat(initialDelay, period), action);
+        }
+        @Override public <T> AsyncTaskResult<T> submit(Callable<T> action) {
+            if (target != TaskExecutionTarget.ASYNC) {
+                throw new UnsupportedOperationException("Results can only be submitted through the async runner");
+            }
+            return AsyncTaskResult.submit(scope, action);
         }
         @Override public TaskHandle nextTick(Runnable action) {
             Objects.requireNonNull(action, "action");
