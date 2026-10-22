@@ -47,6 +47,23 @@ public final class LifecycleBuilder {
         return this;
     }
 
+    /** Registers one explicit reload hook for an already registered service or component. */
+    public LifecycleBuilder reload(LifecycleDependency key, LifecycleAction action) {
+        ensureMutable();
+        Objects.requireNonNull(key, "key");
+        Objects.requireNonNull(action, "action");
+        for (int index = 0; index < nodes.size(); index++) {
+            LifecycleNodeDefinition node = nodes.get(index);
+            if (!node.name().equals(key.name())) continue;
+            if (!node.key().equals(key)) throw new IllegalArgumentException("Reload key has incompatible identity: " + key.name());
+            if (node.reload() != null) throw new IllegalArgumentException("Reload hook already registered for '" + key.name() + "'");
+            nodes.set(index, new LifecycleNodeDefinition(node.key(), node.serviceType(), node.factory(), node.cleanup(),
+                    node.start(), node.stop(), action, node.dependencies(), node.registrationOrder()));
+            return this;
+        }
+        throw new IllegalArgumentException("Cannot register reload hook for unknown lifecycle node '" + key.name() + "'");
+    }
+
     /** Builds an immutable definition. The builder cannot be reused afterward. */
     public LifecycleDefinition build() {
         ensureMutable();

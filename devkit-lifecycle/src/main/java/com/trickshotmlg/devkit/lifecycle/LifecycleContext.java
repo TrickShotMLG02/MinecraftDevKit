@@ -10,11 +10,16 @@ public final class LifecycleContext {
     private final LifecycleNodeDefinition node;
     private final Object resourceLock = new Object();
     private final List<LifecycleManager.OwnedResource> resources = new ArrayList<>();
-    private boolean acceptingResources = true;
+    private boolean acceptingResources;
 
     LifecycleContext(LifecycleManager manager, LifecycleNodeDefinition node) {
+        this(manager, node, true);
+    }
+
+    LifecycleContext(LifecycleManager manager, LifecycleNodeDefinition node, boolean resourceRegistrationAllowed) {
         this.manager = Objects.requireNonNull(manager, "manager");
         this.node = Objects.requireNonNull(node, "node");
+        this.acceptingResources = resourceRegistrationAllowed;
     }
 
     /** Name of the service or component whose callback is running. */
@@ -37,6 +42,12 @@ public final class LifecycleContext {
     public void onClose(LifecycleAction cleanup) {
         Objects.requireNonNull(cleanup, "cleanup");
         manage((AutoCloseable) () -> cleanup.run(this));
+    }
+
+    /** Registers a simple cleanup action, invoked at most once during rollback or shutdown. */
+    public void onClose(Runnable cleanup) {
+        Objects.requireNonNull(cleanup, "cleanup");
+        manage((AutoCloseable) cleanup::run);
     }
 
     List<LifecycleManager.OwnedResource> transferResources() {

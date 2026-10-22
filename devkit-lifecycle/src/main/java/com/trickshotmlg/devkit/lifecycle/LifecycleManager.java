@@ -125,6 +125,36 @@ public final class LifecycleManager implements AutoCloseable {
         return List.copyOf(order);
     }
 
+    /** Immutable point-in-time diagnostics for service and component states. */
+    public LifecycleDiagnostics diagnostics() {
+        synchronized (stateLock) { return new LifecycleDiagnostics(state, serviceStates, startupOrder(), shutdownOrder()); }
+    }
+
+    /** Runs only explicitly registered reload hooks in dependency order. Partial failures are reported, not rolled back. */
+    public LifecycleReloadResult reload() {
+        begin(Operation.RELOAD);
+        List<String> attempted = new ArrayList<>();
+        List<LifecycleException> failures = new ArrayList<>();
+        try {
+            synchronized (stateLock) {
+                if (state != LifecycleState.RUNNING) throw new LifecycleException(LifecyclePhase.RELOAD, null,
+                        "Cannot reload lifecycle while it is " + state, null);
+            }
+            for (LifecycleNodeDefinition node : definition.startupOrderInternal()) {
+                if (node.reload() == null) continue;
+                attempted.add(node.name());
+                try { node.reload().run(new LifecycleContext(this, node, false)); }
+                catch (Throwable error) {
+                    failures.add(new LifecycleException(LifecyclePhase.RELOAD, node.name(),
+                            "Reload failed for lifecycle component '" + node.name() + "'", error));
+                }
+            }
+            return new LifecycleReloadResult(attempted, failures);
+        } finally {
+            end(Operation.RELOAD);
+        }
+    }
+
     @Override public void close() {
         begin(Operation.CLOSE);
         try {
@@ -295,6 +325,9 @@ public final class LifecycleManager implements AutoCloseable {
         public Builder component(ComponentKey key, LifecycleAction start, LifecycleAction stop,
                                  LifecycleDependency... dependencies) {
             delegate.component(key, start, stop, dependencies); return this;
+        }
+        public Builder reload(LifecycleDependency key, LifecycleAction action) {
+            delegate.reload(key, action); return this;
         }
         public LifecycleManager build() { return LifecycleManager.create(delegate.build()); }
     }
