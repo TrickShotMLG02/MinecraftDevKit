@@ -41,7 +41,7 @@ class StorageFoundationTest {
         SQLiteDataSource external = new SQLiteDataSource();
         external.setUrl("jdbc:sqlite::memory:");
         Storage storage = Storage.builder().dataSource(external).build();
-        assertTrue(storage.configuration().toString().contains("<external-data-source>"));
+        assertTrue(storage.configuration().toString().contains("backend=external-data-source"));
         storage.close();
         storage.close();
         try (var connection = external.getConnection()) {
@@ -59,5 +59,21 @@ class StorageFoundationTest {
         assertThrows(IllegalArgumentException.class, () -> Storage.builder().connectionTimeout(Duration.ofMillis(-1))
                 .mysql("localhost", 3306, "game").build());
         assertThrows(IllegalArgumentException.class, () -> Storage.builder().mysql("host?ssl=false", 3306, "game"));
+        assertThrows(IllegalArgumentException.class, () -> Storage.builder().jdbcUrl("jdbc:mysql://localhost/game?password=secret"));
+    }
+
+    @Test void sqliteBackendDefaultDoesNotOverrideExplicitPoolSizeRegardlessOfCallOrder() {
+        try (Storage storage = Storage.builder().maximumPoolSize(2).sqliteMemory().build()) {
+            assertEquals(2, storage.configuration().maximumPoolSize());
+        }
+    }
+
+    @Test void externalDataSourceRejectsCredentialsBecauseItOwnsAuthentication() {
+        SQLiteDataSource external = new SQLiteDataSource();
+        external.setUrl("jdbc:sqlite::memory:");
+        assertThrows(IllegalStateException.class, () -> Storage.builder()
+                .dataSource(external)
+                .credentials("user", "secret")
+                .build());
     }
 }

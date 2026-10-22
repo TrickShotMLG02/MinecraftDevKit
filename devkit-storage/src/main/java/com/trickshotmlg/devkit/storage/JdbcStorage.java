@@ -19,13 +19,13 @@ import java.util.concurrent.ThreadPoolExecutor;
 
 final class JdbcStorage implements Storage {
     private final StorageConfiguration configuration;
-    private final DataSource dataSource;
+    private volatile DataSource dataSource;
     private final boolean ownsDataSource;
     private final AtomicBoolean closed = new AtomicBoolean();
     private final ThreadLocal<Boolean> transactionActive = ThreadLocal.withInitial(() -> false);
     private final Object asyncLifecycleLock = new Object();
     private final java.util.Set<AsyncOperation<?>> asyncOperations = ConcurrentHashMap.newKeySet();
-    private final Executor asyncExecutor;
+    private volatile Executor asyncExecutor;
     private final boolean ownsAsyncExecutor;
     private final StorageAsync async = new StorageAsync(this);
 
@@ -74,9 +74,12 @@ final class JdbcStorage implements Storage {
     }
 
     @Override public StorageConfiguration configuration() { return configuration; }
-    @Override public DataSource dataSource() {
+    @Override public DataSource dataSource() { return openDataSource(); }
+    private DataSource openDataSource() {
         ensureOpen();
-        return dataSource;
+        DataSource current = dataSource;
+        if (current == null) throw new StorageClosedException();
+        return current;
     }
     @Override public boolean isClosed() { return closed.get(); }
     void ensureOpen() { if (closed.get()) throw new StorageClosedException(); }
@@ -123,10 +126,11 @@ final class JdbcStorage implements Storage {
                 else task.fail(failure instanceof StorageException ? failure : new StorageException("Asynchronous storage operation failed", failure));
             } finally { finish(); }
         }
-        private void cancelFromHandle() { cancel(false); }
-        private void cancel(boolean fromClose) {
+        private void cancelFromHandle() { cancel(); }
+        private void cancel() {
             task.cancelState();
-            if (asyncExecutor instanceof ThreadPoolExecutor pool) pool.remove(this);
+            Executor current = asyncExecutor;
+            if (current instanceof ThreadPoolExecutor pool) pool.remove(this);
             finish();
         }
         private void finish() {
@@ -149,7 +153,7 @@ final class JdbcStorage implements Storage {
         ensureOutsideTransaction();
         validateSql(sql);
         ensureOpen();
-        try (var connection = dataSource.getConnection(); var statement = connection.prepareStatement(sql)) {
+        try (var connection = openDataSource().getConnection(); var statement = connection.prepareStatement(sql)) {
             parameters.bind(statement);
             try (var results = statement.executeQuery()) {
                 List<T> mapped = new ArrayList<>(atMostOne ? 1 : 8);
@@ -183,7 +187,7 @@ final class JdbcStorage implements Storage {
         ensureOutsideTransaction();
         validateSql(sql);
         ensureOpen();
-        try (var connection = dataSource.getConnection(); var statement = connection.prepareStatement(sql)) {
+        try (var connection = openDataSource().getConnection(); var statement = connection.prepareStatement(sql)) {
             parameters.bind(statement);
             return statement.executeUpdate();
         } catch (StorageException failure) {
@@ -198,7 +202,7 @@ final class JdbcStorage implements Storage {
         ensureOutsideTransaction();
         validateSql(sql);
         ensureOpen();
-        try (var connection = dataSource.getConnection();
+        try (var connection = openDataSource().getConnection();
              var statement = connection.prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS)) {
             parameters.bind(statement);
             statement.executeUpdate();
@@ -226,7 +230,7 @@ final class JdbcStorage implements Storage {
         ensureOpen();
         if (transactionActive.get())
             throw new IllegalStateException("Nested transactions are not supported; reuse the current Transaction");
-        try (var connection = dataSource.getConnection()) {
+        try (var connection = openDataSource().getConnection()) {
             boolean originalAutoCommit = connection.getAutoCommit();
             TransactionImpl transaction = null;
             Throwable primaryFailure = null;
@@ -274,6 +278,7 @@ final class JdbcStorage implements Storage {
         private void ensureUsable() {
             if (!active) throw new IllegalStateException("Transaction callback has completed");
             if (Thread.currentThread() != owner) throw new IllegalStateException("Transaction is confined to its callback thread");
+            JdbcStorage.this.ensureOpen();
         }
         private void invalidate() { active = false; }
 
@@ -331,15 +336,23 @@ final class JdbcStorage implements Storage {
     @Override public void close() {
         synchronized (asyncLifecycleLock) {
             if (!closed.compareAndSet(false, true)) return;
-            for (AsyncOperation<?> operation : List.copyOf(asyncOperations)) operation.cancel(true);
+            for (AsyncOperation<?> operation : List.copyOf(asyncOperations)) operation.cancel();
         }
-        if (ownsAsyncExecutor && asyncExecutor instanceof ExecutorService service) service.shutdownNow();
+        Executor executor = asyncExecutor;
+        if (ownsAsyncExecutor && executor instanceof ExecutorService service) service.shutdownNow();
+        asyncExecutor = null;
         configuration.clearPassword();
-        if (!ownsDataSource) return;
+        DataSource owned = dataSource;
+        if (!ownsDataSource) {
+            dataSource = null;
+            return;
+        }
         try {
-            if (dataSource instanceof AutoCloseable closeable) closeable.close();
+            if (owned instanceof AutoCloseable closeable) closeable.close();
         } catch (Exception failure) {
             throw new StorageException("Could not close storage resources", failure);
+        } finally {
+            dataSource = null;
         }
     }
 }

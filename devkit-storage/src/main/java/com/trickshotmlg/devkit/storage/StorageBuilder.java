@@ -15,6 +15,7 @@ public final class StorageBuilder {
     private String username;
     private char[] password;
     private int maximumPoolSize = 8;
+    private boolean maximumPoolSizeExplicit;
     private Duration connectionTimeout = Duration.ofSeconds(10);
     private Duration idleTimeout = Duration.ofMinutes(5);
     private Duration busyTimeout;
@@ -36,7 +37,7 @@ public final class StorageBuilder {
         this.jdbcUrl = "jdbc:sqlite:" + absolute;
         this.sqlite = true;
         this.sqliteWal = true;
-        this.maximumPoolSize = 1;
+        if (!maximumPoolSizeExplicit) this.maximumPoolSize = 1;
         this.busyTimeout = Duration.ofSeconds(5);
         return this;
     }
@@ -46,7 +47,7 @@ public final class StorageBuilder {
         this.jdbcUrl = "jdbc:sqlite::memory:";
         this.sqlite = true;
         this.sqliteWal = false;
-        this.maximumPoolSize = 1;
+        if (!maximumPoolSizeExplicit) this.maximumPoolSize = 1;
         this.busyTimeout = Duration.ofSeconds(5);
         return this;
     }
@@ -54,9 +55,15 @@ public final class StorageBuilder {
     /** Configures a generic JDBC URL. Add the matching driver to the application runtime classpath. */
     public StorageBuilder jdbcUrl(String jdbcUrl) {
         this.jdbcUrl = Objects.requireNonNull(jdbcUrl, "jdbcUrl");
+        String normalized = jdbcUrl.toLowerCase(java.util.Locale.ROOT);
+        if (normalized.matches(".*[?&;](password|passwd|pwd)=.*")
+                || ((normalized.startsWith("jdbc:mysql://") || normalized.startsWith("jdbc:mariadb://"))
+                && normalized.substring(normalized.indexOf("//") + 2).split("/", 2)[0].contains("@"))) {
+            throw new IllegalArgumentException("Put credentials in credentials(), not in the JDBC URL");
+        }
         this.sqlite = jdbcUrl.startsWith("jdbc:sqlite:");
         if (sqlite) {
-            maximumPoolSize = 1;
+            if (!maximumPoolSizeExplicit) maximumPoolSize = 1;
             busyTimeout = Duration.ofSeconds(5);
         } else {
             sqliteWal = false;
@@ -74,7 +81,7 @@ public final class StorageBuilder {
     }
 
     private StorageBuilder networkUrl(String scheme, String host, int port, String database) {
-        if (host == null || host.isBlank() || host.contains("/") || host.contains("?") || host.contains("#"))
+        if (host == null || host.isBlank() || host.contains("/") || host.contains("?") || host.contains("#") || host.contains("@"))
             throw new IllegalArgumentException("Invalid database host");
         if (port < 1 || port > 65535) throw new IllegalArgumentException("port must be between 1 and 65535");
         if (database == null || !database.matches("[A-Za-z0-9_$-]+"))
@@ -83,7 +90,7 @@ public final class StorageBuilder {
         sqlite = false;
         sqliteWal = false;
         busyTimeout = null;
-        maximumPoolSize = 8;
+        if (!maximumPoolSizeExplicit) maximumPoolSize = 8;
         return this;
     }
 
@@ -100,7 +107,7 @@ public final class StorageBuilder {
         return credentials(username, password == null ? null : password.toCharArray());
     }
 
-    public StorageBuilder maximumPoolSize(int size) { maximumPoolSize = size; return this; }
+    public StorageBuilder maximumPoolSize(int size) { maximumPoolSize = size; maximumPoolSizeExplicit = true; return this; }
     public StorageBuilder connectionTimeout(Duration timeout) { connectionTimeout = timeout; return this; }
     public StorageBuilder idleTimeout(Duration timeout) { idleTimeout = timeout; return this; }
     public StorageBuilder sqliteBusyTimeout(Duration timeout) { busyTimeout = timeout; return this; }
@@ -137,28 +144,35 @@ public final class StorageBuilder {
     }
 
     public Storage build() {
-        if (externalDataSource == null && (jdbcUrl == null || jdbcUrl.isBlank()))
-            throw new IllegalStateException("Configure sqlite(), mysql(), mariadb(), jdbcUrl(), or dataSource() first");
-        if (externalDataSource != null && (sqliteWal || busyTimeout != null))
-            throw new IllegalStateException("SQLite initialization options cannot be applied to an external DataSource");
-        if (asyncThreads < 1) throw new IllegalArgumentException("asyncThreads must be positive");
-        if (asyncQueueCapacity < 1) throw new IllegalArgumentException("asyncQueueCapacity must be positive");
-        StorageConfiguration configuration = new StorageConfiguration(jdbcUrl, username, password, maximumPoolSize,
-                connectionTimeout, idleTimeout, busyTimeout, sqlite, sqliteWal, externalDataSource != null);
         try {
-            if (sqlite && jdbcUrl != null && !jdbcUrl.equals("jdbc:sqlite::memory:")) {
-                Path file = Path.of(jdbcUrl.substring("jdbc:sqlite:".length()));
-                Path parent = file.getParent();
-                if (parent != null) Files.createDirectories(parent);
+            if (externalDataSource == null && (jdbcUrl == null || jdbcUrl.isBlank()))
+                throw new IllegalStateException("Configure sqlite(), mysql(), mariadb(), jdbcUrl(), or dataSource() first");
+            if (externalDataSource != null && (sqliteWal || busyTimeout != null))
+                throw new IllegalStateException("SQLite initialization options cannot be applied to an external DataSource");
+            if (externalDataSource != null && (username != null || password != null))
+                throw new IllegalStateException("Credentials must be configured on the external DataSource");
+            if (asyncThreads < 1) throw new IllegalArgumentException("asyncThreads must be positive");
+            if (asyncQueueCapacity < 1) throw new IllegalArgumentException("asyncQueueCapacity must be positive");
+            StorageConfiguration configuration = new StorageConfiguration(jdbcUrl, username, password, maximumPoolSize,
+                    connectionTimeout, idleTimeout, busyTimeout, sqlite, sqliteWal, externalDataSource != null);
+            try {
+                if (sqlite && jdbcUrl != null && !jdbcUrl.equals("jdbc:sqlite::memory:")) {
+                    Path file = Path.of(jdbcUrl.substring("jdbc:sqlite:".length()));
+                    Path parent = file.getParent();
+                    if (parent != null) Files.createDirectories(parent);
+                }
+                return new JdbcStorage(configuration, externalDataSource, ownsExternalDataSource,
+                        asyncExecutor, ownsAsyncExecutor, asyncThreads, asyncQueueCapacity);
+            } catch (Exception failure) {
+                configuration.clearPassword();
+                throw failure instanceof StorageException storageFailure ? storageFailure
+                        : new StorageException("Could not initialize storage", failure);
             }
-            return new JdbcStorage(configuration, externalDataSource, ownsExternalDataSource,
-                    asyncExecutor, ownsAsyncExecutor, asyncThreads, asyncQueueCapacity);
-        } catch (Exception failure) {
-            configuration.clearPassword();
-            throw failure instanceof StorageException storageFailure ? storageFailure
-                    : new StorageException("Could not initialize storage", failure);
         } finally {
-            if (password != null) java.util.Arrays.fill(password, '\0');
+            if (password != null) {
+                java.util.Arrays.fill(password, '\0');
+                password = null;
+            }
         }
     }
 

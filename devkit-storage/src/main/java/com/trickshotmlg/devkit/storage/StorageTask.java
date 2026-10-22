@@ -16,6 +16,7 @@ public final class StorageTask<T> {
     boolean begin() { return state.compareAndSet(State.QUEUED, State.RUNNING); }
     boolean complete(T value) {
         if (!state.compareAndSet(State.RUNNING, State.COMPLETED)) return false;
+        cancellation = () -> { };
         result.complete(value);
         return true;
     }
@@ -23,6 +24,7 @@ public final class StorageTask<T> {
         State current = state.get();
         while (current == State.QUEUED || current == State.RUNNING) {
             if (state.compareAndSet(current, State.FAILED)) {
+                cancellation = () -> { };
                 result.completeExceptionally(failure);
                 return true;
             }
@@ -34,6 +36,7 @@ public final class StorageTask<T> {
         State current = state.get();
         while (current == State.QUEUED || current == State.RUNNING) {
             if (state.compareAndSet(current, State.CANCELLED)) {
+                cancellation = () -> { };
                 result.cancel(false);
                 return true;
             }
@@ -50,8 +53,9 @@ public final class StorageTask<T> {
         return value == State.COMPLETED || value == State.CANCELLED || value == State.FAILED;
     }
     public boolean cancel() {
+        Runnable cancelOperation = cancellation;
         boolean cancelled = cancelState();
-        if (cancelled) cancellation.run();
+        if (cancelled) cancelOperation.run();
         return cancelled;
     }
 }

@@ -63,7 +63,11 @@ public final class StorageConfiguration {
     public boolean externalDataSource() { return externalDataSource; }
 
     @Override public String toString() {
-        return "StorageConfiguration[jdbcUrl=" + (externalDataSource ? "<external-data-source>" : jdbcUrl) + ", username=" + username
+        String backend = externalDataSource ? "external-data-source"
+                : jdbcUrl.startsWith("jdbc:sqlite:") ? "sqlite"
+                : jdbcUrl.startsWith("jdbc:mysql:") ? "mysql"
+                : jdbcUrl.startsWith("jdbc:mariadb:") ? "mariadb" : "custom-jdbc";
+        return "StorageConfiguration[backend=" + backend + ", username=" + username
                 + ", password=<redacted>, maximumPoolSize=" + maximumPoolSize
                 + ", connectionTimeout=" + connectionTimeout + ", sqlite=" + sqlite + "]";
     }
