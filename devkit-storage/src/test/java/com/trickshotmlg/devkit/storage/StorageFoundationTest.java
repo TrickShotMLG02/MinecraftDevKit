@@ -81,6 +81,8 @@ class StorageFoundationTest {
                 .mysql("localhost", 3306, "game").build());
         assertThrows(IllegalArgumentException.class, () -> Storage.builder().mysql("host?ssl=false", 3306, "game"));
         assertThrows(IllegalArgumentException.class, () -> Storage.builder().jdbcUrl("jdbc:mysql://localhost/game?password=secret"));
+        assertThrows(IllegalArgumentException.class,
+                () -> Storage.builder().jdbcUrl("jdbc:postgresql://user:secret@localhost/game"));
     }
 
     @Test void sqliteBackendDefaultDoesNotOverrideExplicitPoolSizeRegardlessOfCallOrder() {

@@ -57,8 +57,7 @@ public final class StorageBuilder {
         this.jdbcUrl = Objects.requireNonNull(jdbcUrl, "jdbcUrl");
         String normalized = jdbcUrl.toLowerCase(java.util.Locale.ROOT);
         if (normalized.matches(".*[?&;](password|passwd|pwd)=.*")
-                || ((normalized.startsWith("jdbc:mysql://") || normalized.startsWith("jdbc:mariadb://"))
-                && normalized.substring(normalized.indexOf("//") + 2).split("/", 2)[0].contains("@"))) {
+                || containsNetworkUserInfo(normalized)) {
             throw new IllegalArgumentException("Put credentials in credentials(), not in the JDBC URL");
         }
         this.sqlite = jdbcUrl.startsWith("jdbc:sqlite:");
@@ -70,6 +69,18 @@ public final class StorageBuilder {
             busyTimeout = null;
         }
         return this;
+    }
+
+    private static boolean containsNetworkUserInfo(String jdbcUrl) {
+        int authorityStart = jdbcUrl.indexOf("://");
+        if (authorityStart < 0) return false;
+        authorityStart += 3;
+        int authorityEnd = jdbcUrl.length();
+        for (char delimiter : new char[]{'/', '?', '#', ';'}) {
+            int index = jdbcUrl.indexOf(delimiter, authorityStart);
+            if (index >= 0) authorityEnd = Math.min(authorityEnd, index);
+        }
+        return jdbcUrl.substring(authorityStart, authorityEnd).contains("@");
     }
 
     public StorageBuilder mysql(String host, int port, String database) {
