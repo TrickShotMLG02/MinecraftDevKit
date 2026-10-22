@@ -1,0 +1,6 @@
+config-version: 2
+friends:
+  max: 100
+  requests:
+    enabled: true
+    timeout: PT5M

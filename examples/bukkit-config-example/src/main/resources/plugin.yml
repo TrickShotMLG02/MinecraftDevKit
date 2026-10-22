@@ -1,0 +1,9 @@
+name: MinecraftDevKitConfigExample
+version: 0.1.0-SNAPSHOT
+main: com.trickshotmlg.devkit.examples.config.ConfigExamplePlugin
+api-version: '1.21'
+description: Demonstrates MinecraftDevKit typed configuration, reload, validation, and migration.
+commands:
+  mdkconfig:
+    description: Inspect and manage the example configuration
+    usage: /mdkconfig <show|reload|setmax|save>
