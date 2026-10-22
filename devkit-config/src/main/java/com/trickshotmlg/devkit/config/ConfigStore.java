@@ -193,9 +193,7 @@ public final class ConfigStore {
                 try {
                     for (ConfigIssue issue : constraint.validate(view)) {
                         ConfigKey<?> key = schema.key(issue.path()).orElse(null);
-                        issues.add(key != null && key.sensitive()
-                                ? new ConfigIssue(issue.path(), issue.severity(), "invalid sensitive value", issue.source(), issue.expected())
-                                : issue);
+                        issues.add(sanitizeConstraintIssue(issue, key, schema, values));
                     }
                 } catch (RuntimeException exception) {
                     // Cross-field validators can inspect every value, so their exception messages
@@ -206,6 +204,29 @@ public final class ConfigStore {
         }
         if (issues.stream().anyMatch(issue -> issue.severity() == ConfigIssue.Severity.ERROR)) throw new ConfigValidationException(issues);
         return java.util.Collections.unmodifiableMap(new LinkedHashMap<>(values));
+    }
+
+    private static ConfigIssue sanitizeConstraintIssue(ConfigIssue issue, ConfigKey<?> issueKey,
+                                                       ConfigSchema schema, Map<String, Object> values) {
+        if (issueKey != null && issueKey.sensitive()) {
+            return new ConfigIssue(issue.path(), issue.severity(), "invalid sensitive value", issue.source(), java.util.Optional.empty());
+        }
+        String message = issue.message();
+        String expected = issue.expected().orElse(null);
+        for (ConfigKey<?> key : schema.keys().values()) {
+            if (!key.sensitive()) continue;
+            Object value = values.get(key.path());
+            if (value == null) continue;
+            String sensitiveText;
+            try { sensitiveText = String.valueOf(value); }
+            catch (RuntimeException ignored) { continue; }
+            if (!sensitiveText.isEmpty()) {
+                message = message.replace(sensitiveText, "[REDACTED]");
+                if (expected != null) expected = expected.replace(sensitiveText, "[REDACTED]");
+            }
+        }
+        return new ConfigIssue(issue.path(), issue.severity(), message, issue.source(),
+                java.util.Optional.ofNullable(expected));
     }
 
     private static <T> void decodeAndValidate(ConfigKey<T> key, Object raw, Map<String, Object> values, List<ConfigIssue> issues) {

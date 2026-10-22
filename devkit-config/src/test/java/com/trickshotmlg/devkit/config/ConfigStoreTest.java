@@ -110,9 +110,12 @@ class ConfigStoreTest {
     @Test void sensitiveCrossFieldValidationMessagesAreRedacted() {
         String secret = "private-token-7f9a";
         ConfigKey<String> password = ConfigKey.string("database.password", secret).sensitive().build();
-        ConfigSchema schema = ConfigSchema.builder().register(password)
-                .validate(values -> java.util.List.of(ConfigIssue.error(password.path(),
-                        "invalid credential " + values.get(password))))
+        ConfigSchema schema = ConfigSchema.builder().register(password, LIMIT)
+                .validate(values -> java.util.List.of(
+                        ConfigIssue.error(password.path(), "invalid credential " + values.get(password)),
+                        new ConfigIssue(LIMIT.path(), ConfigIssue.Severity.ERROR,
+                                "credential rejected: " + values.get(password), java.util.Optional.empty(),
+                                java.util.Optional.of("must not contain " + values.get(password)))))
                 .build();
 
         ConfigValidationException failure = assertThrows(ConfigValidationException.class,
@@ -120,5 +123,7 @@ class ConfigStoreTest {
 
         assertFalse(failure.getMessage().contains(secret));
         assertTrue(failure.getMessage().contains("database.password"));
+        assertTrue(failure.issues().stream().noneMatch(issue -> issue.message().contains(secret)
+                || issue.expected().orElse("").contains(secret)));
     }
 }
