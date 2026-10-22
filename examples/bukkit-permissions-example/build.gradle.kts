@@ -1,5 +1,6 @@
 plugins {
     java
+    // settings.gradle.kts maps this plugin request to the selected local or JitPack module.
     id("com.trickshotmlg.devkit.bukkit-permissions") version "0.1.0-beta.1"
     id("com.gradleup.shadow") version "9.6.1"
 }
@@ -11,9 +12,18 @@ java {
     toolchain.languageVersion.set(JavaLanguageVersion.of(21))
 }
 
+val mdkRepository = providers.gradleProperty("mdkRepository").orElse("mavenLocal").get().lowercase()
+val mdkVersion = when (mdkRepository) {
+    "mavenlocal" -> "0.1.0-SNAPSHOT"
+    "jitpack" -> providers.gradleProperty("mdkVersion").get()
+    else -> throw GradleException("Unsupported -PmdkRepository='$mdkRepository'; use mavenLocal or jitpack")
+}
+val mdkGroup = if (mdkRepository == "mavenlocal") "com.trickshotmlg.devkit"
+    else "com.github.TrickshotMLG.MinecraftDevKit"
+
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.8-R0.1-SNAPSHOT")
-    implementation("com.github.TrickshotMLG.MinecraftDevKit:devkit-permissions:0.1.0-beta.1")
+    implementation("$mdkGroup:devkit-permissions:$mdkVersion")
 }
 
 minecraftDevKit {

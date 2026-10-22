@@ -10,12 +10,21 @@ version = "0.1.0-SNAPSHOT"
 
 java { toolchain.languageVersion.set(JavaLanguageVersion.of(21)) }
 
+val mdkRepository = providers.gradleProperty("mdkRepository").orElse("mavenLocal").get().lowercase()
+val mdkVersion = when (mdkRepository) {
+    "mavenlocal" -> "0.1.0-SNAPSHOT"
+    "jitpack" -> providers.gradleProperty("mdkVersion").get()
+    else -> throw GradleException("Unsupported -PmdkRepository='$mdkRepository'; use mavenLocal or jitpack")
+}
+val mdkGroup = if (mdkRepository == "mavenlocal") "com.trickshotmlg.devkit"
+    else "com.github.TrickshotMLG.MinecraftDevKit"
+
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
-    implementation("com.trickshotmlg.devkit:devkit-bukkit-commands:0.1.0-SNAPSHOT")
-    implementation("com.trickshotmlg.devkit:devkit-localization:0.1.0-SNAPSHOT")
-    implementation("com.trickshotmlg.devkit:devkit-localization-yaml:0.1.0-SNAPSHOT")
-    implementation("com.trickshotmlg.devkit:devkit-permissions:0.1.0-SNAPSHOT")
+    implementation("$mdkGroup:devkit-bukkit-commands:$mdkVersion")
+    implementation("$mdkGroup:devkit-localization:$mdkVersion")
+    implementation("$mdkGroup:devkit-localization-yaml:$mdkVersion")
+    implementation("$mdkGroup:devkit-permissions:$mdkVersion")
 }
 
 minecraftDevKit {

@@ -1,12 +1,12 @@
 # MinecraftDevKit Bukkit Commands Example
 
-This is an independent JavaPlugin build demonstrating command, permission, reloadable YAML localization, and scanner APIs together. It resolves MinecraftDevKit artifacts through Maven Local and does not include Gradle project dependencies on the repository root.
+This is an independent JavaPlugin build demonstrating command, permission, reloadable YAML localization, and scanner APIs together. It does not include Gradle project dependencies on the repository root and supports explicit Maven Local or JitPack dependency modes.
 
 ## Prerequisites and build
 
 - JDK 21.
 - Paper 1.21.11 for the documented server check.
-- Publish the current repository artifacts to Maven Local from the repository root.
+- For local development, publish the current repository artifacts to Maven Local from the repository root.
 
 From the repository root:
 
@@ -24,7 +24,7 @@ cd examples/bukkit-commands-example
 
 The build compiles Java definitions, generates a text-reference manifest from the compiled command tree, strictly scans the English and German catalogs plus partial regional locales, generates and merges Bukkit permission metadata, and creates one deployable shaded plugin at `build/libs/minecraftdevkit-bukkit-commands-example-0.1.0-SNAPSHOT.jar`.
 
-The dependencies are `com.trickshotmlg.devkit:devkit-bukkit-commands`, `devkit-localization`, `devkit-localization-yaml`, and `devkit-permissions`, all resolved from Maven Local. The Paper API is `compileOnly`. Cloud v2 and SnakeYAML are relocated into the plugin JAR. Adventure is supplied by Paper and excluded from the shaded JAR. Third-party notices and the Apache 2.0 license text are included in `META-INF`.
+Local mode uses `com.trickshotmlg.devkit` artifacts at `0.1.0-SNAPSHOT`. For remote verification of a published tag, run `clean build -PmdkRepository=jitpack -PmdkVersion=0.1.0-beta.1`; the example then uses `com.github.TrickshotMLG.MinecraftDevKit` coordinates and does not consult Maven Local. Settings maps both MinecraftDevKit Gradle plugin IDs directly to the plugin implementation module. The Paper API is `compileOnly`. Cloud v2, SnakeYAML, and MiniMessage are relocated into the plugin JAR; Paper supplies Adventure API classes. Third-party notices and license texts are included in `META-INF`.
 
 ## Reloadable YAML localization
 

@@ -1,16 +1,42 @@
 # MinecraftDevKit Bukkit Permissions Example
 
-This is a standalone Gradle build for a minimal Bukkit/Paper plugin. It consumes the MinecraftDevKit permission library and Gradle plugin from JitPack, declares a realistic permission catalog in Java, and packages the generated `plugin.yml` together with runtime libraries in one deployable JAR.
+This standalone Gradle build can consume either the current development artifacts from Maven Local or a tagged release from JitPack. It never falls back between repositories.
+
+## Repository mode
+
+After publishing the repository modules locally, build against the matching `0.1.0-SNAPSHOT` artifacts:
+
+```powershell
+.\gradlew.bat clean build -PmdkRepository=mavenLocal
+```
+
+```sh
+./gradlew clean build -PmdkRepository=mavenLocal
+```
+
+For a published Git tag, select JitPack and specify the exact tag version:
+
+```powershell
+.\gradlew.bat clean build -PmdkRepository=jitpack -PmdkVersion=0.1.0-beta.1
+```
+
+```sh
+./gradlew clean build -PmdkRepository=jitpack -PmdkVersion=0.1.0-beta.1
+```
+
+In local mode, both the plugin implementation and libraries use group `com.trickshotmlg.devkit` at `0.1.0-SNAPSHOT`. JitPack mode uses `com.github.TrickshotMLG.MinecraftDevKit` at the requested tag. The Gradle plugin ID is mapped directly to the implementation module in `settings.gradle.kts`, since JitPack plugin marker resolution is not assumed.
+
+This is a standalone Gradle build for a minimal Bukkit/Paper plugin. It declares a realistic permission catalog in Java and packages the generated `plugin.yml` together with runtime libraries in one deployable JAR.
 
 It is intentionally outside the root multi-project build. It demonstrates traditional Bukkit/Spigot-style `plugin.yml`; it does not target Paper's separate `paper-plugin.yml` format.
 
 ## Prerequisites
 
 - JDK 21 (Gradle toolchain and the Paper API target).
-- A published MinecraftDevKit JitPack tag. The example is configured for `0.1.0-beta.1`; it cannot resolve until that tag exists and JitPack reports a successful build.
+- Either the current MinecraftDevKit modules published to Maven Local, or a published JitPack tag. Remote mode cannot resolve until that tag exists and JitPack reports a successful build.
 - A Paper 1.21.8 test server for the documented API target.
 
-Build the standalone example once the JitPack prerelease is available:
+Build the standalone example in the selected repository mode using the commands above. JitPack mode does not fall back to Maven Local.
 
 ```powershell
 cd examples\bukkit-permissions-example
@@ -77,6 +103,4 @@ Native Bukkit defaults, operator status, permission attachments, and LuckPerms m
 
 ## Dependency coordinates
 
-The independent build resolves the plugin implementation module and permission library from JitPack, and Paper's API from the Paper repository. Its `pluginManagement.resolutionStrategy` maps the plugin ID directly to `com.github.TrickshotMLG.MinecraftDevKit:devkit-gradle-plugin:<version>`. This avoids relying on the plugin marker artifact, whose group is the plugin ID rather than JitPack's multi-module repository group. No `project(...)` dependencies point back into the root build.
-
-To test unpublished source locally, first run the repository's `publishToMavenLocal` task. Temporarily add `mavenLocal()` to both repository blocks, change the `useModule` target to `com.trickshotmlg.devkit:devkit-gradle-plugin:0.1.0-SNAPSHOT`, change the plugin request version to `0.1.0-SNAPSHOT`, and use `com.trickshotmlg.devkit:devkit-permissions:0.1.0-SNAPSHOT`. Restore the JitPack settings and coordinates before committing changes.
+The independent build resolves the plugin implementation module and permission library from exactly one selected MinecraftDevKit repository. In JitPack mode, `pluginManagement.resolutionStrategy` maps the plugin ID directly to `com.github.TrickshotMLG.MinecraftDevKit:devkit-gradle-plugin:<tag>`. This avoids relying on the plugin marker artifact, whose group is the plugin ID rather than JitPack's multi-module repository group. In Maven Local mode, the plugin and library use the repository's `com.trickshotmlg.devkit:...:0.1.0-SNAPSHOT` coordinates. No `project(...)` dependencies point back into the root build.
