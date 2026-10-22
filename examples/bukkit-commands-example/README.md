@@ -13,13 +13,13 @@ From the repository root:
 ```powershell
 .\gradlew.bat publishToMavenLocal
 cd examples\bukkit-commands-example
-.\gradlew.bat clean build
+.\gradlew.bat clean build -PmdkRepository=mavenLocal
 ```
 
 ```sh
 ./gradlew publishToMavenLocal
 cd examples/bukkit-commands-example
-./gradlew clean build
+./gradlew clean build -PmdkRepository=mavenLocal
 ```
 
 The build compiles Java definitions, generates a text-reference manifest from the compiled command tree, strictly scans the English and German catalogs plus partial regional locales, generates and merges Bukkit permission metadata, and creates one deployable shaded plugin at `build/libs/minecraftdevkit-bukkit-commands-example-0.1.0-SNAPSHOT.jar`.

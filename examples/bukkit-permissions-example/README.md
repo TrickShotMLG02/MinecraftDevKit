@@ -40,12 +40,12 @@ Build the standalone example in the selected repository mode using the commands 
 
 ```powershell
 cd examples\bukkit-permissions-example
-.\gradlew.bat clean build
+.\gradlew.bat clean build -PmdkRepository=mavenLocal
 ```
 
 ```sh
 cd examples/bukkit-permissions-example
-sh ./gradlew clean build
+sh ./gradlew clean build -PmdkRepository=mavenLocal
 ```
 
 The deployable shaded plugin is `build/libs/minecraftdevkit-bukkit-permissions-example-0.1.0-SNAPSHOT.jar`.
