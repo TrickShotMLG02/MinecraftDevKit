@@ -10,6 +10,7 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.IdentityHashMap;
 import java.util.Map;
+import java.util.function.Supplier;
 
 /** Mutable state for one viewer; never shared between two players. */
 public final class GuiSession {
@@ -24,6 +25,7 @@ public final class GuiSession {
     private boolean transitioning;
     private boolean closed;
     private long navigationVersion;
+    private final Map<Object, Object> renderCache = new IdentityHashMap<>();
 
     GuiSession(Player viewer, GuiMenu menu, TextProvider textProvider, GuiManager manager) {
         this.viewer = Objects.requireNonNull(viewer, "viewer");
@@ -60,5 +62,9 @@ public final class GuiSession {
     void transitioning(boolean value) { transitioning = value; }
     long nextNavigationVersion() { return ++navigationVersion; }
     long navigationVersion() { return navigationVersion; }
+    void beginRender() { renderCache.clear(); }
+    @SuppressWarnings("unchecked") <T> T renderValue(Object key, Supplier<T> supplier) {
+        return (T) renderCache.computeIfAbsent(key, ignored -> supplier.get());
+    }
     void close() { closed = true; inventory = null; }
 }

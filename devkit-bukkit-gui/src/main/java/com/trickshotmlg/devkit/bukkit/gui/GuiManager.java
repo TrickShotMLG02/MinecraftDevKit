@@ -117,6 +117,7 @@ public final class GuiManager implements Listener, AutoCloseable {
         requireMainThread();
         Objects.requireNonNull(expected, "expected");
         if (!isCurrent(session) || session.menu().components().get(slot) != expected) return;
+        session.beginRender();
         GuiRenderContext context = new GuiRenderContext(session.viewer(), session.menu(), session, slot, expected);
         if (!expected.visible(context)) { session.inventory().clear(slot); return; }
         org.bukkit.inventory.ItemStack desired = expected.render(context);
@@ -137,6 +138,7 @@ public final class GuiManager implements Listener, AutoCloseable {
     }
 
     private void render(GuiSession session) {
+        session.beginRender();
         GuiMenu menu = session.menu();
         Inventory inventory = session.inventory();
         if (inventory == null) {
