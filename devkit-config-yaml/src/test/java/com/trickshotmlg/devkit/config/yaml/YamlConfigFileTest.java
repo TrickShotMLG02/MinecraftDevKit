@@ -1,6 +1,7 @@
 package com.trickshotmlg.devkit.config.yaml;
 
 import com.trickshotmlg.devkit.config.ConfigKey;
+import com.trickshotmlg.devkit.config.ConfigCodecs;
 import com.trickshotmlg.devkit.config.ConfigSchema;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -15,10 +16,13 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class YamlConfigFileTest {
     @TempDir Path temp;
-    private final ConfigKey<Integer> MAX = ConfigKey.integer("friends.max", 100).range(1, 1000).build();
+    private final ConfigKey<Integer> MAX = ConfigKey.integer("friends.max", 100).range(1, 1000)
+            .description("Maximum friends per player").build();
     private final ConfigKey<Boolean> ENABLED = ConfigKey.bool("friends.requests.enabled", true).build();
     private final ConfigKey<Duration> TIMEOUT = ConfigKey.duration("friends.requests.timeout", Duration.ofMinutes(5)).build();
-    private final ConfigSchema schema = ConfigSchema.builder().register(MAX, ENABLED, TIMEOUT).build();
+    private final ConfigKey<Map<String, Integer>> LIMITS = ConfigKey.builder("friends.limits", ConfigCodecs.map(ConfigCodecs.INTEGER))
+            .defaultValue(Map.of("daily", 10)).build();
+    private final ConfigSchema schema = ConfigSchema.builder().register(MAX, ENABLED, TIMEOUT, LIMITS).build();
 
     @Test void loadsNestedValuesAndPreservesUnknownSettingsWithWarnings() throws Exception {
         Path file = temp.resolve("config.yml");
@@ -50,6 +54,7 @@ class YamlConfigFileTest {
         assertTrue(yaml.createDefaults(file));
         String first = Files.readString(file);
         assertTrue(first.contains("max: 100"));
+        assertTrue(first.contains("# friends.max: Maximum friends per player"));
         assertTrue(first.contains("timeout: PT5M"));
         Files.writeString(file, "administrator value\n");
         assertFalse(yaml.createDefaults(file));
@@ -63,5 +68,12 @@ class YamlConfigFileTest {
         assertThrows(java.io.IOException.class, () -> new YamlConfigFile(schema).load(file));
         Files.writeString(file, "x: !!java/object:java.lang.Runtime { }\n");
         assertThrows(java.io.IOException.class, () -> new YamlConfigFile(schema).load(file));
+    }
+
+    @Test void schemaDeclaredMapKeysDecodeAsTypedMappingsInsteadOfFlattening() throws Exception {
+        Path file = temp.resolve("map.yml");
+        Files.writeString(file, "friends:\n  limits:\n    daily: 12\n    weekly: 40\n");
+        var result = new YamlConfigFile(schema).load(file);
+        assertEquals(Map.of("daily", 12, "weekly", 40), result.store().get(LIMITS));
     }
 }

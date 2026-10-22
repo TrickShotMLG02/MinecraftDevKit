@@ -1,7 +1,6 @@
 package com.trickshotmlg.devkit.examples.config;
 
 import com.trickshotmlg.devkit.bukkit.commands.BukkitCommandAdapter;
-import com.trickshotmlg.devkit.config.ConfigChange;
 import com.trickshotmlg.devkit.config.yaml.ConfigMigrationRegistry;
 import com.trickshotmlg.devkit.config.yaml.UnknownKeyPolicy;
 import com.trickshotmlg.devkit.config.yaml.YamlConfigHandle;
@@ -11,14 +10,12 @@ import com.trickshotmlg.devkit.config.yaml.YamlSaveOptions;
 import com.trickshotmlg.devkit.config.yaml.YamlSaveResult;
 import com.trickshotmlg.devkit.text.StaticTextProvider;
 import net.kyori.adventure.text.Component;
-import org.bukkit.command.CommandSender;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /** Small Paper plugin demonstrating the public typed configuration API. */
 public final class ConfigExamplePlugin extends JavaPlugin {
@@ -35,9 +32,10 @@ public final class ConfigExamplePlugin extends JavaPlugin {
                     .register(1, 2, values -> values.move("friends.max-count", "friends.max"))
                     .build();
             config = YamlConfigHandle.load(path, FriendConfig.SCHEMA, UnknownKeyPolicy.PRESERVE_AND_WARN, migrations);
-            ioExecutor = Executors.newSingleThreadExecutor(task -> {
+            ioExecutor = new java.util.concurrent.ThreadPoolExecutor(1, 1, 0L,
+                    java.util.concurrent.TimeUnit.MILLISECONDS, new java.util.concurrent.ArrayBlockingQueue<>(16), task -> {
                 Thread thread = new Thread(task, "mdk-config-io"); thread.setDaemon(true); return thread;
-            });
+            }, new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
             changes = config.store().onChange(FriendConfig.MAX_FRIENDS, change -> getLogger().info(
                     "friends.max changed from " + change.oldValue() + " to " + change.newValue() + " (" + change.origin() + ")"));
             new BukkitCommandAdapter(this, new StaticTextProvider(), java.util.Locale.ENGLISH)
@@ -51,16 +49,19 @@ public final class ConfigExamplePlugin extends JavaPlugin {
     YamlConfigHandle config() { return config; }
 
     void reloadConfiguration(com.trickshotmlg.devkit.commands.CommandSender sender) {
-        config.reloadAsync(YamlReloadPolicy.REJECT_IF_DIRTY, ioExecutor).whenComplete((result, failure) ->
-                getServer().getScheduler().runTask(this, () -> {
-                    if (failure != null) sender.sendMessage(Component.text("Reload failed: " + failure.getMessage()));
-                    else sender.sendMessage(Component.text(reloadMessage(result)));
-                }));
+        config.reloadAsync(YamlReloadPolicy.REJECT_IF_DIRTY, ioExecutor).whenComplete((result, failure) -> {
+            if (!isEnabled()) return;
+            getServer().getScheduler().runTask(this, () -> {
+                if (failure != null) sender.sendMessage(Component.text("Reload failed: " + failure.getMessage()));
+                else sender.sendMessage(Component.text(reloadMessage(result)));
+            });
+        });
     }
 
     void saveConfiguration(com.trickshotmlg.devkit.commands.CommandSender sender) {
         ioExecutor.execute(() -> {
             YamlSaveResult result = config.save(YamlSaveOptions.safeRewrite());
+            if (!isEnabled()) return;
             getServer().getScheduler().runTask(this, () -> sender.sendMessage(Component.text(
                     result.success() ? "Configuration saved." : "Save failed: " + result.error().orElse("unknown error"))));
         });

@@ -2,7 +2,7 @@
 
 MinecraftDevKit is a modular, reusable Java development toolkit for Minecraft server plugins and mods. It is being built around platform-independent libraries with small, platform-specific adapters.
 
-> **Status:** Permission definitions and metadata generation, Cloud-backed command definitions and dispatch, YAML localization with reloadable snapshots, localization diagnostics, and a Bukkit/Paper command adapter are implemented. A standalone end-to-end command/localization example is available; live server testing remains a manual step.
+> **Status:** Typed permission definitions and metadata generation, Cloud-backed command definitions and dispatch, reloadable YAML localization, and typed YAML configuration with atomic snapshots, persistence, migrations, and optional watching are implemented. Bukkit/Paper examples are build-verified; live server testing remains a manual step.
 
 ## Goals
 
@@ -26,6 +26,8 @@ Shared modules contain ordinary Java APIs and must not depend on Bukkit, Paper, 
 | `devkit-localization` | Locale resolution, layered immutable snapshots, reload coordination, diagnostics, and shared scanner logic | Implemented; Java 17 |
 | `devkit-localization-yaml` | Safe YAML bundled/external translation sources | Implemented; Java 17 |
 | `devkit-localization-cli` | Terminal scanner for `.properties`/YAML resources and reference manifests | Implemented; Java 17 |
+| `devkit-config` | Platform-independent typed keys, codecs, schemas, validation, snapshots, updates, and listeners | Implemented; Java 17 |
+| `devkit-config-yaml` | Safe YAML loading, defaults, unknown-field preservation, atomic save/reload, watching, and migrations | Implemented; Java 17 |
 | `devkit-permissions` | Platform-independent permission definitions, sections, groups, and immutable catalog resolution | Implemented; depends on `devkit-core` |
 | `devkit-commands` | Immutable typed command definitions, Cloud v2 dispatch, suggestions, generated help/usage, and localized errors | Implemented; Java 17 |
 | `devkit-bukkit` | Common Bukkit/Spigot/Paper adapters | Minimal package structure; depends on shared modules |
@@ -33,9 +35,11 @@ Shared modules contain ordinary Java APIs and must not depend on Bukkit, Paper, 
 | `devkit-bukkit-metadata` | Bukkit-compatible build-time metadata exporters, including permission YAML | Permission catalog exporter implemented; Java 17; does not require a server or Bukkit API |
 | `devkit-gradle-plugin` | Gradle plugins for Bukkit permission metadata and localization scanning | Implemented; Java 17; Maven Local and JitPack module publication configured; public JitPack build not verified |
 
-See the [`devkit-permissions` guide](devkit-permissions/README.md), [`devkit-commands` guide](devkit-commands/README.md), [`devkit-text` guide](devkit-text/README.md), [`devkit-localization` guide](devkit-localization/README.md), [`devkit-localization-yaml` guide](devkit-localization-yaml/README.md), [`devkit-bukkit-commands` guide](devkit-bukkit-commands/README.md), and [`devkit-gradle-plugin` guide](devkit-gradle-plugin/README.md). The localization guide documents the YAML format, runtime fallback/reload lifecycle, scanner CLI, and Gradle task. The metadata plugin supports traditional Bukkit/Spigot-style `plugin.yml`; Paper's `paper-plugin.yml`, Velocity, Fabric, Forge, and NeoForge metadata are not supported. Shared command, text, and localization modules contain no Bukkit API dependency.
+See the [`devkit-permissions` guide](devkit-permissions/README.md), [`devkit-commands` guide](devkit-commands/README.md), [`devkit-text` guide](devkit-text/README.md), [`devkit-localization` guide](devkit-localization/README.md), [`devkit-localization-yaml` guide](devkit-localization-yaml/README.md), [`devkit-config` guide](devkit-config/README.md), [`devkit-config-yaml` guide](devkit-config-yaml/README.md), [`devkit-bukkit-commands` guide](devkit-bukkit-commands/README.md), and [`devkit-gradle-plugin` guide](devkit-gradle-plugin/README.md). Configuration comments and formatting are normalized only when explicit full-document save is invoked; unknown fields are retained. Shared configuration, command, text, and localization modules contain no Bukkit API dependency.
 
 The standalone [`Bukkit permissions example`](examples/bukkit-permissions-example/README.md) supports explicit Maven Local and JitPack dependency modes, generates permission metadata during its own Gradle build, and packages a test plugin JAR for a Paper server. The standalone [`Bukkit commands example`](examples/bukkit-commands-example/README.md) supports the same repository modes, generates permission metadata and a localization reference manifest, validates English/German YAML catalogs with partial regional overrides, and packages a Cloud-backed plugin with reloadable external translations. The repository also includes a local [Paper test server provisioner and IntelliJ run/debug profiles](tools/devservers/README.md); server download and startup are opt-in and Paper's EULA is never accepted automatically.
+
+The independent [`Bukkit configuration example`](examples/bukkit-config-example/README.md) demonstrates typed settings, schema validation, programmatic updates, safe persistence, reload conflicts, and schema migration using the existing Cloud command adapter.
 
 ## Installation
 
@@ -151,13 +155,12 @@ The common modules are normal Java libraries and do not require a Minecraft runt
 
 - Platform-specific runtime permission integrations.
 - Paper bootstrap-time command registration and Velocity/mod-loader adapters.
-- Configuration management.
 - Additional messaging and localization integrations.
 - Scheduling abstractions.
 - General utilities.
 - Additional Bukkit/Paper, Velocity, Fabric, Forge, and NeoForge integrations.
 
-Permission declarations, catalog resolution, Bukkit-compatible permission metadata export, command definitions and Cloud dispatch, generated help/usage, YAML localization with locale fallback and atomic reload, localization diagnostics, automatic Gradle resource integration, and the JavaPlugin command adapter are implemented. Per-player language preferences, Paper bootstrap registration, and the remaining roadmap items are planned work.
+Permission declarations, catalog resolution, Bukkit-compatible permission metadata export, command definitions and Cloud dispatch, generated help/usage, YAML localization with locale fallback and atomic reload, typed YAML configuration with safe persistence and migrations, localization diagnostics, automatic Gradle resource integration, and the JavaPlugin command adapter are implemented. Per-player language preferences, Paper bootstrap registration, and the remaining roadmap items are planned work.
 
 ## Contributing
 

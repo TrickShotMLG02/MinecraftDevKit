@@ -6,6 +6,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import static org.junit.jupiter.api.Assertions.*;
 
 class YamlPersistenceTest {
@@ -58,5 +61,41 @@ class YamlPersistenceTest {
         assertTrue(saved.contains("option:"));
         assertTrue(saved.contains("- a"));
         assertTrue(saved.contains("- b"));
+    }
+
+    @Test void concurrentUpdateDuringSerializationRemainsDirtyAfterTheCapturedGenerationIsWritten() throws Exception {
+        CountDownLatch encoding = new CountDownLatch(1);
+        CountDownLatch continueEncoding = new CountDownLatch(1);
+        AtomicBoolean block = new AtomicBoolean();
+        var codec = com.trickshotmlg.devkit.config.ConfigCodecs.of("blocking integer", raw -> {
+            if (raw instanceof Number number) return number.intValue();
+            throw new IllegalArgumentException("expected integer");
+        }, value -> {
+            if (block.get() && value == 1) {
+                encoding.countDown();
+                try { if (!continueEncoding.await(3, TimeUnit.SECONDS)) throw new IllegalStateException("timed out"); }
+                catch (InterruptedException exception) { Thread.currentThread().interrupt(); throw new IllegalStateException(exception); }
+            }
+            return value;
+        });
+        var value = com.trickshotmlg.devkit.config.ConfigKey.builder("value", codec).defaultValue(1).build();
+        var schema = ConfigSchema.builder().register(value).build();
+        Path file = temp.resolve("concurrent.yml");
+        YamlConfigHandle handle = YamlConfigHandle.createIfMissing(file, schema);
+        handle.store().set(value, 1); // establish dirty state without an effective change
+        block.set(true);
+        var result = new java.util.concurrent.atomic.AtomicReference<YamlSaveResult>();
+        Thread saving = new Thread(() -> result.set(handle.save(YamlSaveOptions.safeRewrite())));
+        saving.start();
+        assertTrue(encoding.await(3, TimeUnit.SECONDS));
+        handle.store().set(value, 2);
+        continueEncoding.countDown();
+        saving.join(3000);
+        assertFalse(saving.isAlive());
+        assertTrue(result.get().success(), result.get().error().orElse(""));
+        assertTrue(handle.store().isDirty());
+        assertTrue(result.get().currentGeneration() > result.get().savedGeneration());
+        assertTrue(Files.readString(file).contains("value: 1"));
+        assertEquals(2, handle.store().get(value));
     }
 }

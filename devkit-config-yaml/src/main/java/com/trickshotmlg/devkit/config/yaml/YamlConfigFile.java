@@ -60,7 +60,7 @@ public final class YamlConfigFile {
         byte[] bytes;
         try (InputStream input = Files.newInputStream(file)) { bytes = input.readNBytes(Math.toIntExact(Math.min(maxBytes + 1, Integer.MAX_VALUE))); }
         if (bytes.length > maxBytes) throw new IOException("Configuration exceeds " + maxBytes + " bytes: " + file);
-        Map<String, Object> flattened = parse(bytes, file.toString(), maxBytes);
+        Map<String, Object> flattened = parse(bytes, file.toString(), maxBytes, schema);
         LinkedHashMap<String, Object> candidate = new LinkedHashMap<>(flattened);
         int sourceVersion = readVersion(candidate.remove("config-version"), file);
         if (sourceVersion > schema.version()) throw new YamlConfigException("Configuration version " + sourceVersion
@@ -98,8 +98,11 @@ public final class YamlConfigFile {
             return new YamlConfigLoadResult(ConfigStore.fromValues(schema, known), Collections.unmodifiableMap(unknown), issues,
                     sourceVersion < schema.version(), sourceVersion);
         } catch (RuntimeException exception) {
+            List<ConfigIssue> validationIssues = exception instanceof com.trickshotmlg.devkit.config.ConfigValidationException validation
+                    ? validation.issues().stream().map(issue -> new ConfigIssue(issue.path(), issue.severity(), issue.message(),
+                    java.util.Optional.of(file.toString()), issue.expected())).toList() : List.of();
             throw new YamlConfigException("Configuration validation failed in " + file + ": " + safeMessage(exception), exception,
-                    exception instanceof com.trickshotmlg.devkit.config.ConfigValidationException validation ? validation.issues() : List.of());
+                    validationIssues);
         }
     }
 
@@ -117,10 +120,17 @@ public final class YamlConfigFile {
 
     /** Deterministically serializes only schema keys that have defaults. */
     public String defaultsYaml() {
+        ConfigStore.defaults(schema); // fail before emitting a document missing required values or violating cross-field constraints
         TreeMap<String, Object> flattened = new TreeMap<>();
         flattened.put("config-version", schema.version());
         for (ConfigKey<?> key : schema.keys().values()) key.defaultValue().ifPresent(value -> flattened.put(key.path(), encode(key, value)));
-        return dump(nest(flattened));
+        String body = dump(nest(flattened));
+        StringBuilder comments = new StringBuilder();
+        for (ConfigKey<?> key : schema.keys().values()) key.description().ifPresent(description -> {
+            String normalized = description.replace('\r', ' ').replace('\n', ' ');
+            comments.append("# ").append(key.path()).append(": ").append(normalized).append('\n');
+        });
+        return comments.append(body).toString();
     }
 
     int schemaVersion() { return schema.version(); }
@@ -128,9 +138,15 @@ public final class YamlConfigFile {
     /** Serializes a store and preserved unknown values; persistence is added by the file handle API. */
     public String serialize(ConfigStore store, Map<String, ?> unknownValues) {
         if (store.schema() != schema) throw new IllegalArgumentException("Store belongs to a different schema");
+        return serialize(store.snapshot(), unknownValues);
+    }
+
+    /** Serializes one already coherent immutable snapshot. */
+    public String serialize(com.trickshotmlg.devkit.config.ConfigSnapshot snapshot, Map<String, ?> unknownValues) {
+        if (snapshot.schema() != schema) throw new IllegalArgumentException("Snapshot belongs to a different schema");
         TreeMap<String, Object> flat = new TreeMap<>();
         flat.put("config-version", schema.version());
-        store.snapshot().values().forEach((path, value) -> flat.put(path, encode(schema.key(path).orElseThrow(), value)));
+        snapshot.values().forEach((path, value) -> flat.put(path, encode(schema.key(path).orElseThrow(), value)));
         unknownValues.forEach((path, value) -> {
             if (schema.key(path).isPresent()) throw new IllegalArgumentException("Unknown-value map collides with schema key '" + path + "'");
             if (flat.putIfAbsent(path, freeze(value)) != null) throw new IllegalArgumentException("Duplicate configuration path '" + path + "'");
@@ -155,7 +171,7 @@ public final class YamlConfigFile {
         return output.toString();
     }
 
-    private static Map<String, Object> parse(byte[] bytes, String source, long maxBytes) throws IOException {
+    private static Map<String, Object> parse(byte[] bytes, String source, long maxBytes, ConfigSchema schema) throws IOException {
         LoaderOptions options = new LoaderOptions();
         options.setAllowDuplicateKeys(false);
         options.setMaxAliasesForCollections(20);
@@ -167,14 +183,15 @@ public final class YamlConfigFile {
             if (root == null) return Map.of();
             if (!(root instanceof Map<?, ?> map)) throw new IOException("Configuration YAML root must be a mapping: " + source);
             TreeMap<String, Object> flattened = new TreeMap<>();
-            flatten(map, "", flattened, source, new IdentityHashMap<>(), 0);
+            flatten(map, "", flattened, source, new IdentityHashMap<>(), 0, schema);
             return Collections.unmodifiableMap(flattened);
         } catch (IOException exception) { throw exception; }
         catch (RuntimeException exception) { throw new IOException("Invalid configuration YAML in " + source + ": " + exception.getMessage(), exception); }
     }
 
     private static void flatten(Map<?, ?> input, String prefix, Map<String, Object> output,
-                                String source, IdentityHashMap<Object, Boolean> ancestors, int depth) throws IOException {
+                                String source, IdentityHashMap<Object, Boolean> ancestors, int depth,
+                                ConfigSchema schema) throws IOException {
         if (depth > 32) throw new IOException("Configuration nesting exceeds 32 levels in " + source);
         if (ancestors.put(input, Boolean.TRUE) != null) throw new IOException("Recursive YAML aliases are not supported in " + source);
         try {
@@ -184,7 +201,8 @@ public final class YamlConfigFile {
                 }
                 String path = prefix.isEmpty() ? key : prefix + "." + key;
                 Object value = entry.getValue();
-                if (value instanceof Map<?, ?> child) flatten(child, path, output, source, ancestors, depth + 1);
+                if (value instanceof Map<?, ?> child && schema.key(path).isEmpty())
+                    flatten(child, path, output, source, ancestors, depth + 1, schema);
                 else {
                     ensureAcyclic(value, ancestors, source, depth + 1);
                     if (output.putIfAbsent(path, freeze(value)) != null) throw new IOException("Duplicate flattened configuration key '" + path + "' in " + source);

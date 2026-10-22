@@ -42,6 +42,7 @@ public final class ConfigKey<T> {
     public static Builder<Float> floatNumber(String path, float defaultValue) { return builder(path, ConfigCodecs.FLOAT).defaultValue(defaultValue); }
     public static Builder<Float> floatNumber(String path) { return builder(path, ConfigCodecs.FLOAT); }
     public static Builder<java.util.UUID> uuid(String path, java.util.UUID defaultValue) { return builder(path, ConfigCodecs.UUID_CODEC).defaultValue(defaultValue); }
+    public static Builder<java.util.UUID> uuid(String path) { return builder(path, ConfigCodecs.UUID_CODEC); }
     public static Builder<java.time.Duration> duration(String path, java.time.Duration defaultValue) { return builder(path, ConfigCodecs.DURATION).defaultValue(defaultValue); }
     public static Builder<java.time.Duration> duration(String path) { return builder(path, ConfigCodecs.DURATION); }
     public static <E extends Enum<E>> Builder<E> enumeration(String path, Class<E> enumType, E defaultValue) { return builder(path, ConfigCodecs.enumCodec(enumType)).defaultValue(defaultValue); }

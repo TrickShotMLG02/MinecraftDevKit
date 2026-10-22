@@ -146,7 +146,8 @@ public final class YamlConfigHandle implements AutoCloseable {
         if (options.documentPolicy() != YamlSaveOptions.DocumentPolicy.REWRITE_DOCUMENT) {
             return failure(false, "unsupported document policy");
         }
-        long savedGeneration = store.generation();
+        com.trickshotmlg.devkit.config.ConfigSnapshot saveSnapshot = store.snapshot();
+        long savedGeneration = saveSnapshot.generation();
         try {
             String currentFingerprint = fingerprint(file);
             if (!Objects.equals(diskFingerprint, currentFingerprint)
@@ -154,7 +155,7 @@ public final class YamlConfigHandle implements AutoCloseable {
                 return new YamlSaveResult(false, false, true, file, savedGeneration, store.generation(),
                         java.util.Optional.of("configuration file changed outside this process"));
             }
-            byte[] bytes = yaml.serialize(store, unknownValues).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            byte[] bytes = yaml.serialize(saveSnapshot, unknownValues).getBytes(java.nio.charset.StandardCharsets.UTF_8);
             Path parent = file.getParent();
             if (parent != null) Files.createDirectories(parent);
             Path temporary = Files.createTempFile(parent, file.getFileName().toString() + ".", ".tmp");
@@ -170,6 +171,11 @@ public final class YamlConfigHandle implements AutoCloseable {
                 if (migrationPending) {
                     createMigrationBackup(sourceVersion);
                 }
+                if (!Objects.equals(currentFingerprint, fingerprint(file))
+                        && options.externalChangePolicy() == YamlSaveOptions.ExternalChangePolicy.REJECT) {
+                    return new YamlSaveResult(false, false, true, file, savedGeneration, store.generation(),
+                            java.util.Optional.of("configuration file changed while the save was being prepared"));
+                }
                 try {
                     Files.move(temporary, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
                 } catch (AtomicMoveNotSupportedException exception) {
@@ -181,7 +187,7 @@ public final class YamlConfigHandle implements AutoCloseable {
             sourceVersion = yaml.schemaVersion();
             try { store.markPersisted(savedGeneration); } catch (IllegalStateException concurrentChange) {
                 return new YamlSaveResult(true, true, false, file, savedGeneration, store.generation(),
-                        java.util.Optional.of("saved this generation; a newer in-memory generation remains dirty"));
+                        java.util.Optional.empty());
             }
             return new YamlSaveResult(true, true, false, file, savedGeneration, store.generation(), java.util.Optional.empty());
         } catch (IOException | RuntimeException exception) {
@@ -196,14 +202,22 @@ public final class YamlConfigHandle implements AutoCloseable {
     private static String fingerprint(Path file) throws IOException {
         if (!Files.exists(file)) return null;
         try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(file));
-            return HexFormat.of().formatHex(digest);
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            try (java.io.InputStream input = Files.newInputStream(file)) {
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = input.read(buffer)) >= 0) digest.update(buffer, 0, read);
+            }
+            return HexFormat.of().formatHex(digest.digest());
         } catch (NoSuchAlgorithmException impossible) { throw new IllegalStateException("SHA-256 unavailable", impossible); }
     }
 
     private void createMigrationBackup(int version) throws IOException {
         Path backup = file.resolveSibling(file.getFileName() + ".v" + version + ".bak");
-        if (Files.exists(backup)) throw new IOException("Migration backup already exists; refusing to overwrite " + backup.getFileName());
+        if (Files.exists(backup)) {
+            if (Objects.equals(fingerprint(file), fingerprint(backup))) return;
+            throw new IOException("Migration backup already exists and differs from the source; refusing to overwrite " + backup.getFileName());
+        }
         Path temporaryBackup = Files.createTempFile(file.getParent(), backup.getFileName().toString(), ".tmp");
         try {
             Files.copy(file, temporaryBackup, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
