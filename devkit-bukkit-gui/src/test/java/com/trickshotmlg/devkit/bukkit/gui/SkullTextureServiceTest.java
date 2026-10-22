@@ -21,7 +21,7 @@ class SkullTextureServiceTest {
     }
 
     @Test
-    void base64TexturePayloadMustContainOneAllowedSkinUrl() {
+    void base64TexturePayloadMustContainStructuredSkinUrl() {
         String hash = "0123456789abcdef0123456789abcdef";
         String payload = Base64.getEncoder().encodeToString(("{\"textures\":{\"SKIN\":{\"url\":\"https://textures.minecraft.net/texture/" + hash + "\"}}}")
                 .getBytes(StandardCharsets.UTF_8));
@@ -30,5 +30,14 @@ class SkullTextureServiceTest {
         assertThrows(IllegalArgumentException.class, () -> SkullTextureService.validateBase64Texture("not-base64!"));
         String malicious = Base64.getEncoder().encodeToString("{\"url\":\"https://evil.example/\"}".getBytes(StandardCharsets.UTF_8));
         assertThrows(IllegalArgumentException.class, () -> SkullTextureService.validateBase64Texture(malicious));
+        assertInvalidPayload("not-json \"url\":\"https://textures.minecraft.net/texture/" + hash + "\"");
+        assertInvalidPayload("{\"other\":{\"url\":\"https://textures.minecraft.net/texture/" + hash + "\"}}");
+        assertInvalidPayload("{\"textures\":{\"SKIN\":{\"url\":\"https://textures.minecraft.net/texture/" + hash + "\"},\"SKIN\":{\"url\":\"https://textures.minecraft.net/texture/" + hash + "\"}}}");
+        assertInvalidPayload("{\"textures\":{\"SKIN\":{\"url\":\"https://textures.minecraft.net/texture/" + hash + "\"}}} trailing");
+    }
+
+    private static void assertInvalidPayload(String json) {
+        String payload = Base64.getEncoder().encodeToString(json.getBytes(StandardCharsets.UTF_8));
+        assertThrows(IllegalArgumentException.class, () -> SkullTextureService.validateBase64Texture(payload), json);
     }
 }

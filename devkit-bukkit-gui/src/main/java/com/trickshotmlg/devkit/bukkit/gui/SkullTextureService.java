@@ -8,6 +8,8 @@ import org.bukkit.profile.PlayerTextures;
 
 import java.net.URI;
 import java.net.URL;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.LinkedHashMap;
@@ -19,13 +21,10 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /** Resolves offline player profiles asynchronously and prepares safe custom texture profiles.
  * Paper owns the profile update executor; this service creates no worker threads. */
 public final class SkullTextureService implements AutoCloseable {
-    private static final Pattern URL_FIELD = Pattern.compile("\\\"url\\\"\\s*:\\s*\\\"(https://textures\\.minecraft\\.net/texture/[a-fA-F0-9]{32})\\\"");
     private static final int MAX_PAYLOAD_BYTES = 16_384;
     private final Plugin plugin;
     private final int maximumCachedProfiles;
@@ -115,12 +114,16 @@ public final class SkullTextureService implements AutoCloseable {
         try { bytes = Base64.getDecoder().decode(encoded); }
         catch (IllegalArgumentException failure) { throw new IllegalArgumentException("Texture payload is not valid Base64", failure); }
         if (bytes.length > MAX_PAYLOAD_BYTES) throw new IllegalArgumentException("Texture payload is too large");
-        String json = new String(bytes, StandardCharsets.UTF_8);
-        Matcher matcher = URL_FIELD.matcher(json);
-        if (!matcher.find()) throw new IllegalArgumentException("Texture payload must contain a textures.minecraft.net skin URL");
-        String textureUrl = matcher.group(1);
-        if (matcher.find()) throw new IllegalArgumentException("Texture payload contains multiple skin URLs");
-        return validateTextureUrl(textureUrl);
+        final String json;
+        try {
+            json = StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+                    .decode(ByteBuffer.wrap(bytes)).toString();
+        } catch (CharacterCodingException failure) {
+            throw new IllegalArgumentException("Texture payload is not valid UTF-8", failure);
+        }
+        return validateTextureUrl(TexturePayloadParser.skinUrl(json));
     }
 
     public static URL validateTextureUrl(String hashOrUrl) {
