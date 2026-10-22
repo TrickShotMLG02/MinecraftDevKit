@@ -17,6 +17,13 @@ class PagedGuiTest {
                 .build();
         assertEquals(3, menu.rows());
         assertEquals(6, menu.components().size());
+        assertTrue(menu.refreshesContentAt(10));
+        assertTrue(menu.refreshesContentAt(11));
+        assertTrue(menu.refreshesContentAt(12));
+        assertTrue(menu.refreshesContentAt(18));
+        assertTrue(menu.refreshesContentAt(22));
+        assertTrue(menu.refreshesContentAt(26));
+        assertFalse(menu.refreshesContentAt(0));
         assertThrows(UnsupportedOperationException.class, () -> menu.components().clear());
     }
 

@@ -10,7 +10,6 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
-import org.bukkit.event.inventory.InventoryAction;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
@@ -36,7 +35,7 @@ public final class GuiManager implements Listener, AutoCloseable {
     private final Map<GuiMenu, List<Listener>> refreshListeners = new IdentityHashMap<>();
     private final Map<GuiSession, RefreshScope> pendingRefresh = new IdentityHashMap<>();
     private BukkitTask refreshTask;
-    private boolean closed;
+    private volatile boolean closed;
 
     private GuiManager(Plugin plugin, TextProvider textProvider) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
@@ -81,9 +80,12 @@ public final class GuiManager implements Listener, AutoCloseable {
         requireMainThread();
         if (!isCurrent(session)) return;
         if (slot < 0 || slot >= session.menu().size()) throw new IllegalArgumentException("Slot outside current menu: " + slot);
+        if (session.menu().refreshesContentAt(slot)) {
+            renderContent(session);
+            return;
+        }
         GuiComponent component = session.menu().components().get(slot);
         if (component == null) {
-            session.beginRender();
             org.bukkit.inventory.ItemStack background = backgroundItem(session, slot);
             if (!Objects.equals(session.inventory().getItem(slot), background)) session.inventory().setItem(slot, background);
             return;
@@ -193,8 +195,13 @@ public final class GuiManager implements Listener, AutoCloseable {
     public void refreshSlotIfCurrent(GuiSession session, int slot, GuiComponent expected) {
         requireMainThread();
         Objects.requireNonNull(expected, "expected");
-        if (!isCurrent(session) || session.menu().components().get(slot) != expected) return;
-        session.beginRender();
+        if (!isCurrent(session)) return;
+        if (slot < 0 || slot >= session.menu().size()) throw new IllegalArgumentException("Slot outside current menu: " + slot);
+        if (session.menu().components().get(slot) != expected) return;
+        if (session.menu().refreshesContentAt(slot)) {
+            renderContent(session);
+            return;
+        }
         GuiRenderContext context = new GuiRenderContext(session.viewer(), session.menu(), session, slot, expected);
         org.bukkit.inventory.ItemStack desired;
         try { desired = expected.visible(context) ? expected.render(context) : null; }
@@ -214,7 +221,11 @@ public final class GuiManager implements Listener, AutoCloseable {
         if (closed) return;
         // Always defer, including when called on the main thread, so render callbacks cannot
         // re-enter the renderer and have their result overwritten by the in-progress pass.
-        Bukkit.getScheduler().runTask(plugin, () -> { if (!closed) action.run(); });
+        try {
+            Bukkit.getScheduler().runTask(plugin, () -> { if (!closed) action.run(); });
+        } catch (org.bukkit.plugin.IllegalPluginAccessException failure) {
+            if (!closed) throw failure;
+        }
     }
     void reportAsyncFailure(String message, Throwable failure) {
         plugin.getLogger().log(Level.WARNING, message + ": " + failure.getMessage());
@@ -233,7 +244,7 @@ public final class GuiManager implements Listener, AutoCloseable {
         Inventory inventory = session.inventory();
         Set<Integer> slots = requestedSlots;
         if (inventory == null) {
-            ManagedHolder holder = new ManagedHolder(session, menu);
+            ManagedHolder holder = new ManagedHolder(this, session, menu);
             inventory = Bukkit.createInventory(holder, menu.size(), menu.title(new GuiRenderContext(session.viewer(), menu, session)));
             holder.inventory = inventory;
             session.inventory(inventory);
@@ -273,18 +284,19 @@ public final class GuiManager implements Listener, AutoCloseable {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onClick(InventoryClickEvent event) {
-        if (!(event.getView().getTopInventory().getHolder(false) instanceof ManagedHolder holder)) return;
+        if (!(event.getView().getTopInventory().getHolder(false) instanceof ManagedHolder holder)
+                || !GuiInteractionRules.ownedBy(this, holder.manager)) return;
         GuiSession session = holder.session;
         int rawSlot = event.getRawSlot();
         boolean topSlot = rawSlot >= 0 && rawSlot < event.getView().getTopInventory().getSize();
-        if (topSlot || holder.menu.interactionPolicy() == GuiInteractionPolicy.LOCK_ALL
-                || affectsTopInventory(event.getAction(), event.getClick())) event.setCancelled(true);
+        if (GuiInteractionRules.cancelClick(holder.menu.interactionPolicy(), rawSlot,
+                event.getView().getTopInventory().getSize(), event.getAction())) event.setCancelled(true);
         if (!topSlot || !(event.getWhoClicked() instanceof Player player) || !isCurrent(session)
                 || holder.menu != session.menu() || !session.viewerId().equals(player.getUniqueId())
                 || session.inventory() != holder.inventory) return;
         GuiComponent component = session.menu().components().get(rawSlot);
         if (component == null || !component.interactive()) return;
-        GuiRenderContext renderContext = new GuiRenderContext(player, session.menu(), session);
+        GuiRenderContext renderContext = new GuiRenderContext(player, session.menu(), session, rawSlot, component);
         try { if (!component.visible(renderContext)) return; }
         catch (RuntimeException failure) {
             plugin.getLogger().log(Level.WARNING, "GUI component visibility check failed at slot " + rawSlot, failure);
@@ -301,13 +313,16 @@ public final class GuiManager implements Listener, AutoCloseable {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onDrag(InventoryDragEvent event) {
         if (event.getView().getTopInventory().getHolder(false) instanceof ManagedHolder holder
-                && (holder.menu.interactionPolicy() == GuiInteractionPolicy.LOCK_ALL
-                || event.getRawSlots().stream().anyMatch(slot -> slot >= 0 && slot < event.getView().getTopInventory().getSize()))) event.setCancelled(true);
+                && GuiInteractionRules.ownedBy(this, holder.manager)
+                && GuiInteractionRules.cancelDrag(holder.menu.interactionPolicy(),
+                event.getView().getTopInventory().getSize(), event.getRawSlots())) event.setCancelled(true);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onClose(InventoryCloseEvent event) {
-        if (!(event.getInventory().getHolder(false) instanceof ManagedHolder holder)) return;
+        if (!(event.getInventory().getHolder(false) instanceof ManagedHolder holder)
+                || holder.manager != this || !event.getPlayer().getUniqueId().equals(holder.session.viewerId())
+                || event.getInventory() != holder.inventory) return;
         GuiSession session = holder.session;
         if (session.transitioning()) return;
         if (isCurrent(session) && session.inventory() == holder.inventory) {
@@ -321,9 +336,6 @@ public final class GuiManager implements Listener, AutoCloseable {
         if (session != null) session.close();
     }
 
-    private static boolean affectsTopInventory(InventoryAction action, org.bukkit.event.inventory.ClickType click) {
-        return action == InventoryAction.MOVE_TO_OTHER_INVENTORY || action == InventoryAction.COLLECT_TO_CURSOR;
-    }
     private boolean isCurrent(GuiSession session) { return !closed && session != null && !session.closed() && sessions.get(session.viewerId()) == session; }
     private void ensureOpen() { if (closed) throw new IllegalStateException("GuiManager is closed"); }
     private static void requireMainThread() { if (!Bukkit.isPrimaryThread()) throw new IllegalStateException("GUI operations must run on the server thread"); }
@@ -348,10 +360,15 @@ public final class GuiManager implements Listener, AutoCloseable {
     }
 
     private static final class ManagedHolder implements InventoryHolder {
+        private final GuiManager manager;
         private final GuiSession session;
         private final GuiMenu menu;
         private Inventory inventory;
-        private ManagedHolder(GuiSession session, GuiMenu menu) { this.session = session; this.menu = menu; }
+        private ManagedHolder(GuiManager manager, GuiSession session, GuiMenu menu) {
+            this.manager = manager;
+            this.session = session;
+            this.menu = menu;
+        }
         @Override public Inventory getInventory() { return inventory; }
     }
 }

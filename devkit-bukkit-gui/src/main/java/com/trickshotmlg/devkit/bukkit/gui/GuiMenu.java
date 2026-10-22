@@ -39,6 +39,7 @@ public final class GuiMenu {
     GuiPattern background() { return background; }
     List<GuiRefreshBinding<?>> refreshBindings() { return refreshBindings; }
     Set<Integer> contentRefreshSlots() { return contentRefreshSlots; }
+    boolean refreshesContentAt(int slot) { return contentRefreshSlots.contains(slot); }
     GuiInteractionPolicy interactionPolicy() { return interactionPolicy; }
     Component title(GuiRenderContext context) {
         if (title.textRef != null && context.session().textProvider() != null)
