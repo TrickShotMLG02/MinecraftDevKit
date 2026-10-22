@@ -37,6 +37,7 @@ import java.nio.file.Files;
 import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 
 /** Small external-consumer plugin showcasing MinecraftDevKit's public GUI API. */
@@ -101,8 +102,9 @@ public final class GuiExamplePlugin extends JavaPlugin {
                 .items(context -> List.copyOf(Bukkit.getOnlinePlayers()))
                 .render((context, target) -> GuiButton.of(ctx -> ItemBuilder.from(GuiItems.playerHead(target))
                         .name(target.getName()).lore("Click to view this player").build(), click -> click.open(details(target))))
-                .previousPage(45).pageIndicator(49, page -> ItemBuilder.of(Material.PAPER)
-                        .name("Page " + page.currentPage() + "/" + page.totalPages())
+                .previousPage(45).pageIndicator(49, (context, page) -> ItemBuilder.of(Material.PAPER)
+                        .name(context.text(TextRef.translated("gui.players.page", "Page {current}/{total}"),
+                                Map.of("current", page.currentPage(), "total", page.totalPages())))
                         .lore("Online players: " + page.totalItems(), "Visible on page: " + page.visibleItemCount()).build())
                 .nextPage(53).emptyState(44, GuiItems.of(Material.BARRIER, "No players online"))
                 .refreshOn(PlayerJoinEvent.class, event -> true, RefreshScope.CONTENT)

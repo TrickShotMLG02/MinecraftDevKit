@@ -42,10 +42,11 @@ public final class ToggleButton implements GuiComponent {
         GuiRenderContext render = new GuiRenderContext(context.viewer(), context.menu(), context.session(), context.slot(), this);
         if (!enabled.test(render) || !permitted(context.viewer())) return;
         boolean next = nextValue(value(render));
-        if (setter != null) setter.accept(render, next);
-        else context.session().set(key, next);
+        if (setter != null) {
+            setter.accept(render, next);
+            context.refreshSlot(context.slot());
+        } else context.session().set(key, next);
         onChange.accept(context, next);
-        context.refreshSlot(context.slot());
     }
     private boolean value(GuiRenderContext context) { return getter == null ? context.session().get(key) : Objects.requireNonNull(getter.apply(context), "toggle value"); }
     private boolean permitted(Player player) { return permission == null || player.hasPermission(permission.node()); }

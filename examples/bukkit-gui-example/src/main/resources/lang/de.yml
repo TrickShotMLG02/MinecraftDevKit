@@ -3,6 +3,7 @@ gui:
     title: "<aqua>MinecraftDevKit GUI"
   players:
     title: "<blue>Online-Spieler"
+    page: "<white>Seite {current}/{total}"
   settings:
     title: "<gold>Einstellungen"
   skulls:

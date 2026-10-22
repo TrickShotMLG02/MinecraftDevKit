@@ -45,7 +45,8 @@ public final class GuiButton implements GuiComponent {
     @Override public boolean visible(GuiRenderContext context) { return visible.test(context) && allowed(context.viewer()); }
     @Override public boolean interactive() { return true; }
     @Override public void click(GuiClickContext context) {
-        if (allowed(context.viewer()) && enabled.test(new GuiRenderContext(context.viewer(), context.menu(), context.session()))
+        if (allowed(context.viewer()) && enabled.test(new GuiRenderContext(
+                context.viewer(), context.menu(), context.session(), context.slot(), this))
                 && (clickTypes.isEmpty() || clickTypes.contains(context.clickType()))) handler.handle(context);
     }
     private boolean allowed(Player player) { return permission == null || player.hasPermission(permission.node()); }

@@ -27,7 +27,7 @@ public final class PagedGui<T> {
         private Function<GuiRenderContext, ? extends List<T>> items;
         private BiFunction<GuiRenderContext, T, GuiComponent> renderer;
         private Integer previousSlot, indicatorSlot, nextSlot, emptySlot;
-        private Function<PageInfo, ItemStack> indicator;
+        private BiFunction<GuiRenderContext, PageInfo, ItemStack> indicator;
         private ItemStack previous, next, disabled, empty;
         private final List<GuiRefreshBinding<?>> refreshBindings = new ArrayList<>();
         private Builder(int rows) {
@@ -43,7 +43,17 @@ public final class PagedGui<T> {
         public Builder<T> previousPage(int slot) { previousSlot = slot; return this; }
         public Builder<T> nextPage(int slot) { nextSlot = slot; return this; }
         public Builder<T> pageIndicator(int slot) { indicatorSlot = slot; return this; }
-        public Builder<T> pageIndicator(int slot, Function<PageInfo, ItemStack> renderer) { indicatorSlot = slot; indicator = Objects.requireNonNull(renderer, "renderer"); return this; }
+        public Builder<T> pageIndicator(int slot, Function<PageInfo, ItemStack> renderer) {
+            Objects.requireNonNull(renderer, "renderer");
+            indicatorSlot = slot;
+            indicator = (context, page) -> renderer.apply(page);
+            return this;
+        }
+        public Builder<T> pageIndicator(int slot, BiFunction<GuiRenderContext, PageInfo, ItemStack> renderer) {
+            indicatorSlot = slot;
+            indicator = Objects.requireNonNull(renderer, "renderer");
+            return this;
+        }
         public Builder<T> navigationItems(ItemStack previous, ItemStack next, ItemStack disabled) {
             this.previous = copy(previous); this.next = copy(next); this.disabled = copy(disabled); return this;
         }
@@ -120,11 +130,12 @@ public final class PagedGui<T> {
         }
         @Override public boolean interactive() { return true; }
         @Override public void click(GuiClickContext context) {
-            Builder.Snapshot<T> snapshot = builder.snapshot(new GuiRenderContext(context.viewer(), context.menu(), context.session()), pageKey, slots);
+            GuiRenderContext renderContext = new GuiRenderContext(context.viewer(), context.menu(), context.session(), context.slot(), this);
+            Builder.Snapshot<T> snapshot = builder.snapshot(renderContext, pageKey, slots);
             int itemIndex = snapshot.page.firstVisibleItemIndex() + ordinal;
             if (itemIndex >= snapshot.items.size() || ordinal >= snapshot.page.visibleItemCount()) return;
-            GuiComponent component = builder.renderer.apply(new GuiRenderContext(context.viewer(), context.menu(), context.session()), snapshot.items.get(itemIndex));
-            if (component != null && component.visible(new GuiRenderContext(context.viewer(), context.menu(), context.session()))) component.click(context);
+            GuiComponent component = builder.renderer.apply(renderContext, snapshot.items.get(itemIndex));
+            if (component != null && component.visible(renderContext)) component.click(context);
         }
     }
     private static final class PageControl<T> implements GuiComponent {
@@ -142,7 +153,7 @@ public final class PagedGui<T> {
         }
         @Override public boolean interactive() { return true; }
         @Override public void click(GuiClickContext context) {
-            PageInfo page = builder.snapshot(new GuiRenderContext(context.viewer(),context.menu(),context.session()),pageKey,slots).page;
+            PageInfo page = builder.snapshot(new GuiRenderContext(context.viewer(),context.menu(),context.session(),context.slot(),this),pageKey,slots).page;
             if (forward ? page.hasNext() : page.hasPrevious()) context.session().set(pageKey,page.currentPage()+(forward?1:-1));
         }
     }
@@ -151,7 +162,7 @@ public final class PagedGui<T> {
         private Indicator(Builder<T>b,GuiStateKey<Integer>key,List<Integer>slots){this.b=b;this.key=key;this.slots=slots;}
         @Override public ItemStack render(GuiRenderContext context){PageInfo p=b.snapshot(context,key,slots).page;return b.indicator==null
                 ?GuiItems.of(Material.PAPER,"Page "+p.currentPage()+"/"+p.totalPages())
-                :Objects.requireNonNull(b.indicator.apply(p),"page indicator item").clone();}
+                :Objects.requireNonNull(b.indicator.apply(context,p),"page indicator item").clone();}
     }
     private static final class EmptyComponent<T> implements GuiComponent {
         private final Builder<T>b;private final GuiStateKey<Integer>key;private final List<Integer>slots;

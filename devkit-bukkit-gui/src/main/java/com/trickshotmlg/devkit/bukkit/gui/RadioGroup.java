@@ -47,14 +47,15 @@ public final class RadioGroup<T> {
         return value == EmptySelection.INSTANCE ? null : (T) value;
     }
     private void select(GuiClickContext context, T value) {
-        T old = selected(new GuiRenderContext(context.viewer(), context.menu(), context.session()));
+        T old = selected(new GuiRenderContext(context.viewer(), context.menu(), context.session(), context.slot()));
         T next = nextSelection(old, value, allowNone);
         if (Objects.equals(old, next)) return;
-        GuiRenderContext render = new GuiRenderContext(context.viewer(), context.menu(), context.session());
-        if (setter != null) setter.accept(render, next);
-        else context.session().set(stateKey, next == null ? EmptySelection.INSTANCE : next);
+        GuiRenderContext render = new GuiRenderContext(context.viewer(), context.menu(), context.session(), context.slot());
+        if (setter != null) {
+            setter.accept(render, next);
+            context.refresh();
+        } else context.session().set(stateKey, next == null ? EmptySelection.INSTANCE : next);
         onChange.accept(context, next);
-        context.refresh();
     }
     private enum EmptySelection { INSTANCE }
     static <T> T nextSelection(T current, T clicked, boolean allowNone) {
@@ -72,7 +73,7 @@ public final class RadioGroup<T> {
             return Objects.equals(group.selected(context), option.value) ? option.selected.render(context) : option.unselected.render(context);
         }
         @Override public void click(GuiClickContext context) {
-            if (!option.enabled.test(new GuiRenderContext(context.viewer(), context.menu(), context.session()))
+            if (!option.enabled.test(new GuiRenderContext(context.viewer(), context.menu(), context.session(), context.slot(), this))
                     || option.permission != null && !context.viewer().hasPermission(option.permission.node())) return;
             group.select(context, option.value);
         }
