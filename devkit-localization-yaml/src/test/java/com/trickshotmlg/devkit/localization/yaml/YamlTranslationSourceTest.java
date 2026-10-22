@@ -59,6 +59,13 @@ class YamlTranslationSourceTest {
     }
 
     @Test
+    void rejectsRecursiveYamlAliasesWithoutRecursingDuringFlattening() {
+        IOException error = assertThrows(IOException.class, () -> YamlCatalogParser.parse(stream("root: &root\n  child: *root\n"),
+                "recursive.yml"));
+        assertTrue(error.getMessage().contains("Cyclic YAML aliases"));
+    }
+
+    @Test
     void limitsAliasesAndDocumentSize() {
         StringBuilder aliases = new StringBuilder("base: &base {message: \"Hello\"}\n");
         for (int index = 0; index < 24; index++) aliases.append("copy").append(index).append(": *base\n");
@@ -74,6 +81,18 @@ class YamlTranslationSourceTest {
         assertEquals("Hello", catalogs.get(Locale.ENGLISH).translations().get("greeting"));
         assertEquals(Map.of("greeting", "Bonjour", "menu.open", "Ouvrir"),
                 catalogs.get(Locale.FRENCH).translations());
+    }
+
+    @Test
+    void bundledIndexRejectsRepeatedFileNamesEvenWhenTheFileHasNoKeys() throws Exception {
+        Path resources = Files.createDirectories(temp.resolve("duplicate-index/fr"));
+        Files.writeString(resources.resolve("index.txt"), "empty.yml\nempty.yml\n");
+        Files.writeString(resources.resolve("empty.yml"), "{}\n");
+        try (var loader = new java.net.URLClassLoader(new java.net.URL[]{temp.toUri().toURL()}, null)) {
+            IOException error = assertThrows(IOException.class, () -> YamlTranslationSource.bundled(loader,
+                    "duplicate-index", "fr").load());
+            assertTrue(error.getMessage().contains("Duplicate YAML filename"));
+        }
     }
 
     @Test

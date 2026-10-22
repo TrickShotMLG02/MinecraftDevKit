@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -129,6 +130,9 @@ public final class YamlTranslationSource implements TranslationSource {
             List<String> names = new String(bytes, StandardCharsets.UTF_8).lines()
                     .map(String::trim).filter(line -> !line.isEmpty() && !line.startsWith("#")).toList();
             if (names.isEmpty()) throw new IOException("Bundled translation index is empty: " + resource);
+            if (new HashSet<>(names).size() != names.size()) {
+                throw new IOException("Duplicate YAML filename in bundled translation index: " + resource);
+            }
             for (String name : names) {
                 if (!FILE_NAME.matcher(name).matches() || name.equals("index.txt")) {
                     throw new IOException("Invalid YAML filename in " + resource + ": " + name);

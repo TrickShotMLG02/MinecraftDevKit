@@ -9,7 +9,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
-import java.util.LinkedHashMap;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -33,7 +33,7 @@ public final class YamlCatalogParser {
             if (root == null) return Map.of();
             if (!(root instanceof Map<?, ?> mapping)) throw new IOException("YAML root must be a mapping: " + source);
             TreeMap<String, String> flattened = new TreeMap<>();
-            flatten(mapping, "", flattened, source);
+            flatten(mapping, "", flattened, source, new IdentityHashMap<>());
             return Collections.unmodifiableMap(flattened);
         } catch (IOException exception) {
             throw exception;
@@ -42,21 +42,30 @@ public final class YamlCatalogParser {
         }
     }
 
-    private static void flatten(Map<?, ?> mapping, String prefix, Map<String, String> output, String source) throws IOException {
-        for (Map.Entry<?, ?> entry : mapping.entrySet()) {
-            if (!(entry.getKey() instanceof String key) || key.isBlank() || key.contains(".")) {
-                throw new IOException("YAML translation keys must be non-empty strings without dots in " + source + ": " + entry.getKey());
+    private static void flatten(Map<?, ?> mapping, String prefix, Map<String, String> output, String source,
+                                IdentityHashMap<Map<?, ?>, Boolean> ancestors) throws IOException {
+        if (ancestors.put(mapping, Boolean.TRUE) != null) {
+            throw new IOException("Cyclic YAML aliases are not supported in " + source
+                    + (prefix.isEmpty() ? "" : " at '" + prefix + "'"));
+        }
+        try {
+            for (Map.Entry<?, ?> entry : mapping.entrySet()) {
+                if (!(entry.getKey() instanceof String key) || key.isBlank() || key.contains(".")) {
+                    throw new IOException("YAML translation keys must be non-empty strings without dots in " + source + ": " + entry.getKey());
+                }
+                String path = prefix.isEmpty() ? key : prefix + "." + key;
+                Object value = entry.getValue();
+                if (value instanceof Map<?, ?> child) {
+                    flatten(child, path, output, source, ancestors);
+                } else if (value instanceof String text) {
+                    if (output.putIfAbsent(path, text) != null) throw new IOException("Flattened duplicate key '" + path + "' in " + source);
+                } else {
+                    throw new IOException("Translation value for '" + path + "' must be a quoted YAML string in " + source
+                            + " (found " + (value == null ? "null" : value.getClass().getSimpleName()) + ")");
+                }
             }
-            String path = prefix.isEmpty() ? key : prefix + "." + key;
-            Object value = entry.getValue();
-            if (value instanceof Map<?, ?> child) {
-                flatten(child, path, output, source);
-            } else if (value instanceof String text) {
-                if (output.putIfAbsent(path, text) != null) throw new IOException("Flattened duplicate key '" + path + "' in " + source);
-            } else {
-                throw new IOException("Translation value for '" + path + "' must be a quoted YAML string in " + source
-                        + " (found " + (value == null ? "null" : value.getClass().getSimpleName()) + ")");
-            }
+        } finally {
+            ancestors.remove(mapping);
         }
     }
 }
