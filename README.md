@@ -49,7 +49,7 @@ repositories {
 }
 
 dependencies {
-    implementation("com.github.TrickshotMLG.MinecraftDevKit:devkit-permissions:0.1.0-beta.1")
+    implementation("com.github.TrickShotMLG02.MinecraftDevKit:devkit-permissions:0.1.0-beta.1")
 }
 ```
 
@@ -65,7 +65,7 @@ dependencies {
 
 <dependencies>
   <dependency>
-    <groupId>com.github.TrickshotMLG.MinecraftDevKit</groupId>
+    <groupId>com.github.TrickShotMLG02.MinecraftDevKit</groupId>
     <artifactId>devkit-permissions</artifactId>
     <version>0.1.0-beta.1</version>
   </dependency>
@@ -78,7 +78,7 @@ For local development, each module also publishes under `com.trickshotmlg.devkit
 
 ### Applying the Gradle plugin from JitPack
 
-Gradle plugin marker artifacts use the plugin ID as their group. JitPack's documented multi-module coordinates instead use `com.github.TrickshotMLG.MinecraftDevKit` as the group and `devkit-gradle-plugin` as the artifact. Resolve the plugin request directly to that published module:
+Gradle plugin marker artifacts use the plugin ID as their group. JitPack's documented multi-module coordinates instead use `com.github.TrickShotMLG02.MinecraftDevKit` as the group and `devkit-gradle-plugin` as the artifact. Resolve the plugin request directly to that published module:
 
 ```kotlin
 // settings.gradle.kts
@@ -91,7 +91,7 @@ pluginManagement {
         eachPlugin {
             if (requested.id.id == "com.trickshotmlg.devkit.bukkit-permissions"
                     || requested.id.id == "com.trickshotmlg.devkit.localization-scan") {
-                useModule("com.github.TrickshotMLG.MinecraftDevKit:devkit-gradle-plugin:${requested.version}")
+                useModule("com.github.TrickShotMLG02.MinecraftDevKit:devkit-gradle-plugin:${requested.version}")
             }
         }
     }
@@ -111,7 +111,7 @@ repositories {
 }
 
 dependencies {
-    implementation("com.github.TrickshotMLG.MinecraftDevKit:devkit-permissions:0.1.0-beta.1")
+    implementation("com.github.TrickShotMLG02.MinecraftDevKit:devkit-permissions:0.1.0-beta.1")
 }
 
 minecraftDevKit {

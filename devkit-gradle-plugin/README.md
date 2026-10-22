@@ -30,7 +30,7 @@ Reference manifests can be generated from `TextCatalogManifest.write(...)`, incl
 
 ## Publishing and applying
 
-The plugin implementation is published as the `devkit-gradle-plugin` module. For JitPack, the module coordinates are `com.github.TrickshotMLG.MinecraftDevKit:devkit-gradle-plugin:<tag>`.
+The plugin implementation is published as the `devkit-gradle-plugin` module. For JitPack, the module coordinates are `com.github.TrickShotMLG02.MinecraftDevKit:devkit-gradle-plugin:<tag>`.
 
 The standard Gradle plugin marker has group `com.trickshotmlg.devkit.bukkit-permissions`, derived from the plugin ID. JitPack documents repository modules under `com.github.USER.REPO:MODULE:TAG`, so do not rely on the marker coordinate being available from JitPack. Use `pluginManagement.resolutionStrategy` to map the plugin request to its implementation module:
 
@@ -43,7 +43,7 @@ pluginManagement {
     resolutionStrategy {
         eachPlugin {
             if (requested.id.id == "com.trickshotmlg.devkit.bukkit-permissions") {
-                useModule("com.github.TrickshotMLG.MinecraftDevKit:devkit-gradle-plugin:${requested.version}")
+                useModule("com.github.TrickShotMLG02.MinecraftDevKit:devkit-gradle-plugin:${requested.version}")
             }
         }
     }

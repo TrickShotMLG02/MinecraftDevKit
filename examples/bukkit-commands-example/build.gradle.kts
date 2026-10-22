@@ -17,7 +17,7 @@ val mdkVersion = when (mdkRepository) {
     else -> throw GradleException("Unsupported -PmdkRepository='$mdkRepository'; use mavenLocal or jitpack")
 }
 val mdkGroup = if (mdkRepository == "mavenlocal") "com.trickshotmlg.devkit"
-    else "com.github.TrickshotMLG.MinecraftDevKit"
+    else "com.github.TrickShotMLG02.MinecraftDevKit"
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")

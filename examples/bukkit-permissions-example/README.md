@@ -24,7 +24,7 @@ For a published Git tag, select JitPack and specify the exact tag version:
 ./gradlew clean build -PmdkRepository=jitpack -PmdkVersion=0.1.0-beta.1
 ```
 
-In local mode, both the plugin implementation and libraries use group `com.trickshotmlg.devkit` at `0.1.0-SNAPSHOT`. JitPack mode uses `com.github.TrickshotMLG.MinecraftDevKit` at the requested tag. The Gradle plugin ID is mapped directly to the implementation module in `settings.gradle.kts`, since JitPack plugin marker resolution is not assumed.
+In local mode, both the plugin implementation and libraries use group `com.trickshotmlg.devkit` at `0.1.0-SNAPSHOT`. JitPack mode uses `com.github.TrickShotMLG02.MinecraftDevKit` at the requested tag. The Gradle plugin ID is mapped directly to the implementation module in `settings.gradle.kts`, since JitPack plugin marker resolution is not assumed.
 
 This is a standalone Gradle build for a minimal Bukkit/Paper plugin. It declares a realistic permission catalog in Java and packages the generated `plugin.yml` together with runtime libraries in one deployable JAR.
 
@@ -103,4 +103,4 @@ Native Bukkit defaults, operator status, permission attachments, and LuckPerms m
 
 ## Dependency coordinates
 
-The independent build resolves the plugin implementation module and permission library from exactly one selected MinecraftDevKit repository. In JitPack mode, `pluginManagement.resolutionStrategy` maps the plugin ID directly to `com.github.TrickshotMLG.MinecraftDevKit:devkit-gradle-plugin:<tag>`. This avoids relying on the plugin marker artifact, whose group is the plugin ID rather than JitPack's multi-module repository group. In Maven Local mode, the plugin and library use the repository's `com.trickshotmlg.devkit:...:0.1.0-SNAPSHOT` coordinates. No `project(...)` dependencies point back into the root build.
+The independent build resolves the plugin implementation module and permission library from exactly one selected MinecraftDevKit repository. In JitPack mode, `pluginManagement.resolutionStrategy` maps the plugin ID directly to `com.github.TrickShotMLG02.MinecraftDevKit:devkit-gradle-plugin:<tag>`. This avoids relying on the plugin marker artifact, whose group is the plugin ID rather than JitPack's multi-module repository group. In Maven Local mode, the plugin and library use the repository's `com.trickshotmlg.devkit:...:0.1.0-SNAPSHOT` coordinates. No `project(...)` dependencies point back into the root build.

@@ -28,7 +28,7 @@ pluginManagement {
                 val module = if (mdkRepository == "mavenlocal") {
                     "com.trickshotmlg.devkit:devkit-gradle-plugin:$mdkVersion"
                 } else {
-                    "com.github.TrickshotMLG.MinecraftDevKit:devkit-gradle-plugin:$mdkVersion"
+                    "com.github.TrickShotMLG02.MinecraftDevKit:devkit-gradle-plugin:$mdkVersion"
                 }
                 useModule(module)
             }

@@ -23,7 +23,7 @@ if ([string]::IsNullOrWhiteSpace($ServerDirectory)) {
 $ServerDirectory = [System.IO.Path]::GetFullPath($ServerDirectory)
 $pluginsDirectory = Join-Path $ServerDirectory "plugins"
 $serverJar = Join-Path $ServerDirectory "paper.jar"
-$userAgent = "MinecraftDevKit-devserver/1.0 (https://github.com/TrickshotMLG/MinecraftDevKit)"
+$userAgent = "MinecraftDevKit-devserver/1.0 (https://github.com/TrickShotMLG02/MinecraftDevKit)"
 
 function Get-PaperDownload {
     $uri = "https://fill.papermc.io/v3/projects/paper/versions/$MinecraftVersion/builds"

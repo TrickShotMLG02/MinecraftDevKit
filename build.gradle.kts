@@ -72,7 +72,7 @@ subprojects {
                 pom {
                     name.set(project.name)
                     description.set("${project.name} module of MinecraftDevKit")
-                    url.set("https://github.com/TrickshotMLG/MinecraftDevKit")
+                    url.set("https://github.com/TrickShotMLG02/MinecraftDevKit")
                     licenses {
                         license {
                             name.set("GNU General Public License v3.0 only (GPL-3.0-only)")
@@ -81,9 +81,9 @@ subprojects {
                         }
                     }
                     scm {
-                        connection.set("scm:git:git://github.com/TrickshotMLG/MinecraftDevKit.git")
-                        developerConnection.set("scm:git:ssh://github.com/TrickshotMLG/MinecraftDevKit.git")
-                        url.set("https://github.com/TrickshotMLG/MinecraftDevKit")
+                        connection.set("scm:git:git://github.com/TrickShotMLG02/MinecraftDevKit.git")
+                        developerConnection.set("scm:git:ssh://github.com/TrickShotMLG02/MinecraftDevKit.git")
+                        url.set("https://github.com/TrickShotMLG02/MinecraftDevKit")
                     }
                 }
             }
