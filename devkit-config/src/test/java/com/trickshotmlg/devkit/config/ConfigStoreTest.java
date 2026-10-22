@@ -85,6 +85,15 @@ class ConfigStoreTest {
                         .build());
         assertFalse(invalidDefault.getMessage().contains(secret));
 
+        ConfigCodec<String> rejectingDefaultCodec = ConfigCodecs.of("credential", raw -> {
+            if (secret.equals(raw)) throw new IllegalArgumentException("cannot decode " + raw);
+            return String.class.cast(raw);
+        }, value -> value);
+        IllegalArgumentException invalidCodecDefault = assertThrows(IllegalArgumentException.class, () ->
+                ConfigKey.builder("database.password", rejectingDefaultCodec)
+                        .defaultValue(secret).sensitive().build());
+        assertFalse(invalidCodecDefault.toString().contains(secret));
+
         ConfigCodec<String> codec = ConfigCodecs.of("credential", raw -> {
             if ("safe".equals(raw)) return "safe";
             throw new IllegalArgumentException("rejected value: " + raw);

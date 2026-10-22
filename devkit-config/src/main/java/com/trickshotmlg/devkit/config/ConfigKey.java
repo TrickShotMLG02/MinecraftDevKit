@@ -22,7 +22,14 @@ public final class ConfigKey<T> {
         validators = List.copyOf(builder.validators);
         description = Optional.ofNullable(builder.description);
         sensitive = builder.sensitive;
-        defaultValue = Optional.ofNullable(builder.defaultValue).map(value -> ConfigCodecs.freeze(codec.decode(codec.encode(value))));
+        if (builder.defaultValue == null) defaultValue = Optional.empty();
+        else {
+            try { defaultValue = Optional.of(ConfigCodecs.freeze(codec.decode(codec.encode(builder.defaultValue)))); }
+            catch (RuntimeException exception) {
+                if (sensitive) throw new IllegalArgumentException("Invalid sensitive default for configuration key '" + path + "'");
+                throw exception;
+            }
+        }
         defaultValue.ifPresent(value -> {
             List<String> failures = validate(value);
             if (!failures.isEmpty()) throw new IllegalArgumentException("Invalid default for '" + path + "': " + String.join("; ", failures));
