@@ -20,11 +20,13 @@ public final class ConfigCodecs {
     public static final ConfigCodec<Double> DOUBLE = number("finite double", Double.class, value -> {
         double result = value.doubleValue();
         if (!Double.isFinite(result)) throw new IllegalArgumentException("must be finite");
+        if (result == 0.0d && value.signum() != 0) throw new IllegalArgumentException("value underflows the double range");
         return result;
     });
     public static final ConfigCodec<Float> FLOAT = number("finite float", Float.class, value -> {
         float result = value.floatValue();
         if (!Float.isFinite(result)) throw new IllegalArgumentException("must be finite");
+        if (result == 0.0f && value.signum() != 0) throw new IllegalArgumentException("value underflows the float range");
         return result;
     });
     public static final ConfigCodec<UUID> UUID_CODEC = new ConfigCodec<>() {

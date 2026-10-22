@@ -25,6 +25,8 @@ class ConfigKeyTest {
         assertThrows(IllegalArgumentException.class, () -> ConfigCodecs.INTEGER.decode(2.5d));
         assertThrows(IllegalArgumentException.class, () -> ConfigCodecs.INTEGER.decode(Long.MAX_VALUE));
         assertThrows(IllegalArgumentException.class, () -> ConfigCodecs.DOUBLE.decode(Double.NaN));
+        assertThrows(IllegalArgumentException.class, () -> ConfigCodecs.DOUBLE.decode(new java.math.BigDecimal("1e-400")));
+        assertThrows(IllegalArgumentException.class, () -> ConfigCodecs.FLOAT.decode(new java.math.BigDecimal("1e-100")));
         assertEquals(Duration.ofMinutes(5), ConfigCodecs.DURATION.decode("PT5M"));
         assertEquals(List.of("a", "b"), ConfigCodecs.list(ConfigCodecs.STRING).decode(List.of("a", "b")));
         Map<String, String> values = ConfigCodecs.map(ConfigCodecs.STRING).decode(Map.of("a", "b"));
