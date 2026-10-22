@@ -17,6 +17,7 @@ final class JdbcStorage implements Storage {
     private final DataSource dataSource;
     private final boolean ownsDataSource;
     private final AtomicBoolean closed = new AtomicBoolean();
+    private final ThreadLocal<Boolean> transactionActive = ThreadLocal.withInitial(() -> false);
 
     JdbcStorage(StorageConfiguration configuration, DataSource external, boolean ownsExternal) throws Exception {
         this.configuration = configuration;
@@ -74,6 +75,7 @@ final class JdbcStorage implements Storage {
     private <T> List<T> executeQuery(String sql, SqlParameters parameters, RowMapper<T> mapper, boolean atMostOne) {
         Objects.requireNonNull(parameters, "parameters");
         Objects.requireNonNull(mapper, "mapper");
+        ensureOutsideTransaction();
         validateSql(sql);
         ensureOpen();
         try (var connection = dataSource.getConnection(); var statement = connection.prepareStatement(sql)) {
@@ -107,6 +109,7 @@ final class JdbcStorage implements Storage {
 
     @Override public int update(String sql, SqlParameters parameters) {
         Objects.requireNonNull(parameters, "parameters");
+        ensureOutsideTransaction();
         validateSql(sql);
         ensureOpen();
         try (var connection = dataSource.getConnection(); var statement = connection.prepareStatement(sql)) {
@@ -121,6 +124,7 @@ final class JdbcStorage implements Storage {
 
     @Override public OptionalLong insert(String sql, SqlParameters parameters) {
         Objects.requireNonNull(parameters, "parameters");
+        ensureOutsideTransaction();
         validateSql(sql);
         ensureOpen();
         try (var connection = dataSource.getConnection();
@@ -139,6 +143,118 @@ final class JdbcStorage implements Storage {
 
     private static void validateSql(String sql) {
         if (sql == null || sql.isBlank()) throw new IllegalArgumentException("SQL must not be empty");
+    }
+
+    private void ensureOutsideTransaction() {
+        if (transactionActive.get())
+            throw new IllegalStateException("Use the supplied Transaction for all SQL inside its callback");
+    }
+
+    @Override public <T> T transaction(TransactionWork<T> work) {
+        Objects.requireNonNull(work, "work");
+        ensureOpen();
+        if (transactionActive.get())
+            throw new IllegalStateException("Nested transactions are not supported; reuse the current Transaction");
+        try (var connection = dataSource.getConnection()) {
+            boolean originalAutoCommit = connection.getAutoCommit();
+            TransactionImpl transaction = null;
+            Throwable primaryFailure = null;
+            T value = null;
+            transactionActive.set(true);
+            try {
+                connection.setAutoCommit(false);
+                transaction = new TransactionImpl(connection);
+                value = work.execute(transaction);
+                transaction.ensureUsable();
+                connection.commit();
+            } catch (Throwable failure) {
+                primaryFailure = failure;
+                try { connection.rollback(); }
+                catch (Throwable rollbackFailure) { failure.addSuppressed(rollbackFailure); }
+            } finally {
+                if (transaction != null) transaction.invalidate();
+                try { connection.setAutoCommit(originalAutoCommit); }
+                catch (Throwable restoreFailure) {
+                    if (primaryFailure != null) primaryFailure.addSuppressed(restoreFailure);
+                    else primaryFailure = restoreFailure;
+                }
+                transactionActive.remove();
+            }
+            if (primaryFailure != null) {
+                if (primaryFailure instanceof Error error) throw error;
+                if (primaryFailure instanceof StorageException storageFailure) throw storageFailure;
+                throw new StorageException("Database transaction failed", primaryFailure);
+            }
+            return value;
+        } catch (StorageException failure) {
+            throw failure;
+        } catch (Throwable failure) {
+            if (failure instanceof Error error) throw error;
+            throw new StorageException("Could not acquire or release transaction connection", failure);
+        }
+    }
+
+    private final class TransactionImpl implements Transaction {
+        private final java.sql.Connection connection;
+        private final Thread owner = Thread.currentThread();
+        private boolean active = true;
+
+        private TransactionImpl(java.sql.Connection connection) { this.connection = connection; }
+        private void ensureUsable() {
+            if (!active) throw new IllegalStateException("Transaction callback has completed");
+            if (Thread.currentThread() != owner) throw new IllegalStateException("Transaction is confined to its callback thread");
+        }
+        private void invalidate() { active = false; }
+
+        @Override public <T> Optional<T> queryOne(String sql, SqlParameters parameters, RowMapper<T> mapper) {
+            List<T> rows = query(sql, parameters, mapper, true);
+            return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
+        }
+        @Override public <T> List<T> queryList(String sql, SqlParameters parameters, RowMapper<T> mapper) {
+            return query(sql, parameters, mapper, false);
+        }
+        private <T> List<T> query(String sql, SqlParameters parameters, RowMapper<T> mapper, boolean atMostOne) {
+            ensureUsable(); Objects.requireNonNull(parameters, "parameters");
+            Objects.requireNonNull(mapper, "mapper"); validateSql(sql);
+            try (var statement = connection.prepareStatement(sql)) {
+                parameters.bind(statement);
+                try (var results = statement.executeQuery()) {
+                    List<T> mapped = new ArrayList<>();
+                    while (results.next()) {
+                        if (atMostOne && !mapped.isEmpty())
+                            throw new StorageException("Query expected at most one result row but returned multiple rows");
+                        Row row = new Row(results);
+                        try {
+                            T item = mapper.map(row);
+                            if (item == null) throw new StorageException("Row mapper returned null");
+                            mapped.add(item);
+                        } catch (StorageException failure) { throw failure; }
+                        catch (Exception failure) { throw new StorageException("Could not map SQL result row", failure); }
+                        finally { row.invalidate(); }
+                    }
+                    return List.copyOf(mapped);
+                }
+            } catch (StorageException failure) { throw failure; }
+            catch (Exception failure) { throw new StorageException("Database transaction query failed", failure); }
+        }
+        @Override public int update(String sql, SqlParameters parameters) {
+            ensureUsable(); Objects.requireNonNull(parameters, "parameters"); validateSql(sql);
+            try (var statement = connection.prepareStatement(sql)) {
+                parameters.bind(statement);
+                return statement.executeUpdate();
+            } catch (StorageException failure) { throw failure; }
+            catch (Exception failure) { throw new StorageException("Database transaction update failed", failure); }
+        }
+        @Override public OptionalLong insert(String sql, SqlParameters parameters) {
+            ensureUsable(); Objects.requireNonNull(parameters, "parameters"); validateSql(sql);
+            try (var statement = connection.prepareStatement(sql, java.sql.Statement.RETURN_GENERATED_KEYS)) {
+                parameters.bind(statement); statement.executeUpdate();
+                try (var keys = statement.getGeneratedKeys()) {
+                    return keys.next() ? OptionalLong.of(keys.getLong(1)) : OptionalLong.empty();
+                }
+            } catch (StorageException failure) { throw failure; }
+            catch (Exception failure) { throw new StorageException("Database transaction insert failed", failure); }
+        }
     }
 
     @Override public void close() {

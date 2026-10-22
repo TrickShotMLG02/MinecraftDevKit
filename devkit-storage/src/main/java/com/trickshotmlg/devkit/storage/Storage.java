@@ -32,6 +32,9 @@ public interface Storage extends AutoCloseable {
     /** Executes an insert and returns the driver's generated key when available. */
     java.util.OptionalLong insert(String sql, SqlParameters parameters);
 
+    /** Executes work synchronously on one connection and commits only if the callback succeeds. */
+    <T> T transaction(TransactionWork<T> work);
+
     boolean isClosed();
 
     /** Releases resources owned by this instance. Safe to call more than once. */
