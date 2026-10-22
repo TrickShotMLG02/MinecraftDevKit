@@ -28,7 +28,7 @@ public final class PagedGui<T> {
         private BiFunction<GuiRenderContext, T, GuiComponent> renderer;
         private Integer previousSlot, indicatorSlot, nextSlot, emptySlot;
         private BiFunction<GuiRenderContext, PageInfo, ItemStack> indicator;
-        private ItemStack previous, next, disabled, empty;
+        private GuiItemTemplate previous, next, disabled, empty;
         private final List<GuiRefreshBinding<?>> refreshBindings = new ArrayList<>();
         private Builder(int rows) {
             if (rows < 1 || rows > 6) throw new IllegalArgumentException("Chest rows must be between 1 and 6");
@@ -55,9 +55,17 @@ public final class PagedGui<T> {
             return this;
         }
         public Builder<T> navigationItems(ItemStack previous, ItemStack next, ItemStack disabled) {
-            this.previous = copy(previous); this.next = copy(next); this.disabled = copy(disabled); return this;
+            this.previous = template(previous); this.next = template(next); this.disabled = template(disabled); return this;
         }
-        public Builder<T> emptyState(int slot, ItemStack item) { emptySlot = slot; empty = copy(item); return this; }
+        /** Sets previous/next/disabled items using per-viewer render-time templates. */
+        public Builder<T> navigationTemplates(GuiItemTemplate previous, GuiItemTemplate next, GuiItemTemplate disabled) {
+            this.previous = previous; this.next = next; this.disabled = disabled; return this;
+        }
+        public Builder<T> emptyState(int slot, ItemStack item) { emptySlot = slot; empty = template(item); return this; }
+        /** Sets an empty-state item rendered for the current viewer. */
+        public Builder<T> emptyStateTemplate(int slot, GuiItemTemplate item) {
+            emptySlot = slot; empty = Objects.requireNonNull(item, "item"); return this;
+        }
         public <E extends Event> Builder<T> refreshOn(Class<E> eventType, Predicate<E> filter, RefreshScope scope) {
             refreshBindings.add(new GuiRefreshBinding<>(eventType, filter, scope)); return this;
         }
@@ -114,7 +122,11 @@ public final class PagedGui<T> {
         private void checkSlot(int slot) {
             if (slot < 0 || slot >= rows * 9) throw new IllegalArgumentException("Slot " + slot + " is outside a " + rows + " row chest");
         }
-        private static ItemStack copy(ItemStack item) { return item == null ? null : item.clone(); }
+        private static GuiItemTemplate template(ItemStack item) {
+            if (item == null) return null;
+            ItemStack copy = item.clone();
+            return context -> copy.clone();
+        }
         private record Snapshot<T>(List<T> items, PageInfo page) { }
     }
 
@@ -144,12 +156,11 @@ public final class PagedGui<T> {
         @Override public ItemStack render(GuiRenderContext context) {
             PageInfo page = builder.snapshot(context,pageKey,slots).page;
             boolean active = forward ? page.hasNext() : page.hasPrevious();
-            ItemStack item = active ? forward ? builder.next : builder.previous : builder.disabled;
-            if (item == null) item = active
+            GuiItemTemplate item = active ? forward ? builder.next : builder.previous : builder.disabled;
+            if (item == null) item = renderContext -> active
                     ? GuiItems.of(Material.ARROW, forward ? "Next page" : "Previous page")
                     : GuiItems.of(Material.GRAY_STAINED_GLASS_PANE, forward ? "No next page" : "No previous page");
-            if (item == null) return null;
-            return item.clone();
+            return item.render(context);
         }
         @Override public boolean interactive() { return true; }
         @Override public void click(GuiClickContext context) {
@@ -168,6 +179,6 @@ public final class PagedGui<T> {
         private final Builder<T>b;private final GuiStateKey<Integer>key;private final List<Integer>slots;
         private EmptyComponent(Builder<T>b,GuiStateKey<Integer>key,List<Integer>slots){this.b=b;this.key=key;this.slots=slots;}
         @Override public boolean visible(GuiRenderContext context){return b.snapshot(context,key,slots).items.isEmpty();}
-        @Override public ItemStack render(GuiRenderContext context){return b.empty==null?GuiItems.of(Material.BARRIER,"No entries"):b.empty.clone();}
+        @Override public ItemStack render(GuiRenderContext context){return b.empty==null?GuiItems.of(Material.BARRIER,"No entries"):b.empty.render(context);}
     }
 }

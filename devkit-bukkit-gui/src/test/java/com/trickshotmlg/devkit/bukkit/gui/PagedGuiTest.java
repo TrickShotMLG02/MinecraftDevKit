@@ -37,4 +37,22 @@ class PagedGuiTest {
         assertThrows(IllegalArgumentException.class, () -> PagedGui.<String>chest(1)
                 .items(context -> List.of()).render((context, item) -> null).build());
     }
+
+    @Test
+    void localizedControlTemplatesAreReservedAndRefreshWithPagedContent() {
+        GuiMenu menu = PagedGui.<String>chest(3)
+                .contentSlots(List.of(10, 11))
+                .items(context -> List.of("A"))
+                .render((context, value) -> null)
+                .previousPage(18).pageIndicator(22).nextPage(26)
+                .navigationTemplates(context -> null, context -> null, context -> null)
+                .emptyStateTemplate(17, context -> null)
+                .build();
+
+        assertEquals(6, menu.components().size());
+        for (int slot : List.of(10, 11, 17, 18, 22, 26)) assertTrue(menu.refreshesContentAt(slot));
+        assertThrows(IllegalArgumentException.class, () -> PagedGui.<String>chest(3)
+                .contentSlots(List.of(10)).items(context -> List.of()).render((context, value) -> null)
+                .emptyStateTemplate(10, context -> null).build());
+    }
 }
