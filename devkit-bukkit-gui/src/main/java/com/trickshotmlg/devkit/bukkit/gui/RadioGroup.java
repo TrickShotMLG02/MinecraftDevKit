@@ -36,7 +36,13 @@ public final class RadioGroup<T> {
         return Collections.unmodifiableMap(result);
     }
     private T selected(GuiRenderContext context) {
-        if (getter != null) return getter.apply(context);
+        if (getter != null) {
+            T selected = getter.apply(context);
+            if (selected == null && !allowNone) throw new IllegalStateException("Required radio group binding returned no selection");
+            if (selected != null && options.values().stream().noneMatch(option -> Objects.equals(option.value, selected)))
+                throw new IllegalStateException("Radio group binding returned an unknown selection: " + selected);
+            return selected;
+        }
         Object value = context.session().get(stateKey);
         return value == EmptySelection.INSTANCE ? null : (T) value;
     }
@@ -92,10 +98,12 @@ public final class RadioGroup<T> {
                                  GuiItemTemplate disabled, Predicate<GuiRenderContext> enabled, Permission permission) {
             if (slot < 0 || slot > 53) throw new IllegalArgumentException("Radio option slot must be between 0 and 53");
             Objects.requireNonNull(value, "value");
-            if (!values.add(value)) throw new IllegalArgumentException("Duplicate radio option value: " + value);
-            if (options.putIfAbsent(slot, new Option<>(value, Objects.requireNonNull(selected, "selected"),
-                    Objects.requireNonNull(unselected, "unselected"), disabled, Objects.requireNonNull(enabled, "enabled"), permission)) != null)
-                throw new IllegalArgumentException("Duplicate radio option slot: " + slot);
+            if (values.contains(value)) throw new IllegalArgumentException("Duplicate radio option value: " + value);
+            if (options.containsKey(slot)) throw new IllegalArgumentException("Duplicate radio option slot: " + slot);
+            Option<T> option = new Option<>(value, Objects.requireNonNull(selected, "selected"),
+                    Objects.requireNonNull(unselected, "unselected"), disabled, Objects.requireNonNull(enabled, "enabled"), permission);
+            options.put(slot, option);
+            values.add(value);
             return this;
         }
         public Builder<T> bind(Function<GuiRenderContext, T> getter, BiConsumer<GuiRenderContext, T> setter) {

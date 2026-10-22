@@ -10,6 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Predicate;
 
 /** Immutable chest menu definition reusable by any number of players. */
@@ -19,6 +20,8 @@ public final class GuiMenu {
     private final Map<Integer, GuiComponent> components;
     private final GuiPattern background;
     private final List<GuiRefreshBinding<?>> refreshBindings;
+    private final Set<Integer> contentRefreshSlots;
+    private final GuiInteractionPolicy interactionPolicy;
 
     private GuiMenu(Builder builder) {
         rows = builder.rows;
@@ -26,6 +29,8 @@ public final class GuiMenu {
         components = Collections.unmodifiableMap(new LinkedHashMap<>(builder.components));
         background = builder.background;
         refreshBindings = List.copyOf(builder.refreshBindings);
+        contentRefreshSlots = Collections.unmodifiableSet(new java.util.LinkedHashSet<>(builder.contentRefreshSlots));
+        interactionPolicy = builder.interactionPolicy;
     }
     public static Builder chest(int rows) { return new Builder(rows); }
     public int rows() { return rows; }
@@ -33,6 +38,8 @@ public final class GuiMenu {
     public Map<Integer, GuiComponent> components() { return components; }
     GuiPattern background() { return background; }
     List<GuiRefreshBinding<?>> refreshBindings() { return refreshBindings; }
+    Set<Integer> contentRefreshSlots() { return contentRefreshSlots; }
+    GuiInteractionPolicy interactionPolicy() { return interactionPolicy; }
     Component title(GuiRenderContext context) {
         if (title.textRef != null && context.session().textProvider() != null)
             return context.session().textProvider().resolve(title.textRef, context.locale());
@@ -50,6 +57,8 @@ public final class GuiMenu {
         private final Map<Integer, GuiComponent> components = new LinkedHashMap<>();
         private GuiPattern background;
         private final List<GuiRefreshBinding<?>> refreshBindings = new java.util.ArrayList<>();
+        private final Set<Integer> contentRefreshSlots = new java.util.LinkedHashSet<>();
+        private GuiInteractionPolicy interactionPolicy = GuiInteractionPolicy.PROTECT_GUI;
         private Builder(int rows) {
             if (rows < 1 || rows > 6) throw new IllegalArgumentException("Chest rows must be between 1 and 6: " + rows);
             this.rows = rows;
@@ -71,6 +80,7 @@ public final class GuiMenu {
         public Builder fillEmpty(ItemStack item) { background = Pattern.solid(Objects.requireNonNull(item, "item")); return this; }
         public Builder background(GuiPattern pattern) { background = Objects.requireNonNull(pattern, "pattern"); return this; }
         public Builder border(ItemStack item) { background = Pattern.border(Objects.requireNonNull(item, "item")); return this; }
+        public Builder interactionPolicy(GuiInteractionPolicy policy) { interactionPolicy = Objects.requireNonNull(policy, "policy"); return this; }
         public <E extends Event> Builder refreshOn(Class<E> eventType, Predicate<E> filter, RefreshScope scope) {
             refreshBindings.add(new GuiRefreshBinding<>(eventType, filter, scope));
             return this;
@@ -79,6 +89,13 @@ public final class GuiMenu {
             return refreshOn(eventType, ignored -> true, RefreshScope.FULL);
         }
         Builder refreshBinding(GuiRefreshBinding<?> binding) { refreshBindings.add(Objects.requireNonNull(binding, "binding")); return this; }
+        Builder contentRefreshSlots(Iterable<Integer> slots) {
+            for (Integer slot : slots) {
+                if (slot == null || slot < 0 || slot >= rows * 9) throw new IllegalArgumentException("Invalid content refresh slot: " + slot);
+                contentRefreshSlots.add(slot);
+            }
+            return this;
+        }
         public Builder component(int slot, GuiComponent component) {
             if (slot < 0 || slot >= rows * 9) throw new IllegalArgumentException("Slot " + slot + " is outside a " + rows + " row chest");
             Objects.requireNonNull(component, "component");

@@ -18,5 +18,9 @@ class PageInfoTest {
         assertThrows(IllegalArgumentException.class, () -> PageInfo.of(0, 1, 10));
         assertThrows(IllegalArgumentException.class, () -> PageInfo.of(1, -1, 10));
         assertThrows(IllegalArgumentException.class, () -> PageInfo.of(1, 1, 0));
+        assertThrows(IllegalArgumentException.class,
+                () -> new PageInfo(2, 1, 10, 10, 10, 0, true, false));
+        assertThrows(IllegalArgumentException.class,
+                () -> new PageInfo(1, 2, 10, 10, 0, 10, false, false));
     }
 }

@@ -25,7 +25,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.Collections;
 import java.util.UUID;
 import java.util.logging.Level;
 
@@ -35,7 +34,7 @@ public final class GuiManager implements Listener, AutoCloseable {
     private final TextProvider textProvider;
     private final Map<UUID, GuiSession> sessions = new HashMap<>();
     private final Map<GuiMenu, List<Listener>> refreshListeners = new IdentityHashMap<>();
-    private final Set<GuiSession> pendingRefresh = Collections.newSetFromMap(new IdentityHashMap<>());
+    private final Map<GuiSession, RefreshScope> pendingRefresh = new IdentityHashMap<>();
     private BukkitTask refreshTask;
     private boolean closed;
 
@@ -58,15 +57,21 @@ public final class GuiManager implements Listener, AutoCloseable {
         GuiSession session = new GuiSession(player, menu, textProvider, this);
         sessions.put(player.getUniqueId(), session);
         registerRefreshBindings(menu);
-        render(session);
-        player.openInventory(session.inventory());
+        try {
+            render(session);
+            player.openInventory(session.inventory());
+        } catch (RuntimeException failure) {
+            sessions.remove(player.getUniqueId(), session);
+            session.close();
+            throw failure;
+        }
         return session;
     }
 
     /** Refreshes all currently open instances of this immutable definition. */
     public void refreshOpen(GuiMenu menu) {
         requireMainThread();
-        for (GuiSession session : sessions.values().toArray(GuiSession[]::new)) if (session.menu() == menu) queueRefresh(session);
+        for (GuiSession session : sessions.values().toArray(GuiSession[]::new)) if (session.menu() == menu) queueRefresh(session, RefreshScope.FULL);
     }
     public void refresh(GuiSession session) {
         requireMainThread();
@@ -87,8 +92,9 @@ public final class GuiManager implements Listener, AutoCloseable {
     }
     public void navigate(GuiSession session, GuiMenu child) {
         scheduleNavigation(session, () -> {
-            session.history().push(session.menu());
+            GuiMenu previous = session.menu();
             switchMenu(session, child);
+            session.history().push(previous);
         });
     }
     public void replace(GuiSession session, GuiMenu menu) {
@@ -96,17 +102,24 @@ public final class GuiManager implements Listener, AutoCloseable {
     }
     public void back(GuiSession session) {
         scheduleNavigation(session, () -> {
-            if (!session.history().isEmpty()) switchMenu(session, session.history().pop());
+            if (!session.history().isEmpty()) {
+                GuiMenu previous = session.history().peek();
+                switchMenu(session, previous);
+                session.history().pop();
+            }
         });
     }
     public void close(GuiSession session) {
         scheduleNavigation(session, () -> {
             sessions.remove(session.viewerId(), session);
+            Player player = session.viewer();
             session.close();
-            if (session.viewer().isOnline()) session.viewer().closeInventory();
+            if (player.isOnline()) player.closeInventory();
         });
     }
     private void switchMenu(GuiSession session, GuiMenu menu) {
+        GuiMenu previousMenu = session.menu();
+        Inventory previousInventory = session.inventory();
         session.transitioning(true);
         try {
             session.menu(menu);
@@ -114,6 +127,11 @@ public final class GuiManager implements Listener, AutoCloseable {
             render(session);
             registerRefreshBindings(menu);
             session.viewer().openInventory(session.inventory());
+        } catch (RuntimeException failure) {
+            session.menu(previousMenu);
+            session.inventory(previousInventory);
+            if (session.viewer().isOnline() && previousInventory != null) session.viewer().openInventory(previousInventory);
+            throw failure;
         } finally {
             session.transitioning(false);
         }
@@ -138,7 +156,7 @@ public final class GuiManager implements Listener, AutoCloseable {
                 Runnable refresh = () -> {
                     try {
                         if (binding.matches(event)) for (GuiSession session : sessions.values().toArray(GuiSession[]::new))
-                            if (session.menu() == menu) queueRefresh(session);
+                            if (session.menu() == menu) queueRefresh(session, binding.scope());
                     } catch (Throwable failure) {
                         plugin.getLogger().log(Level.WARNING, "GUI refresh event filter failed", failure);
                     }
@@ -151,15 +169,23 @@ public final class GuiManager implements Listener, AutoCloseable {
         }
         refreshListeners.put(menu, List.copyOf(listeners));
     }
-    private void queueRefresh(GuiSession session) {
+    private void queueRefresh(GuiSession session, RefreshScope scope) {
         if (!isCurrent(session)) return;
-        pendingRefresh.add(session);
+        pendingRefresh.merge(session, Objects.requireNonNull(scope, "scope"),
+                (oldScope, newScope) -> oldScope == RefreshScope.FULL || newScope == RefreshScope.FULL
+                        ? RefreshScope.FULL : RefreshScope.CONTENT);
         if (refreshTask != null) return;
         refreshTask = Bukkit.getScheduler().runTask(plugin, () -> {
             refreshTask = null;
-            GuiSession[] pending = pendingRefresh.toArray(GuiSession[]::new);
+            Map<GuiSession, RefreshScope> pending = new IdentityHashMap<>(pendingRefresh);
             pendingRefresh.clear();
-            for (GuiSession current : pending) if (isCurrent(current)) render(current);
+            for (Map.Entry<GuiSession, RefreshScope> entry : pending.entrySet()) if (isCurrent(entry.getKey())) {
+                try {
+                    if (entry.getValue() == RefreshScope.CONTENT) renderContent(entry.getKey());
+                    else render(entry.getKey());
+                }
+                catch (RuntimeException failure) { plugin.getLogger().log(Level.WARNING, "GUI refresh failed", failure); }
+            }
         });
     }
     void requireSessionThread() { requireMainThread(); }
@@ -170,7 +196,12 @@ public final class GuiManager implements Listener, AutoCloseable {
         if (!isCurrent(session) || session.menu().components().get(slot) != expected) return;
         session.beginRender();
         GuiRenderContext context = new GuiRenderContext(session.viewer(), session.menu(), session, slot, expected);
-        org.bukkit.inventory.ItemStack desired = expected.visible(context) ? expected.render(context) : null;
+        org.bukkit.inventory.ItemStack desired;
+        try { desired = expected.visible(context) ? expected.render(context) : null; }
+        catch (RuntimeException failure) {
+            plugin.getLogger().log(Level.WARNING, "GUI component refresh failed at slot " + slot, failure);
+            return;
+        }
         if (desired == null) desired = backgroundItem(session, slot);
         org.bukkit.inventory.ItemStack current = session.inventory().getItem(slot);
         if (!Objects.equals(current, desired)) session.inventory().setItem(slot, desired == null ? null : desired.clone());
@@ -190,25 +221,43 @@ public final class GuiManager implements Listener, AutoCloseable {
     }
 
     private void render(GuiSession session) {
+        render(session, null);
+    }
+    private void renderContent(GuiSession session) {
+        if (session.menu().contentRefreshSlots().isEmpty()) render(session);
+        else render(session, session.menu().contentRefreshSlots());
+    }
+    private void render(GuiSession session, Set<Integer> requestedSlots) {
         session.beginRender();
         GuiMenu menu = session.menu();
         Inventory inventory = session.inventory();
+        Set<Integer> slots = requestedSlots;
         if (inventory == null) {
-            ManagedHolder holder = new ManagedHolder(session);
+            ManagedHolder holder = new ManagedHolder(session, menu);
             inventory = Bukkit.createInventory(holder, menu.size(), menu.title(new GuiRenderContext(session.viewer(), menu, session)));
             holder.inventory = inventory;
             session.inventory(inventory);
+            slots = null;
         }
         org.bukkit.inventory.ItemStack[] desired = new org.bukkit.inventory.ItemStack[menu.size()];
-        for (int slot = 0; slot < desired.length; slot++) desired[slot] = backgroundItem(session, slot);
+        Iterable<Integer> renderSlots = slots == null ? java.util.stream.IntStream.range(0, desired.length).boxed().toList() : slots;
+        for (int slot : renderSlots) {
+            try { desired[slot] = backgroundItem(session, slot); }
+            catch (RuntimeException failure) { plugin.getLogger().log(Level.WARNING, "GUI background pattern failed at slot " + slot, failure); }
+        }
         for (Map.Entry<Integer, GuiComponent> entry : menu.components().entrySet()) {
+            if (slots != null && !slots.contains(entry.getKey())) continue;
             GuiComponent component = entry.getValue();
             GuiRenderContext context = new GuiRenderContext(session.viewer(), menu, session, entry.getKey(), component);
-            if (!component.visible(context)) continue;
-            org.bukkit.inventory.ItemStack item = component.render(context);
-            if (item != null) desired[entry.getKey()] = item.clone();
+            try {
+                if (!component.visible(context)) continue;
+                org.bukkit.inventory.ItemStack item = component.render(context);
+                if (item != null) desired[entry.getKey()] = item.clone();
+            } catch (RuntimeException failure) {
+                plugin.getLogger().log(Level.WARNING, "GUI component render failed at slot " + entry.getKey(), failure);
+            }
         }
-        for (int slot = 0; slot < desired.length; slot++) {
+        for (int slot : renderSlots) {
             org.bukkit.inventory.ItemStack current = inventory.getItem(slot);
             if (!Objects.equals(current, desired[slot])) inventory.setItem(slot, desired[slot] == null ? null : desired[slot].clone());
         }
@@ -228,13 +277,19 @@ public final class GuiManager implements Listener, AutoCloseable {
         GuiSession session = holder.session;
         int rawSlot = event.getRawSlot();
         boolean topSlot = rawSlot >= 0 && rawSlot < event.getView().getTopInventory().getSize();
-        if (topSlot || affectsTopInventory(event.getAction(), event.getClick())) event.setCancelled(true);
+        if (topSlot || holder.menu.interactionPolicy() == GuiInteractionPolicy.LOCK_ALL
+                || affectsTopInventory(event.getAction(), event.getClick())) event.setCancelled(true);
         if (!topSlot || !(event.getWhoClicked() instanceof Player player) || !isCurrent(session)
-                || !session.viewerId().equals(player.getUniqueId()) || session.inventory() != holder.inventory) return;
+                || holder.menu != session.menu() || !session.viewerId().equals(player.getUniqueId())
+                || session.inventory() != holder.inventory) return;
         GuiComponent component = session.menu().components().get(rawSlot);
         if (component == null || !component.interactive()) return;
         GuiRenderContext renderContext = new GuiRenderContext(player, session.menu(), session);
-        if (!component.visible(renderContext)) return;
+        try { if (!component.visible(renderContext)) return; }
+        catch (RuntimeException failure) {
+            plugin.getLogger().log(Level.WARNING, "GUI component visibility check failed at slot " + rawSlot, failure);
+            return;
+        }
         if (!isCurrent(session) || session.inventory() != holder.inventory) return;
         try {
             component.click(new GuiClickContext(player, session.menu(), session, rawSlot, event.getClick(), event, this));
@@ -246,7 +301,8 @@ public final class GuiManager implements Listener, AutoCloseable {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onDrag(InventoryDragEvent event) {
         if (event.getView().getTopInventory().getHolder(false) instanceof ManagedHolder holder
-                && event.getRawSlots().stream().anyMatch(slot -> slot >= 0 && slot < event.getView().getTopInventory().getSize())) event.setCancelled(true);
+                && (holder.menu.interactionPolicy() == GuiInteractionPolicy.LOCK_ALL
+                || event.getRawSlots().stream().anyMatch(slot -> slot >= 0 && slot < event.getView().getTopInventory().getSize()))) event.setCancelled(true);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -293,8 +349,9 @@ public final class GuiManager implements Listener, AutoCloseable {
 
     private static final class ManagedHolder implements InventoryHolder {
         private final GuiSession session;
+        private final GuiMenu menu;
         private Inventory inventory;
-        private ManagedHolder(GuiSession session) { this.session = session; }
+        private ManagedHolder(GuiSession session, GuiMenu menu) { this.session = session; this.menu = menu; }
         @Override public Inventory getInventory() { return inventory; }
     }
 }

@@ -13,6 +13,7 @@ import java.util.function.Predicate;
 /** Immutable interactive component with a dynamic item template and optional access rules. */
 public final class GuiButton implements GuiComponent {
     private final GuiItemTemplate item;
+    private final GuiItemTemplate disabledItem;
     private final ClickHandler handler;
     private final Predicate<GuiRenderContext> visible;
     private final Predicate<GuiRenderContext> enabled;
@@ -21,6 +22,7 @@ public final class GuiButton implements GuiComponent {
 
     private GuiButton(Builder builder) {
         item = Objects.requireNonNull(builder.item, "item");
+        disabledItem = builder.disabledItem;
         handler = Objects.requireNonNull(builder.handler, "onClick");
         visible = builder.visible;
         enabled = builder.enabled;
@@ -36,7 +38,10 @@ public final class GuiButton implements GuiComponent {
         return builder().item(item).onClick(handler).build();
     }
 
-    @Override public ItemStack render(GuiRenderContext context) { return item.render(context); }
+    @Override public ItemStack render(GuiRenderContext context) {
+        if (!enabled.test(context) && disabledItem != null) return disabledItem.render(context);
+        return item.render(context);
+    }
     @Override public boolean visible(GuiRenderContext context) { return visible.test(context) && allowed(context.viewer()); }
     @Override public boolean interactive() { return true; }
     @Override public void click(GuiClickContext context) {
@@ -49,6 +54,7 @@ public final class GuiButton implements GuiComponent {
 
     public static final class Builder {
         private GuiItemTemplate item;
+        private GuiItemTemplate disabledItem;
         private ClickHandler handler;
         private Predicate<GuiRenderContext> visible = ignored -> true;
         private Predicate<GuiRenderContext> enabled = ignored -> true;
@@ -61,6 +67,12 @@ public final class GuiButton implements GuiComponent {
             return this;
         }
         public Builder item(GuiItemTemplate value) { item = Objects.requireNonNull(value, "item"); return this; }
+        public Builder disabledItem(ItemStack value) {
+            ItemStack copy = Objects.requireNonNull(value, "item").clone();
+            disabledItem = ignored -> copy.clone();
+            return this;
+        }
+        public Builder disabledItem(GuiItemTemplate value) { disabledItem = Objects.requireNonNull(value, "item"); return this; }
         public Builder onClick(ClickHandler value) { handler = Objects.requireNonNull(value, "onClick"); return this; }
         public Builder visibleWhen(Predicate<GuiRenderContext> value) { visible = Objects.requireNonNull(value, "visibleWhen"); return this; }
         public Builder enabledWhen(Predicate<GuiRenderContext> value) { enabled = Objects.requireNonNull(value, "enabledWhen"); return this; }

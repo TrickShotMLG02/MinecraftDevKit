@@ -68,6 +68,7 @@ public final class PagedGui<T> {
             List<Integer> immutableSlots = List.copyOf(slots);
             GuiStateKey<Integer> pageKey = GuiStateKey.of("paged.current-page", 1);
             GuiMenu.Builder menu = GuiMenu.chest(rows);
+            menu.contentRefreshSlots(reserved);
             refreshBindings.forEach(menu::refreshBinding);
             if (title instanceof String value) menu.title(value);
             else if (title instanceof Component value) menu.title(value);
@@ -88,7 +89,9 @@ public final class PagedGui<T> {
             return context.session().renderValue(this, () -> {
                 List<T> provided = Objects.requireNonNull(items.apply(context), "Paged item source returned null");
                 List<T> copy = List.copyOf(provided);
-                PageInfo page = PageInfo.of(context.session().get(pageKey), copy.size(), slots.size());
+                int requested = context.session().get(pageKey);
+                PageInfo page = PageInfo.of(requested, copy.size(), slots.size());
+                if (page.currentPage() != requested) context.session().setRenderState(pageKey, page.currentPage());
                 return new Snapshot<>(copy, page);
             });
         }
@@ -131,7 +134,9 @@ public final class PagedGui<T> {
             PageInfo page = builder.snapshot(context,pageKey,slots).page;
             boolean active = forward ? page.hasNext() : page.hasPrevious();
             ItemStack item = active ? forward ? builder.next : builder.previous : builder.disabled;
-            if (item == null && active) item = GuiItems.of(forward ? Material.ARROW : Material.ARROW, forward ? "Next page" : "Previous page");
+            if (item == null) item = active
+                    ? GuiItems.of(Material.ARROW, forward ? "Next page" : "Previous page")
+                    : GuiItems.of(Material.GRAY_STAINED_GLASS_PANE, forward ? "No next page" : "No previous page");
             if (item == null) return null;
             return item.clone();
         }

@@ -30,5 +30,7 @@ class GuiControlsTest {
                 ignored -> null, null, ignored -> true, null));
         assertThrows(IllegalArgumentException.class, () -> builder.option(10, "NORMAL", ignored -> null,
                 ignored -> null, null, ignored -> true, null));
+        builder.option(12, "NORMAL", ignored -> null, ignored -> null, null, ignored -> true, null);
+        assertEquals(3, builder.selected("NORMAL").build().components().size());
     }
 }

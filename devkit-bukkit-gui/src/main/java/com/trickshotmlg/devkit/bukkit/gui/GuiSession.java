@@ -15,7 +15,7 @@ import java.util.function.Supplier;
 /** Mutable state for one viewer; never shared between two players. */
 public final class GuiSession {
     private final UUID viewerId;
-    private final Player viewer;
+    private Player viewer;
     private final TextProvider textProvider;
     private final GuiManager manager;
     private final Deque<GuiMenu> history = new ArrayDeque<>();
@@ -35,8 +35,14 @@ public final class GuiSession {
         this.manager = Objects.requireNonNull(manager, "manager");
     }
     public UUID viewerId() { return viewerId; }
-    public Player viewer() { return viewer; }
-    public GuiMenu menu() { return menu; }
+    public Player viewer() {
+        if (viewer == null) throw new IllegalStateException("GUI session is closed");
+        return viewer;
+    }
+    public GuiMenu menu() {
+        if (menu == null) throw new IllegalStateException("GUI session is closed");
+        return menu;
+    }
     public boolean closed() { return closed; }
     public int historyDepth() { return history.size(); }
     /** Reads a typed session-local value, returning its key's initial value if unset. */
@@ -63,8 +69,18 @@ public final class GuiSession {
     long nextNavigationVersion() { return ++navigationVersion; }
     long navigationVersion() { return navigationVersion; }
     void beginRender() { renderCache.clear(); }
+    <T> void setRenderState(GuiStateKey<T> key, T value) { state.put(key, value); }
     @SuppressWarnings("unchecked") <T> T renderValue(Object key, Supplier<T> supplier) {
         return (T) renderCache.computeIfAbsent(key, ignored -> supplier.get());
     }
-    void close() { closed = true; inventory = null; }
+    void close() {
+        if (closed) return;
+        closed = true;
+        inventory = null;
+        menu = null;
+        viewer = null;
+        history.clear();
+        state.clear();
+        renderCache.clear();
+    }
 }

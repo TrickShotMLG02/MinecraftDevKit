@@ -5,9 +5,11 @@ public record PageInfo(int currentPage, int totalPages, int totalItems, int page
                        int firstVisibleItemIndex, int visibleItemCount,
                        boolean hasPrevious, boolean hasNext) {
     public PageInfo {
-        if (currentPage < 1 || totalPages < 1 || totalItems < 0 || pageSize < 1
+        if (currentPage < 1 || totalPages < 1 || currentPage > totalPages || totalItems < 0 || pageSize < 1
                 || firstVisibleItemIndex < 0 || visibleItemCount < 0 || visibleItemCount > pageSize)
             throw new IllegalArgumentException("Invalid pagination metadata");
+        if (hasPrevious != (currentPage > 1) || hasNext != (currentPage < totalPages))
+            throw new IllegalArgumentException("Page navigation flags do not match the current page");
     }
     public static PageInfo of(int requestedPage, int totalItems, int pageSize) {
         if (requestedPage < 1) throw new IllegalArgumentException("Pages are one-based and must be positive");
