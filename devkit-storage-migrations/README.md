@@ -15,4 +15,20 @@ The Flyway integration borrows `Storage.dataSource()` and never closes Storage. 
 
 The module declares Flyway core and database integration modules, but it does not bundle MySQL or MariaDB JDBC drivers. Include the selected database's JDBC driver in the application runtime. SQLite JDBC is available from `devkit-storage`.
 
+## Optional network database integration tests
+
+Normal unit tests and root build tasks remain Docker-free. To execute the real MySQL/MariaDB migration suite, use a Docker-compatible container runtime and run:
+
+```powershell
+.\gradlew.bat :devkit-storage-migrations:integrationTest
+```
+
+The suite uses Testcontainers 2.0.5 with MySQL `8.4.11` and MariaDB `11.4.13`, and exercises packaged versioned SQL resources, Flyway history/version reporting, repeat startup, checksum validation, and invalid-SQL failure handling on each server. A missing container runtime makes this explicit task fail; no tests are skipped and reported as a successful backend verification.
+
+Run both module suites together with:
+
+```powershell
+.\gradlew.bat :devkit-storage:integrationTest :devkit-storage-migrations:integrationTest
+```
+
 Migrations are not automatically reversible. DDL transaction support differs among SQLite, MySQL, and MariaDB, and concurrent SQLite migration attempts are not a distributed lock. Do not run two application instances against one SQLite database and assume Flyway serializes their startup. Back up production data and test migrations on the exact target backend before deployment. Migration failure leaves the database state to the backend and Flyway; this module does not delete data or reset history.

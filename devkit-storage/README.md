@@ -52,6 +52,16 @@ For MariaDB use `.mariadb(host, port, database)`. The builder creates a JDBC URL
 
 HikariCP pool defaults are one connection for SQLite and eight for network URLs. Connection acquisition timeout defaults to 10 seconds. Explicit pool sizing is honored independent of the order in which builder methods are called. Applications supplying a `DataSource` or executor retain ownership unless they explicitly transfer it to Storage. `dataSource()` returns a borrowed DataSource intended for integrations such as migration tools; do not close it.
 
+## Optional MySQL and MariaDB integration tests
+
+The ordinary `test`, `check`, `build`, and publication tasks use SQLite/unit tests only and do not start containers. To run the real-server suite, make a Docker-compatible container runtime available and invoke:
+
+```powershell
+.\gradlew.bat :devkit-storage:integrationTest
+```
+
+The suite uses Testcontainers 2.0.5 with the fixed MySQL `8.4.11` and MariaDB `11.4.13` images. MySQL Connector/J 26.10.0 and MariaDB Connector/J 3.5.7 are present only on this integration-test runtime; they are not published as mandatory storage dependencies. Testcontainers selects host ports dynamically and removes its containers after the suite. If the container runtime cannot be reached, this explicit task fails rather than treating database checks as successful. The test verifies driver/product identity, authenticated connectivity, prepared typed queries, transaction commit/rollback, concurrent async updates, pool exhaustion/recovery, authentication error redaction, and resource behavior against both database products.
+
 ## Transactions
 
 Each transaction callback uses one JDBC connection:
