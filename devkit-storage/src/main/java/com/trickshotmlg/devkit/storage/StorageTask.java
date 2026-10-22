@@ -32,20 +32,24 @@ public final class StorageTask<T> {
         }
         return false;
     }
-    boolean cancelState() {
+    boolean markCancelled() {
         State current = state.get();
         while (current == State.QUEUED || current == State.RUNNING) {
             if (state.compareAndSet(current, State.CANCELLED)) {
                 cancellation = () -> { };
-                result.cancel(false);
                 return true;
             }
             current = state.get();
         }
-        return current == State.CANCELLED;
+        return false;
     }
 
-    /** Read-only result stage; cancelling its derived future does not mutate this task. */
+    void publishCancellation() { result.cancel(false); }
+
+    /**
+     * Read-only result stage; cancelling its derived future does not mutate this task.
+     * Non-async completion actions run inline on the thread that publishes completion or cancellation.
+     */
     public CompletionStage<T> result() { return result.minimalCompletionStage(); }
     public State state() { return state.get(); }
     public boolean isDone() {
@@ -54,8 +58,8 @@ public final class StorageTask<T> {
     }
     public boolean cancel() {
         Runnable cancelOperation = cancellation;
-        boolean cancelled = cancelState();
-        if (cancelled) cancelOperation.run();
-        return cancelled;
+        boolean changed = markCancelled();
+        if (changed) cancelOperation.run();
+        return changed || state.get() == State.CANCELLED;
     }
 }

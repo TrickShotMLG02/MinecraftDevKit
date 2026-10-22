@@ -86,6 +86,8 @@ storage.async().queryOne("SELECT coins FROM players WHERE uuid = ?", SqlParamete
 
 The storage callback runs on the storage executor, not on Bukkit's server thread. Use the MinecraftDevKit scheduler or the platform's native scheduler for thread handoff. Capture stable identifiers such as UUIDs, then revalidate online state in the synchronous callback. `StorageTask.cancel()` cancels the logical result and removes queued work where supported; it does not guarantee interruption of JDBC work already running. Closing Storage rejects new work, settles outstanding logical handles as cancelled, shuts down internally owned workers without an unbounded wait, and preserves caller-owned executors/DataSources.
 
+CompletionStage callbacks registered without an explicit executor run inline on whichever thread completes or cancels the task. In particular, shutdown cancellation may run such callbacks on the thread calling `Storage.close()`. Keep these callbacks short, avoid waiting on other work from them, and explicitly hand Bukkit operations to the Bukkit scheduler.
+
 ## Lifecycle ownership
 
 Storage implements `AutoCloseable` and can be returned directly from a lifecycle service factory. Declare config and migration dependencies before repositories so migrations finish before gameplay queries begin. On reverse shutdown, repositories/features stop before Storage closes its pool and executor. Flyway is optional and lives in `devkit-storage-migrations`.

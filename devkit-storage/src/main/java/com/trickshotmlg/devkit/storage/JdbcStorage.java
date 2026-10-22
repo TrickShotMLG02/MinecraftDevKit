@@ -110,6 +110,7 @@ final class JdbcStorage implements Storage {
         private final java.util.concurrent.Callable<T> work;
         private final StorageTask<T> task = new StorageTask<>();
         private final AtomicBoolean finished = new AtomicBoolean();
+        private final AtomicBoolean cancellationFinalized = new AtomicBoolean();
         private final AtomicBoolean submissionReturned = new AtomicBoolean();
         private final Thread submittingThread = Thread.currentThread();
         private AsyncOperation(java.util.concurrent.Callable<T> work) { this.work = work; }
@@ -128,10 +129,15 @@ final class JdbcStorage implements Storage {
         }
         private void cancelFromHandle() { cancel(); }
         private void cancel() {
-            task.cancelState();
+            task.markCancelled();
+            finishCancellation();
+        }
+        private void finishCancellation() {
+            if (task.state() != StorageTask.State.CANCELLED || !cancellationFinalized.compareAndSet(false, true)) return;
             Executor current = asyncExecutor;
             if (current instanceof ThreadPoolExecutor pool) pool.remove(this);
             finish();
+            task.publishCancellation();
         }
         private void finish() {
             if (finished.compareAndSet(false, true)) asyncOperations.remove(this);
@@ -352,10 +358,15 @@ final class JdbcStorage implements Storage {
     }
 
     @Override public void close() {
+        List<AsyncOperation<?>> operations;
         synchronized (asyncLifecycleLock) {
             if (!closed.compareAndSet(false, true)) return;
-            for (AsyncOperation<?> operation : List.copyOf(asyncOperations)) operation.cancel();
+            operations = List.copyOf(asyncOperations);
+            for (AsyncOperation<?> operation : operations) operation.task.markCancelled();
         }
+        // Completing a CompletableFuture can invoke arbitrary application callbacks inline.
+        // Publish cancellation only after releasing the lifecycle lock.
+        for (AsyncOperation<?> operation : operations) operation.finishCancellation();
         Executor executor = asyncExecutor;
         if (ownsAsyncExecutor && executor instanceof ExecutorService service) service.shutdownNow();
         asyncExecutor = null;

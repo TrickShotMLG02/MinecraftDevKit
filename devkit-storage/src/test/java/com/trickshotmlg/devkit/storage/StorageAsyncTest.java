@@ -9,9 +9,13 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.Executor;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -95,6 +99,108 @@ class StorageAsyncTest {
         assertEquals(StorageTask.State.CANCELLED, queued.state());
         assertThrows(StorageClosedException.class, () -> storage.async().submit(() -> "rejected"));
         release.countDown();
+    }
+
+    @Test void closeDoesNotRunCompletionCallbacksWhileHoldingLifecycleLock() throws Exception {
+        Storage storage = Storage.builder().sqliteMemory().asyncThreads(1).asyncQueueCapacity(1).build();
+        StorageAsync async = storage.async();
+        CountDownLatch workEntered = new CountDownLatch(1);
+        CountDownLatch releaseWork = new CountDownLatch(1);
+        StorageTask<Void> task = async.submit(() -> {
+            workEntered.countDown();
+            releaseWork.await();
+            return null;
+        });
+        assertTrue(workEntered.await(3, TimeUnit.SECONDS));
+        CountDownLatch callbackEntered = new CountDownLatch(1);
+        AtomicBoolean submissionBlockedByCloseLock = new AtomicBoolean();
+        task.result().whenComplete((ignored, failure) -> {
+            callbackEntered.countDown();
+            CountDownLatch attemptingSubmission = new CountDownLatch(1);
+            CountDownLatch submissionFinished = new CountDownLatch(1);
+            Thread submitter = new Thread(() -> {
+                attemptingSubmission.countDown();
+                try { async.submit(() -> null); }
+                catch (StorageClosedException expected) { /* close already linearized */ }
+                finally { submissionFinished.countDown(); }
+            }, "storage-close-callback-probe");
+            submitter.start();
+            try {
+                if (!attemptingSubmission.await(3, TimeUnit.SECONDS)) return;
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+                while (submissionFinished.getCount() != 0 && System.nanoTime() < deadline) {
+                    if (submitter.getState() == Thread.State.BLOCKED) {
+                        submissionBlockedByCloseLock.set(true);
+                        break;
+                    }
+                    Thread.onSpinWait();
+                }
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        });
+
+        try { storage.close(); }
+        finally { releaseWork.countDown(); }
+        assertTrue(callbackEntered.await(3, TimeUnit.SECONDS));
+        assertFalse(submissionBlockedByCloseLock.get(),
+                "future completion callbacks must not run while the async lifecycle lock is held");
+        assertEquals(StorageTask.State.CANCELLED, task.state());
+    }
+
+    @Test void acceptedSubmissionRacingCloseIsSettledAndCannotRunAfterward() throws Exception {
+        CountDownLatch executeEntered = new CountDownLatch(1);
+        CountDownLatch admit = new CountDownLatch(1);
+        AtomicReference<Runnable> queuedOperation = new AtomicReference<>();
+        Executor controlled = command -> {
+            executeEntered.countDown();
+            try {
+                if (!admit.await(3, TimeUnit.SECONDS)) throw new RejectedExecutionException("test admission timed out");
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new RejectedExecutionException(interrupted);
+            }
+            queuedOperation.set(command);
+        };
+        Storage storage = Storage.builder().sqliteMemory().executor(controlled).build();
+        StorageAsync async = storage.async();
+        AtomicReference<StorageTask<Boolean>> submitted = new AtomicReference<>();
+        AtomicReference<Throwable> submitFailure = new AtomicReference<>();
+        AtomicReference<Throwable> closeFailure = new AtomicReference<>();
+        AtomicBoolean workRan = new AtomicBoolean();
+        Thread submitter = new Thread(() -> {
+            try { submitted.set(async.submit(() -> { workRan.set(true); return true; })); }
+            catch (Throwable failure) { submitFailure.set(failure); }
+        }, "storage-submit-race");
+        submitter.start();
+        assertTrue(executeEntered.await(3, TimeUnit.SECONDS));
+
+        CountDownLatch closeStarted = new CountDownLatch(1);
+        Thread closer = new Thread(() -> {
+            closeStarted.countDown();
+            try { storage.close(); }
+            catch (Throwable failure) { closeFailure.set(failure); }
+        }, "storage-close-race");
+        closer.start();
+        assertTrue(closeStarted.await(3, TimeUnit.SECONDS));
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+        while (closer.getState() != Thread.State.BLOCKED && System.nanoTime() < deadline) Thread.onSpinWait();
+        assertEquals(Thread.State.BLOCKED, closer.getState(), "close should wait for the in-flight admission decision");
+
+        admit.countDown();
+        submitter.join(3000);
+        closer.join(3000);
+        assertFalse(submitter.isAlive());
+        assertFalse(closer.isAlive());
+        assertNull(submitFailure.get());
+        assertNull(closeFailure.get());
+        StorageTask<Boolean> task = submitted.get();
+        assertNotNull(task);
+        assertEquals(StorageTask.State.CANCELLED, task.state());
+        assertCancellation(task);
+
+        queuedOperation.get().run();
+        assertFalse(workRan.get(), "work accepted just before close must not start after close cancels it");
     }
 
     @Test void externalExecutorIsNotClosedAndInlineExecutorCannotRunDatabaseWork() throws Exception {
