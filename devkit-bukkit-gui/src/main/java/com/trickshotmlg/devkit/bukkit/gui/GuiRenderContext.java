@@ -1,6 +1,10 @@
 package com.trickshotmlg.devkit.bukkit.gui;
 
 import org.bukkit.entity.Player;
+import com.trickshotmlg.devkit.text.TextRef;
+import net.kyori.adventure.text.Component;
+
+import java.util.Map;
 
 import java.util.Locale;
 import java.util.Objects;
@@ -25,5 +29,15 @@ public record GuiRenderContext(Player viewer, GuiMenu menu, GuiSession session, 
     public Locale locale() {
         Locale locale = Locale.forLanguageTag(viewer.getLocale().replace('_', '-'));
         return locale.getLanguage().isEmpty() ? Locale.ENGLISH : locale;
+    }
+
+    /** Resolves a viewer-localized reference at render time, retaining TextRef fallback behavior. */
+    public Component text(TextRef reference) { return text(reference, Map.of()); }
+    public Component text(TextRef reference, Map<String, ?> placeholders) {
+        Objects.requireNonNull(reference, "reference");
+        Objects.requireNonNull(placeholders, "placeholders");
+        if (session.textProvider() != null) return session.textProvider().resolve(reference, locale(), placeholders);
+        if (reference instanceof TextRef.Literal literal) return Component.text(literal.value());
+        return Component.text(reference.fallback().orElseGet(() -> reference.translationKey().orElse("")));
     }
 }

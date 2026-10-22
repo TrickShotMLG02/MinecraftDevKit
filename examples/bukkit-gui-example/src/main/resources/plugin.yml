@@ -1,0 +1,5 @@
+name: MinecraftDevKitGuiExample
+version: 0.1.0-SNAPSHOT
+main: com.trickshotmlg.devkit.examples.gui.GuiExamplePlugin
+api-version: '1.21'
+description: Demonstrates MinecraftDevKit inventory menus and controls.

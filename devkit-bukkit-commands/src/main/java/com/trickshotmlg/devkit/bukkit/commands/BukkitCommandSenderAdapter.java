@@ -18,7 +18,8 @@ final class BukkitCommandSenderAdapter {
     BukkitCommandSenderAdapter(Locale defaultLocale) { this.defaultLocale = Objects.requireNonNull(defaultLocale, "defaultLocale"); }
     CommandSender adapt(org.bukkit.command.CommandSender sender) {
         Objects.requireNonNull(sender, "sender");
-        return new CommandSender() {
+        return new BukkitCommandSender() {
+            @Override public org.bukkit.command.CommandSender bukkitSender() { return sender; }
             @Override public SenderKind kind() {
                 if (sender instanceof Player) return SenderKind.PLAYER;
                 if (sender instanceof ConsoleCommandSender) return SenderKind.CONSOLE;

@@ -94,12 +94,17 @@ public final class SkullTextureService implements AutoCloseable {
 
     /** Creates a custom-texture player head. Only a texture hash or textures.minecraft.net URL is accepted. */
     public static org.bukkit.inventory.ItemStack customHead(String textureHashOrUrl) {
-        URL url = validateTextureUrl(textureHashOrUrl);
+        return head(textureProfile(textureHashOrUrl));
+    }
+
+    /** Prepares a Paper player profile containing a validated custom skin URL. */
+    public static PlayerProfile textureProfile(String hashOrUrl) {
+        URL url = validateTextureUrl(hashOrUrl);
         PlayerProfile profile = Bukkit.createPlayerProfile(UUID.randomUUID());
         PlayerTextures textures = profile.getTextures();
         textures.setSkin(url);
         profile.setTextures(textures);
-        return ItemBuilder.of(org.bukkit.Material.PLAYER_HEAD).skullProfile(profile).build();
+        return profile;
     }
 
     /** Parses Mojang's base64 texture property without accepting arbitrary URLs or payload sizes. */

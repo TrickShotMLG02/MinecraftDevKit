@@ -124,6 +124,11 @@ public final class ItemBuilder {
             skull.setOwnerProfile(profile.clone());
         });
     }
+    public ItemBuilder skullTextureHash(String hash) { return skullProfile(SkullTextureService.textureProfile(Objects.requireNonNull(hash, "hash"))); }
+    public ItemBuilder skullTextureUrl(String url) { return skullProfile(SkullTextureService.textureProfile(Objects.requireNonNull(url, "url"))); }
+    public ItemBuilder skullTextureBase64(String base64) {
+        return skullProfile(SkullTextureService.textureProfile(SkullTextureService.validateBase64Texture(base64).toExternalForm()));
+    }
     public <P, C> ItemBuilder persistentData(NamespacedKey key, PersistentDataType<P, C> type, C value) {
         Objects.requireNonNull(key, "key");
         Objects.requireNonNull(type, "type");

@@ -29,6 +29,7 @@ class BukkitCommandSenderAdapterTest {
         Component message = Component.text("Hallo");
         sender.sendMessage(message);
         assertEquals(SenderKind.PLAYER, sender.kind());
+        assertSame(player, ((BukkitCommandSender) sender).bukkitSender());
         assertEquals(Locale.GERMANY, sender.locale());
         assertTrue(sender.hasPermission(permission));
         assertSame(message, delivered.get());

@@ -36,6 +36,7 @@ public final class GuiMenu {
     Component title(GuiRenderContext context) {
         if (title.textRef != null && context.session().textProvider() != null)
             return context.session().textProvider().resolve(title.textRef, context.locale());
+        if (title.textRef instanceof TextRef.Literal literal) return Component.text(literal.value());
         if (title.textRef != null) return Component.text(title.textRef.fallback()
                 .orElseGet(() -> title.textRef.translationKey().orElse("")));
         return title.component;
@@ -77,6 +78,7 @@ public final class GuiMenu {
         public <E extends Event> Builder refreshOn(Class<E> eventType) {
             return refreshOn(eventType, ignored -> true, RefreshScope.FULL);
         }
+        Builder refreshBinding(GuiRefreshBinding<?> binding) { refreshBindings.add(Objects.requireNonNull(binding, "binding")); return this; }
         public Builder component(int slot, GuiComponent component) {
             if (slot < 0 || slot >= rows * 9) throw new IllegalArgumentException("Slot " + slot + " is outside a " + rows + " row chest");
             Objects.requireNonNull(component, "component");

@@ -181,8 +181,9 @@ public final class GuiManager implements Listener, AutoCloseable {
     public void executeOnMainThread(Runnable action) {
         Objects.requireNonNull(action, "action");
         if (closed) return;
-        if (Bukkit.isPrimaryThread()) action.run();
-        else Bukkit.getScheduler().runTask(plugin, () -> { if (!closed) action.run(); });
+        // Always defer, including when called on the main thread, so render callbacks cannot
+        // re-enter the renderer and have their result overwritten by the in-progress pass.
+        Bukkit.getScheduler().runTask(plugin, () -> { if (!closed) action.run(); });
     }
     void reportAsyncFailure(String message, Throwable failure) {
         plugin.getLogger().log(Level.WARNING, message + ": " + failure.getMessage());
@@ -225,14 +226,11 @@ public final class GuiManager implements Listener, AutoCloseable {
     public void onClick(InventoryClickEvent event) {
         if (!(event.getView().getTopInventory().getHolder(false) instanceof ManagedHolder holder)) return;
         GuiSession session = holder.session;
-        if (!(event.getWhoClicked() instanceof Player player) || !isCurrent(session)
-                || !session.viewerId().equals(player.getUniqueId()) || session.inventory() != holder.inventory) return;
         int rawSlot = event.getRawSlot();
-        if (rawSlot < 0 || rawSlot >= session.menu().size()) {
-            if (affectsTopInventory(event.getAction(), event.getClick())) event.setCancelled(true);
-            return;
-        }
-        event.setCancelled(true);
+        boolean topSlot = rawSlot >= 0 && rawSlot < event.getView().getTopInventory().getSize();
+        if (topSlot || affectsTopInventory(event.getAction(), event.getClick())) event.setCancelled(true);
+        if (!topSlot || !(event.getWhoClicked() instanceof Player player) || !isCurrent(session)
+                || !session.viewerId().equals(player.getUniqueId()) || session.inventory() != holder.inventory) return;
         GuiComponent component = session.menu().components().get(rawSlot);
         if (component == null || !component.interactive()) return;
         GuiRenderContext renderContext = new GuiRenderContext(player, session.menu(), session);
@@ -248,8 +246,7 @@ public final class GuiManager implements Listener, AutoCloseable {
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onDrag(InventoryDragEvent event) {
         if (event.getView().getTopInventory().getHolder(false) instanceof ManagedHolder holder
-                && holder.session.inventory() == holder.inventory
-                && event.getRawSlots().stream().anyMatch(slot -> slot < holder.session.menu().size())) event.setCancelled(true);
+                && event.getRawSlots().stream().anyMatch(slot -> slot >= 0 && slot < event.getView().getTopInventory().getSize())) event.setCancelled(true);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)

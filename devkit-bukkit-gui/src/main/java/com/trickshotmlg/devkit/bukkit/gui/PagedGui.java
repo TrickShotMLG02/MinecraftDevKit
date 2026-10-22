@@ -4,6 +4,7 @@ import net.kyori.adventure.text.Component;
 import com.trickshotmlg.devkit.text.TextRef;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.event.Event;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -12,6 +13,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /** Builder for a menu whose content is automatically mapped across a set of slots. */
 public final class PagedGui<T> {
@@ -27,6 +29,7 @@ public final class PagedGui<T> {
         private Integer previousSlot, indicatorSlot, nextSlot, emptySlot;
         private Function<PageInfo, ItemStack> indicator;
         private ItemStack previous, next, disabled, empty;
+        private final List<GuiRefreshBinding<?>> refreshBindings = new ArrayList<>();
         private Builder(int rows) {
             if (rows < 1 || rows > 6) throw new IllegalArgumentException("Chest rows must be between 1 and 6");
             this.rows = rows;
@@ -45,6 +48,10 @@ public final class PagedGui<T> {
             this.previous = copy(previous); this.next = copy(next); this.disabled = copy(disabled); return this;
         }
         public Builder<T> emptyState(int slot, ItemStack item) { emptySlot = slot; empty = copy(item); return this; }
+        public <E extends Event> Builder<T> refreshOn(Class<E> eventType, Predicate<E> filter, RefreshScope scope) {
+            refreshBindings.add(new GuiRefreshBinding<>(eventType, filter, scope)); return this;
+        }
+        public <E extends Event> Builder<T> refreshOn(Class<E> eventType) { return refreshOn(eventType, ignored -> true, RefreshScope.FULL); }
 
         public GuiMenu build() {
             if (items == null || renderer == null) throw new IllegalStateException("Paged GUI requires an item source and renderer");
@@ -61,6 +68,7 @@ public final class PagedGui<T> {
             List<Integer> immutableSlots = List.copyOf(slots);
             GuiStateKey<Integer> pageKey = GuiStateKey.of("paged.current-page", 1);
             GuiMenu.Builder menu = GuiMenu.chest(rows);
+            refreshBindings.forEach(menu::refreshBinding);
             if (title instanceof String value) menu.title(value);
             else if (title instanceof Component value) menu.title(value);
             else menu.title((TextRef) title);

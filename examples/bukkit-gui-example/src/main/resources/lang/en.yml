@@ -1,0 +1,9 @@
+gui:
+  main:
+    title: "<aqua>MinecraftDevKit GUI"
+  players:
+    title: "<blue>Online players"
+  settings:
+    title: "<gold>Settings"
+  skulls:
+    title: "<light_purple>Skull showcase"
