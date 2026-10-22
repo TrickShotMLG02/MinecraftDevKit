@@ -143,7 +143,7 @@ GuiMenu confirm = ConfirmGui.builder()
     .build();
 ```
 
-Confirmation callback failures are logged by the manager and leave the dialog available for retry. A successful action is guarded against repeat clicks and closes the dialog. Closing with Escape never confirms.
+The confirmation action is claimed before its callback runs, so repeated or reentrant clicks cannot invoke it twice. If the callback throws after partially completing its work, the action stays consumed and the dialog remains open with its confirm button disabled; the user can close it, but cannot retry. Make externally visible confirmation callbacks atomic or idempotent. Closing with Escape never confirms.
 
 ## Pagination
 
@@ -170,6 +170,15 @@ GuiMenu onlinePlayers = PagedGui.<Player>chest(6)
 
 Pages shown to players are one-based. Empty data reports page `1/1`; previous and next controls are disabled automatically. Current pages are clamped when data shrinks. `PageInfo` contains current/total pages, total item count, page size, first zero-based item index, visible count, and navigation flags. Content and its navigation/indicator controls are reserved together and validated against duplicates.
 
+For viewer-localized indicators, use the two-argument renderer overload; it receives the same per-viewer `GuiRenderContext` as other dynamic components:
+
+```java
+.pageIndicator(49, (context, page) -> ItemBuilder.of(Material.PAPER)
+    .name(context.text(TextRef.translated("gui.page", "Page {current}/{total}"),
+        Map.of("current", page.currentPage(), "total", page.totalPages())))
+    .build())
+```
+
 ## Backgrounds and layouts
 
 ```java
@@ -186,7 +195,7 @@ Background patterns render first and only fill slots where no component produced
 
 ## Refresh and localization
 
-`guis.refresh(session)` refreshes one session, `guis.refreshOpen(menu)` refreshes active instances of a definition, and click contexts expose `refresh()` and `refreshSlot(slot)`. `refreshOn(eventType, filter, scope)` installs one shared Bukkit subscription per menu definition. `FULL` re-evaluates every component; `CONTENT` re-evaluates the paged content and its controls. Multiple requests in one tick are coalesced, and stack equality is checked before writing a slot. The manager does not call `Player.updateInventory()` for ordinary updates.
+`guis.refresh(session)` refreshes one session, `guis.refreshOpen(menu)` refreshes active instances of a definition, and click contexts expose `refresh()` and `refreshSlot(slot)`. Refreshing any reserved paginated content/control slot re-renders that whole region so displayed entries and their click actions share one data snapshot. `refreshOn(eventType, filter, scope)` installs one shared Bukkit subscription per menu definition. `FULL` re-evaluates every component; `CONTENT` re-evaluates the paged content and its controls. Multiple requests in one tick are coalesced, and stack equality is checked before writing a slot. The manager does not call `Player.updateInventory()` for ordinary updates.
 
 For localized titles pass an existing `TextProvider` to `GuiManager.create(plugin, provider)` and use `TextRef`:
 
@@ -203,7 +212,7 @@ Item templates are resolved for each viewer, so a localization service reload is
 
 ## Interaction protection and lifecycle
 
-Managed top inventory clicks and drags are always cancelled, including stale inventory instances. In the default `PROTECT_GUI` policy, ordinary bottom-inventory actions remain available while shift transfers into the GUI and double-click collection are cancelled. Use `.interactionPolicy(GuiInteractionPolicy.LOCK_ALL)` to cancel all clicks/drags for the view. Component callbacks run only for the active viewer/session and the exact currently registered slot component. Typed permissions are checked at render and again at click time using Bukkit's native `hasPermission` check.
+Managed top inventory clicks and drags are always cancelled, including stale inventory instances. In the default `PROTECT_GUI` policy, ordinary bottom-inventory actions remain available while shift transfers into the GUI and double-click collection are cancelled. Use `.interactionPolicy(GuiInteractionPolicy.LOCK_ALL)` to cancel all clicks/drags for the view. Each manager handles only inventories it created; close events also verify the session viewer and inventory identity. Component callbacks run only for the active viewer/session and the exact currently registered slot component. Typed permissions are checked at render and again at click time using Bukkit's native `hasPermission` check. Click predicates receive the actual top-inventory slot in their render context.
 
 Construct and open GUIs on the server thread. All inventory mutation and refresh callbacks run on the server thread; `executeOnMainThread` always schedules to the next tick. Close `GuiManager` and `SkullTextureService` in `JavaPlugin.onDisable()`. Close/disconnect clears manager-held player sessions, their navigation history, and session state. Paper is the only verified runtime target; Folia's region/entity scheduler is not supported.
 
