@@ -4,7 +4,6 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
-import org.bukkit.attribute.Attribute;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
@@ -15,6 +14,8 @@ import org.bukkit.inventory.meta.PotionMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.Color;
 import org.bukkit.potion.PotionType;
+import org.bukkit.profile.PlayerProfile;
+import org.bukkit.inventory.meta.SkullMeta;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -114,6 +115,13 @@ public final class ItemBuilder {
         return edit(meta -> {
             if (!(meta instanceof PotionMeta potion)) throw new IllegalArgumentException("Item is not a potion: " + prototype.getType());
             potion.setBasePotionType(type);
+        });
+    }
+    public ItemBuilder skullProfile(PlayerProfile profile) {
+        Objects.requireNonNull(profile, "profile");
+        return edit(meta -> {
+            if (!(meta instanceof SkullMeta skull)) throw new IllegalArgumentException("Item is not a player head: " + prototype.getType());
+            skull.setOwnerProfile(profile.clone());
         });
     }
     public <P, C> ItemBuilder persistentData(NamespacedKey key, PersistentDataType<P, C> type, C value) {

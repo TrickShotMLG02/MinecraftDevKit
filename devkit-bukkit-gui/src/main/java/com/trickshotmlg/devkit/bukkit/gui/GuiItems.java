@@ -3,6 +3,8 @@ package com.trickshotmlg.devkit.bukkit.gui;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.entity.Player;
+import java.util.UUID;
 
 import java.util.Objects;
 
@@ -19,4 +21,32 @@ public final class GuiItems {
     public static ItemStack blackPane() { return of(Material.BLACK_STAINED_GLASS_PANE, " "); }
     public static ItemStack greenPane(String name) { return of(Material.GREEN_STAINED_GLASS_PANE, name); }
     public static ItemStack redPane(String name) { return of(Material.RED_STAINED_GLASS_PANE, name); }
+    public static ItemStack playerHead(Player player) { return SkullTextureService.onlineHead(player); }
+    public static ItemStack skullTexture(String hashOrUrl) { return SkullTextureService.customHead(hashOrUrl); }
+    public static ItemStack skullBase64(String base64) { return SkullTextureService.customHead(SkullTextureService.validateBase64Texture(base64).toExternalForm()); }
+
+    /** Creates a reactive offline head template with a placeholder until Paper resolves the profile. */
+    public static GuiItemTemplate offlinePlayerHead(UUID playerId, SkullTextureService service,
+                                                     GuiManager manager, ItemStack placeholder) {
+        Objects.requireNonNull(playerId, "playerId");
+        Objects.requireNonNull(service, "service");
+        Objects.requireNonNull(manager, "manager");
+        ItemStack fallback = Objects.requireNonNull(placeholder, "placeholder").clone();
+        return context -> {
+            var cached = service.cached(playerId);
+            if (cached.isPresent()) return SkullTextureService.head(cached.get());
+            GuiComponent component = context.component();
+            if (component != null && context.slot() >= 0) {
+                service.resolve(playerId).whenComplete((profile, error) -> {
+                    if (error != null) {
+                        manager.reportAsyncFailure("Could not load player head " + playerId, error);
+                        return;
+                    }
+                    manager.executeOnMainThread(() -> manager.refreshSlotIfCurrent(
+                            context.session(), context.slot(), component));
+                });
+            }
+            return fallback.clone();
+        };
+    }
 }

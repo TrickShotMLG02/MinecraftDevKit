@@ -60,21 +60,47 @@ public final class GuiManager implements Listener, AutoCloseable {
         requireMainThread();
         if (isCurrent(session)) render(session);
     }
+    /** Refreshes a slot only while the session still displays the same component instance. */
+    public void refreshSlotIfCurrent(GuiSession session, int slot, GuiComponent expected) {
+        requireMainThread();
+        Objects.requireNonNull(expected, "expected");
+        if (!isCurrent(session) || session.menu().components().get(slot) != expected) return;
+        GuiRenderContext context = new GuiRenderContext(session.viewer(), session.menu(), session, slot, expected);
+        if (!expected.visible(context)) { session.inventory().clear(slot); return; }
+        org.bukkit.inventory.ItemStack desired = expected.render(context);
+        org.bukkit.inventory.ItemStack current = session.inventory().getItem(slot);
+        if (!Objects.equals(current, desired)) session.inventory().setItem(slot, desired == null ? null : desired.clone());
+    }
     public int openSessionCount() { return sessions.size(); }
+
+    /** Schedules a platform mutation on the server thread and ignores it after manager shutdown. */
+    public void executeOnMainThread(Runnable action) {
+        Objects.requireNonNull(action, "action");
+        if (closed) return;
+        if (Bukkit.isPrimaryThread()) action.run();
+        else Bukkit.getScheduler().runTask(plugin, () -> { if (!closed) action.run(); });
+    }
+    void reportAsyncFailure(String message, Throwable failure) {
+        plugin.getLogger().log(Level.WARNING, message + ": " + failure.getMessage());
+    }
 
     private void render(GuiSession session) {
         GuiMenu menu = session.menu();
-        ManagedHolder holder = new ManagedHolder(session);
-        Inventory inventory = Bukkit.createInventory(holder, menu.size(), menu.title(new GuiRenderContext(session.viewer(), menu, session)));
-        holder.inventory = inventory;
-        GuiRenderContext context = new GuiRenderContext(session.viewer(), menu, session);
+        Inventory inventory = session.inventory();
+        if (inventory == null) {
+            ManagedHolder holder = new ManagedHolder(session);
+            inventory = Bukkit.createInventory(holder, menu.size(), menu.title(new GuiRenderContext(session.viewer(), menu, session)));
+            holder.inventory = inventory;
+            session.inventory(inventory);
+        }
+        inventory.clear();
         for (Map.Entry<Integer, GuiComponent> entry : menu.components().entrySet()) {
             GuiComponent component = entry.getValue();
+            GuiRenderContext context = new GuiRenderContext(session.viewer(), menu, session, entry.getKey(), component);
             if (!component.visible(context)) continue;
             org.bukkit.inventory.ItemStack item = component.render(context);
             if (item != null) inventory.setItem(entry.getKey(), item.clone());
         }
-        session.inventory(inventory);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
