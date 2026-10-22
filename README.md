@@ -52,6 +52,8 @@ The standalone [`Bukkit scheduler example`](examples/bukkit-scheduler-example/RE
 
 The standalone [`Bukkit lifecycle example`](examples/bukkit-lifecycle-example/README.md) demonstrates typed service keys, dependency-ordered startup, managed task scopes and resources, reload hooks, diagnostics, and reverse-order shutdown.
 
+The standalone [`Bukkit integration example`](examples/bukkit-integration-example/README.md) composes lifecycle, typed YAML configuration, English/German localization, generated typed permissions, Cloud commands, protected paginated GUIs, and lifecycle-owned scheduled/asynchronous work in one Paper plugin.
+
 ## Installation
 
 After the repository is public, tag `0.1.0-beta.1`, and JitPack successfully builds that tag, consumers can declare individual modules using JitPack coordinates. These examples document the intended prerelease coordinates; no public artifact or JitPack build has been verified yet.
