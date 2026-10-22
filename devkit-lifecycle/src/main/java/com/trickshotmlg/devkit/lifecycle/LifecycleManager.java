@@ -55,6 +55,9 @@ public final class LifecycleManager implements AutoCloseable {
                         serviceValue = node.factory().create(context);
                         if (serviceValue == null) throw new IllegalStateException("Factory for service '" + node.name() + "' returned null");
                         if (!node.serviceType().isInstance(serviceValue)) {
+                            // A factory may violate its generic contract through raw types or unchecked code.
+                            // The returned object was still acquired during startup, so own it before rejecting it.
+                            if (serviceValue instanceof AutoCloseable closeable) context.manage(closeable);
                             throw new IllegalStateException("Factory for service '" + node.name() + "' returned "
                                     + serviceValue.getClass().getName() + ", expected " + node.serviceType().getName());
                         }

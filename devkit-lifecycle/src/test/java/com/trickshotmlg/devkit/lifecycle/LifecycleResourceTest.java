@@ -104,4 +104,21 @@ class LifecycleResourceTest {
         manager.close();
         assertEquals(List.of("value"), calls);
     }
+
+    @Test void closesAutoCloseableFactoryResultWhenRuntimeTypeValidationFails() {
+        List<String> calls = new ArrayList<>();
+        ServiceKey<PlainService> key = ServiceKey.of("plain", PlainService.class);
+        AutoCloseable incompatible = () -> calls.add("closed-incompatible-result");
+        @SuppressWarnings({"rawtypes", "unchecked"})
+        LifecycleManager manager = LifecycleManager.builder()
+                .service((ServiceKey) key, context -> incompatible)
+                .build();
+
+        LifecycleException failure = assertThrows(LifecycleException.class, manager::start);
+
+        assertInstanceOf(IllegalStateException.class, failure.getCause());
+        assertTrue(failure.getCause().getMessage().contains(PlainService.class.getName()));
+        assertEquals(List.of("closed-incompatible-result"), calls);
+        assertEquals(LifecycleState.FAILED, manager.state());
+    }
 }
