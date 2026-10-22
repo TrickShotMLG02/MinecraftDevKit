@@ -1,0 +1,5 @@
+name: MinecraftDevKitLifecycleExample
+version: 0.1.0-SNAPSHOT
+main: com.trickshotmlg.devkit.examples.lifecycle.LifecycleExamplePlugin
+api-version: '1.21'
+description: Demonstrates typed service ownership and dependency ordered lifecycle management.
