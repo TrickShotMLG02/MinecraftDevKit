@@ -50,8 +50,9 @@ public final class LifecycleBuilder {
     /** Builds an immutable definition. The builder cannot be reused afterward. */
     public LifecycleDefinition build() {
         ensureMutable();
+        LifecycleDefinition definition = new LifecycleDefinition(nodes);
         built = true;
-        return new LifecycleDefinition(nodes);
+        return definition;
     }
 
     private void addName(LifecycleDependency key) {
