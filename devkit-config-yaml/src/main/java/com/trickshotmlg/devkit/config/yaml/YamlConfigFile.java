@@ -1,0 +1,209 @@
+package com.trickshotmlg.devkit.config.yaml;
+
+import com.trickshotmlg.devkit.config.ConfigIssue;
+import com.trickshotmlg.devkit.config.ConfigKey;
+import com.trickshotmlg.devkit.config.ConfigSchema;
+import com.trickshotmlg.devkit.config.ConfigStore;
+import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.DumperOptions;
+import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.TreeMap;
+
+/** Safe YAML loading and default document generation for typed configuration schemas. */
+public final class YamlConfigFile {
+    public static final long DEFAULT_MAX_BYTES = 1_048_576;
+    private final ConfigSchema schema;
+    private final UnknownKeyPolicy unknownKeyPolicy;
+    private final long maxBytes;
+
+    public YamlConfigFile(ConfigSchema schema) { this(schema, UnknownKeyPolicy.PRESERVE_AND_WARN, DEFAULT_MAX_BYTES); }
+    public YamlConfigFile(ConfigSchema schema, UnknownKeyPolicy unknownKeyPolicy) {
+        this(schema, unknownKeyPolicy, DEFAULT_MAX_BYTES);
+    }
+    public YamlConfigFile(ConfigSchema schema, UnknownKeyPolicy unknownKeyPolicy, long maxBytes) {
+        this.schema = Objects.requireNonNull(schema, "schema");
+        this.unknownKeyPolicy = Objects.requireNonNull(unknownKeyPolicy, "unknownKeyPolicy");
+        if (maxBytes < 1 || maxBytes >= Integer.MAX_VALUE) throw new IllegalArgumentException("maxBytes must be between 1 and Integer.MAX_VALUE");
+        this.maxBytes = maxBytes;
+    }
+
+    /** Loads one complete YAML document, applies defaults, and rejects invalid known values. */
+    public YamlConfigLoadResult load(Path file) throws IOException {
+        Objects.requireNonNull(file, "file");
+        byte[] bytes;
+        try (InputStream input = Files.newInputStream(file)) { bytes = input.readNBytes(Math.toIntExact(Math.min(maxBytes + 1, Integer.MAX_VALUE))); }
+        if (bytes.length > maxBytes) throw new IOException("Configuration exceeds " + maxBytes + " bytes: " + file);
+        Map<String, Object> flattened = parse(bytes, file.toString(), maxBytes);
+        LinkedHashMap<String, Object> known = new LinkedHashMap<>();
+        TreeMap<String, Object> unknown = new TreeMap<>();
+        ArrayList<ConfigIssue> issues = new ArrayList<>();
+        flattened.forEach((path, value) -> {
+            if (schema.key(path).isPresent()) known.put(path, value);
+            else {
+                unknown.put(path, freeze(value));
+                if (unknownKeyPolicy == UnknownKeyPolicy.PRESERVE_AND_WARN) {
+                    issues.add(new ConfigIssue(path, ConfigIssue.Severity.WARNING, "unknown configuration key preserved",
+                            java.util.Optional.of(file.toString()), java.util.Optional.empty()));
+                } else if (unknownKeyPolicy == UnknownKeyPolicy.REJECT) {
+                    issues.add(new ConfigIssue(path, ConfigIssue.Severity.ERROR, "unknown configuration key",
+                            java.util.Optional.of(file.toString()), java.util.Optional.empty()));
+                }
+            }
+        });
+        if (issues.stream().anyMatch(issue -> issue.severity() == ConfigIssue.Severity.ERROR)) {
+            throw new YamlConfigException("Unknown configuration values in " + file, issues);
+        }
+        try {
+            return new YamlConfigLoadResult(ConfigStore.fromValues(schema, known), Collections.unmodifiableMap(unknown), issues);
+        } catch (RuntimeException exception) {
+            throw new YamlConfigException("Configuration validation failed in " + file + ": " + safeMessage(exception), exception,
+                    exception instanceof com.trickshotmlg.devkit.config.ConfigValidationException validation ? validation.issues() : List.of());
+        }
+    }
+
+    /** Writes schema defaults only if the target does not already exist. */
+    public boolean createDefaults(Path file) throws IOException {
+        Objects.requireNonNull(file, "file");
+        byte[] bytes = defaultsYaml().getBytes(StandardCharsets.UTF_8);
+        Path parent = file.toAbsolutePath().getParent();
+        if (parent != null) Files.createDirectories(parent);
+        try {
+            Files.write(file, bytes, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+            return true;
+        } catch (java.nio.file.FileAlreadyExistsException exists) { return false; }
+    }
+
+    /** Deterministically serializes only schema keys that have defaults. */
+    public String defaultsYaml() {
+        TreeMap<String, Object> flattened = new TreeMap<>();
+        for (ConfigKey<?> key : schema.keys().values()) key.defaultValue().ifPresent(value -> flattened.put(key.path(), encode(key, value)));
+        return dump(nest(flattened));
+    }
+
+    /** Serializes a store and preserved unknown values; persistence is added by the file handle API. */
+    public String serialize(ConfigStore store, Map<String, ?> unknownValues) {
+        if (store.schema() != schema) throw new IllegalArgumentException("Store belongs to a different schema");
+        TreeMap<String, Object> flat = new TreeMap<>();
+        store.snapshot().values().forEach((path, value) -> flat.put(path, encode(schema.key(path).orElseThrow(), value)));
+        unknownValues.forEach((path, value) -> {
+            if (schema.key(path).isPresent()) throw new IllegalArgumentException("Unknown-value map collides with schema key '" + path + "'");
+            if (flat.putIfAbsent(path, freeze(value)) != null) throw new IllegalArgumentException("Duplicate configuration path '" + path + "'");
+        });
+        return dump(nest(flat));
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static Object encode(ConfigKey key, Object value) { return key.codec().encode(value); }
+
+    private String dump(Map<String, Object> root) {
+        DumperOptions options = new DumperOptions();
+        options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
+        options.setPrettyFlow(true);
+        options.setIndent(2);
+        options.setIndicatorIndent(0);
+        options.setAllowUnicode(true);
+        options.setLineBreak(DumperOptions.LineBreak.UNIX);
+        options.setDefaultScalarStyle(DumperOptions.ScalarStyle.PLAIN);
+        StringWriter output = new StringWriter();
+        new Yaml(options).dump(root, output);
+        return output.toString();
+    }
+
+    private static Map<String, Object> parse(byte[] bytes, String source, long maxBytes) throws IOException {
+        LoaderOptions options = new LoaderOptions();
+        options.setAllowDuplicateKeys(false);
+        options.setMaxAliasesForCollections(20);
+        options.setNestingDepthLimit(32);
+        options.setCodePointLimit((int) maxBytes);
+        try {
+            Object root = new Yaml(new SafeConstructor(options)).load(new InputStreamReader(
+                    new java.io.ByteArrayInputStream(bytes), StandardCharsets.UTF_8));
+            if (root == null) return Map.of();
+            if (!(root instanceof Map<?, ?> map)) throw new IOException("Configuration YAML root must be a mapping: " + source);
+            TreeMap<String, Object> flattened = new TreeMap<>();
+            flatten(map, "", flattened, source, new IdentityHashMap<>(), 0);
+            return Collections.unmodifiableMap(flattened);
+        } catch (IOException exception) { throw exception; }
+        catch (RuntimeException exception) { throw new IOException("Invalid configuration YAML in " + source + ": " + exception.getMessage(), exception); }
+    }
+
+    private static void flatten(Map<?, ?> input, String prefix, Map<String, Object> output,
+                                String source, IdentityHashMap<Object, Boolean> ancestors, int depth) throws IOException {
+        if (depth > 32) throw new IOException("Configuration nesting exceeds 32 levels in " + source);
+        if (ancestors.put(input, Boolean.TRUE) != null) throw new IOException("Recursive YAML aliases are not supported in " + source);
+        try {
+            for (Map.Entry<?, ?> entry : input.entrySet()) {
+                if (!(entry.getKey() instanceof String key) || key.isBlank() || key.contains(".")) {
+                    throw new IOException("Configuration keys must be non-empty strings without dots in " + source + ": " + entry.getKey());
+                }
+                String path = prefix.isEmpty() ? key : prefix + "." + key;
+                Object value = entry.getValue();
+                if (value instanceof Map<?, ?> child) flatten(child, path, output, source, ancestors, depth + 1);
+                else {
+                    ensureAcyclic(value, ancestors, source, depth + 1);
+                    if (output.putIfAbsent(path, freeze(value)) != null) throw new IOException("Duplicate flattened configuration key '" + path + "' in " + source);
+                }
+            }
+        } finally { ancestors.remove(input); }
+    }
+
+    private static void ensureAcyclic(Object value, IdentityHashMap<Object, Boolean> ancestors, String source, int depth) throws IOException {
+        if (depth > 32) throw new IOException("Configuration nesting exceeds 32 levels in " + source);
+        if (value instanceof Map<?, ?> map) {
+            if (ancestors.put(map, Boolean.TRUE) != null) throw new IOException("Recursive YAML aliases are not supported in " + source);
+            try { for (Object item : map.values()) ensureAcyclic(item, ancestors, source, depth + 1); }
+            finally { ancestors.remove(map); }
+        } else if (value instanceof List<?> list) {
+            if (ancestors.put(list, Boolean.TRUE) != null) throw new IOException("Recursive YAML aliases are not supported in " + source);
+            try { for (Object item : list) ensureAcyclic(item, ancestors, source, depth + 1); }
+            finally { ancestors.remove(list); }
+        }
+    }
+
+    private static Map<String, Object> nest(Map<String, ?> flat) {
+        LinkedHashMap<String, Object> root = new LinkedHashMap<>();
+        flat.forEach((path, value) -> {
+            String[] parts = path.split("\\.");
+            Map<String, Object> current = root;
+            for (int i = 0; i < parts.length - 1; i++) {
+                Object prior = current.get(parts[i]);
+                if (prior != null && !(prior instanceof Map<?, ?>)) throw new IllegalArgumentException("Path collides with scalar: " + path);
+                if (prior == null) { LinkedHashMap<String, Object> next = new LinkedHashMap<>(); current.put(parts[i], next); current = next; }
+                else current = (Map<String, Object>) prior;
+            }
+            current.put(parts[parts.length - 1], value);
+        });
+        return root;
+    }
+
+    private static String safeMessage(RuntimeException exception) {
+        return exception instanceof com.trickshotmlg.devkit.config.ConfigValidationException ? exception.getMessage() : exception.getClass().getSimpleName();
+    }
+
+    private static Object freeze(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            LinkedHashMap<Object, Object> copy = new LinkedHashMap<>();
+            map.forEach((key, item) -> copy.put(key, freeze(item)));
+            return Collections.unmodifiableMap(copy);
+        }
+        if (value instanceof List<?> list) return list.stream().map(YamlConfigFile::freeze).toList();
+        return value;
+    }
+}
