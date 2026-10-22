@@ -10,7 +10,13 @@ From `examples/bukkit-permissions-example`, with PowerShell available and JDK 21
 .\gradlew.bat provisionPaperServer
 ```
 
-This downloads the latest stable Paper build for Minecraft 1.21.8 (or `-PpaperMinecraftVersion=...`) using PaperMC's official downloads service and validates the published SHA-256 checksum. The server is created at `examples/bukkit-permissions-example/build/devserver/paper-<version>/`. The ordinary build does not download or start a server.
+This downloads the latest stable Paper build for Minecraft 1.21.8 using PaperMC's official downloads service and validates the published SHA-256 checksum. To select another version in Windows PowerShell, quote the dotted Gradle property so it remains one argument:
+
+```powershell
+.\gradlew.bat provisionPaperServer '-PpaperMinecraftVersion=1.21.11'
+```
+
+The server is created at `examples/bukkit-permissions-example/build/devserver/paper-<version>/`. The ordinary build does not download or start a server.
 
 Provisioning writes `eula=false` if no EULA file exists. Read and accept the [Minecraft EULA](https://www.minecraft.net/eula) yourself before changing it to `eula=true`. The run tasks stop with an actionable message until this is done.
 
@@ -43,7 +49,7 @@ Then run `syncPaperTestPlugins`. A mismatch fails without replacing the destinat
 
 The shared project run configurations are in the repository `.run` directory. Open the root repository in IntelliJ and import/refresh Gradle. Also link `examples/bukkit-permissions-example` as a Gradle project (Gradle tool window **+** / **Link Gradle Project**) so IntelliJ indexes the plugin sources for breakpoints. Run **Paper Test Server** for normal startup. For plugin breakpoints, first run **Paper Server for Debug**; it starts the server suspended on JDWP port 5005. Then start **Attach Paper Debugger**. Both server profiles build, deploy the example, and sync checksum-pinned plugins automatically.
 
-The debug JVM listens on localhost via JDWP. `-PpaperMinecraftVersion=<version>` selects another Paper server release; use `--rerun-tasks` on `provisionPaperServer` when you want to refresh the stable server build for an existing version. On systems using PowerShell 7, pass `-PpaperPowerShell=pwsh`.
+The debug JVM listens on localhost via JDWP. `-PpaperMinecraftVersion=<version>` selects another Paper server release; quote this property in PowerShell as shown above. Use `--rerun-tasks` on `provisionPaperServer` when you want to refresh the stable server build for an existing version. On systems using PowerShell 7, pass `-PpaperPowerShell=pwsh`.
 
 The example targets Paper 1.21.8 and Java 21. Newer Minecraft/Paper releases may require a newer Java toolchain; use a matching JDK and rebuild the example before changing the server version.
 
