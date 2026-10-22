@@ -59,6 +59,11 @@ public final class YamlConfigFile {
 
     /** Loads one complete YAML document, applies defaults, and rejects invalid known values. */
     public YamlConfigLoadResult load(Path file) throws IOException {
+        return loadDocument(file).result();
+    }
+
+    /** Internal load result couples parsed values to the fingerprint of the bytes they came from. */
+    LoadedDocument loadDocument(Path file) throws IOException {
         Objects.requireNonNull(file, "file");
         byte[] bytes;
         try (InputStream input = Files.newInputStream(file)) { bytes = input.readNBytes(Math.toIntExact(Math.min(maxBytes + 1, Integer.MAX_VALUE))); }
@@ -103,8 +108,9 @@ public final class YamlConfigFile {
             throw new YamlConfigException("Unknown configuration values in " + file, issues);
         }
         try {
-            return new YamlConfigLoadResult(ConfigStore.fromValues(schema, known), Collections.unmodifiableMap(unknown), issues,
-                    sourceVersion < schema.version(), sourceVersion, java.util.Optional.of(fingerprint(bytes)));
+            YamlConfigLoadResult result = new YamlConfigLoadResult(ConfigStore.fromValues(schema, known),
+                    Collections.unmodifiableMap(unknown), issues, sourceVersion < schema.version(), sourceVersion);
+            return new LoadedDocument(result, fingerprint(bytes));
         } catch (RuntimeException exception) {
             List<ConfigIssue> validationIssues = exception instanceof com.trickshotmlg.devkit.config.ConfigValidationException validation
                     ? validation.issues().stream().map(issue -> new ConfigIssue(issue.path(), issue.severity(), issue.message(),
@@ -300,6 +306,8 @@ public final class YamlConfigFile {
         if (first instanceof java.util.Set<?> a && second instanceof java.util.Set<?> b) return a.equals(b);
         return first.equals(second);
     }
+
+    record LoadedDocument(YamlConfigLoadResult result, String sourceFingerprint) { }
 
     static Object freeze(Object value) {
         if (value instanceof Map<?, ?> map) {

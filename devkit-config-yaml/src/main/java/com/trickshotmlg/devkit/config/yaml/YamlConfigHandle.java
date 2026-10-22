@@ -28,13 +28,13 @@ public final class YamlConfigHandle implements AutoCloseable {
     private volatile boolean migrationPending;
     private volatile int sourceVersion;
 
-    private YamlConfigHandle(Path file, YamlConfigFile yaml, YamlConfigLoadResult loaded) {
+    private YamlConfigHandle(Path file, YamlConfigFile yaml, YamlConfigFile.LoadedDocument loadedDocument) {
         this.file = file.toAbsolutePath().normalize();
         this.yaml = yaml;
+        YamlConfigLoadResult loaded = loadedDocument.result();
         store = loaded.store();
         unknownValues = loaded.unknownValues();
-        diskFingerprint = loaded.sourceFingerprint().orElseThrow(
-                () -> new IllegalArgumentException("Loaded YAML result has no source fingerprint"));
+        diskFingerprint = loadedDocument.sourceFingerprint();
         migrationPending = loaded.migrated();
         sourceVersion = loaded.sourceVersion();
         if (migrationPending) store.markUnsaved();
@@ -55,7 +55,7 @@ public final class YamlConfigHandle implements AutoCloseable {
     }
     private static YamlConfigHandle load(Path file, YamlConfigFile yaml) throws IOException {
         Path normalized = file.toAbsolutePath().normalize();
-        YamlConfigLoadResult result = yaml.load(normalized);
+        YamlConfigFile.LoadedDocument result = yaml.loadDocument(normalized);
         return new YamlConfigHandle(normalized, yaml, result);
     }
 
@@ -81,13 +81,13 @@ public final class YamlConfigHandle implements AutoCloseable {
             return reloadFailure(true, "configuration has unsaved in-memory changes", java.util.List.of());
         }
         try {
-            YamlConfigLoadResult candidate = yaml.load(file);
+            YamlConfigFile.LoadedDocument loadedCandidate = yaml.loadDocument(file);
+            YamlConfigLoadResult candidate = loadedCandidate.result();
             boolean changed = !store.snapshot().values().equals(candidate.store().snapshot().values())
                     || !YamlConfigFile.valuesEqual(unknownValues, candidate.unknownValues());
             store.replaceFromReload(candidate.store().snapshot().values(), expectedGeneration);
             unknownValues = candidate.unknownValues();
-            diskFingerprint = candidate.sourceFingerprint().orElseThrow(
-                    () -> new IllegalStateException("Loaded YAML result has no source fingerprint"));
+            diskFingerprint = loadedCandidate.sourceFingerprint();
             migrationPending = candidate.migrated();
             sourceVersion = candidate.sourceVersion();
             if (migrationPending) store.markUnsaved();
