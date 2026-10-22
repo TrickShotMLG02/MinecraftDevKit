@@ -170,4 +170,20 @@ class YamlPersistenceTest {
         assertTrue(unchanged.success(), unchanged.error().orElse(""));
         assertFalse(unchanged.changed());
     }
+
+    @Test void emptyUnknownMappingsSurviveLoadSaveAndReload() throws Exception {
+        Path file = temp.resolve("empty-unknown.yml");
+        Files.writeString(file, "friends:\n  max: 100\nfuture:\n  empty: {}\n  nested:\n    empty: {}\n");
+        YamlConfigHandle handle = YamlConfigHandle.load(file, schema);
+
+        assertEquals(java.util.Map.of(), handle.unknownValues().get("future.empty"));
+        assertEquals(java.util.Map.of(), handle.unknownValues().get("future.nested.empty"));
+        handle.store().set(MAX, 110);
+        YamlSaveResult save = handle.save(YamlSaveOptions.safeRewrite());
+        assertTrue(save.success(), save.error().orElse(""));
+
+        YamlConfigHandle reloaded = YamlConfigHandle.load(file, schema);
+        assertEquals(java.util.Map.of(), reloaded.unknownValues().get("future.empty"));
+        assertEquals(java.util.Map.of(), reloaded.unknownValues().get("future.nested.empty"));
+    }
 }

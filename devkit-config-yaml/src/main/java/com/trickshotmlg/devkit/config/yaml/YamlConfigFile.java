@@ -215,14 +215,22 @@ public final class YamlConfigFile {
                 }
                 String path = prefix.isEmpty() ? key : prefix + "." + key;
                 Object value = entry.getValue();
-                if (value instanceof Map<?, ?> child && schema.key(path).isEmpty())
-                    flatten(child, path, output, source, ancestors, depth + 1, schema);
-                else {
+                if (value instanceof Map<?, ?> child && schema.key(path).isEmpty()) {
+                    if (child.isEmpty()) {
+                        if (!isSchemaSection(path, schema) && output.putIfAbsent(path, Map.of()) != null)
+                            throw new IOException("Duplicate flattened configuration key '" + path + "' in " + source);
+                    } else flatten(child, path, output, source, ancestors, depth + 1, schema);
+                } else {
                     ensureAcyclic(value, ancestors, source, depth + 1);
                     if (output.putIfAbsent(path, freeze(value)) != null) throw new IOException("Duplicate flattened configuration key '" + path + "' in " + source);
                 }
             }
         } finally { ancestors.remove(input); }
+    }
+
+    private static boolean isSchemaSection(String path, ConfigSchema schema) {
+        String prefix = path + ".";
+        return schema.keys().keySet().stream().anyMatch(key -> key.startsWith(prefix));
     }
 
     private static void ensureAcyclic(Object value, IdentityHashMap<Object, Boolean> ancestors, String source, int depth) throws IOException {
