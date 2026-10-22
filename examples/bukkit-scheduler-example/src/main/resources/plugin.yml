@@ -1,0 +1,5 @@
+name: MinecraftDevKitSchedulerExample
+version: 0.1.0-SNAPSHOT
+main: com.trickshotmlg.devkit.examples.scheduler.SchedulerExamplePlugin
+api-version: '1.21'
+description: Demonstrates MinecraftDevKit task scheduling, scopes, and thread handoff.
