@@ -8,6 +8,8 @@ include(
     "devkit-localization-cli",
     "devkit-config",
     "devkit-config-yaml",
+    "devkit-storage",
+    "devkit-storage-migrations",
     "devkit-permissions",
     "devkit-commands",
     "devkit-bukkit",
