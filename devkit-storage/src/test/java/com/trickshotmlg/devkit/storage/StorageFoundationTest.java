@@ -54,6 +54,7 @@ class StorageFoundationTest {
         StorageConfiguration configuration = new StorageConfiguration("jdbc:mysql://localhost:3306/game", "user",
                 password, 8, Duration.ofSeconds(10), Duration.ofMinutes(5), null, false, false, false);
         assertFalse(configuration.toString().contains("very-secret"));
+        assertFalse(configuration.toString().contains("username=user"));
         assertThrows(IllegalArgumentException.class, () -> new StorageConfiguration("jdbc:mysql://localhost/game",
                 "user", password, 0, Duration.ofSeconds(10), Duration.ofMinutes(5), null, false, false, false));
         assertThrows(IllegalArgumentException.class, () -> Storage.builder().connectionTimeout(Duration.ofMillis(-1))

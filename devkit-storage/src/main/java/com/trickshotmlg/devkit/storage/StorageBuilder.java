@@ -104,7 +104,10 @@ public final class StorageBuilder {
 
     /** Convenience overload. Prefer the char-array overload when the source can avoid immutable strings. */
     public StorageBuilder credentials(String username, String password) {
-        return credentials(username, password == null ? null : password.toCharArray());
+        if (password == null) return credentials(username, (char[]) null);
+        char[] temporary = password.toCharArray();
+        try { return credentials(username, temporary); }
+        finally { java.util.Arrays.fill(temporary, '\0'); }
     }
 
     public StorageBuilder maximumPoolSize(int size) { maximumPoolSize = size; maximumPoolSizeExplicit = true; return this; }

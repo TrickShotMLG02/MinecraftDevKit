@@ -67,7 +67,7 @@ public final class StorageConfiguration {
                 : jdbcUrl.startsWith("jdbc:sqlite:") ? "sqlite"
                 : jdbcUrl.startsWith("jdbc:mysql:") ? "mysql"
                 : jdbcUrl.startsWith("jdbc:mariadb:") ? "mariadb" : "custom-jdbc";
-        return "StorageConfiguration[backend=" + backend + ", username=" + username
+        return "StorageConfiguration[backend=" + backend + ", username=<redacted>"
                 + ", password=<redacted>, maximumPoolSize=" + maximumPoolSize
                 + ", connectionTimeout=" + connectionTimeout + ", sqlite=" + sqlite + "]";
     }
