@@ -13,13 +13,28 @@ public final class LifecycleBuilder {
     private final Set<String> names = new HashSet<>();
     private boolean built;
 
-    /** Registers an automatically closed service with declared dependencies. */
+    /**
+     * Registers an automatically closed service with declared dependencies.
+     * @param key typed identity of the service
+     * @param factory synchronous service factory
+     * @param dependencies nodes that must be started first
+     * @param <T> service type
+     * @return this builder
+     */
     public <T> LifecycleBuilder service(ServiceKey<T> key, ServiceFactory<? extends T> factory,
                                         LifecycleDependency... dependencies) {
         return serviceWithCleanup(key, factory, null, dependencies);
     }
 
-    /** Registers a service with an explicit cleanup callback. */
+    /**
+     * Registers a service whose cleanup is supplied explicitly instead of inferred from {@link AutoCloseable}.
+     * @param key typed identity of the service
+     * @param factory synchronous service factory
+     * @param cleanup cleanup action, or {@code null} for automatic {@link AutoCloseable} cleanup
+     * @param dependencies nodes that must be started first
+     * @param <T> service type
+     * @return this builder
+     */
     public <T> LifecycleBuilder serviceWithCleanup(ServiceKey<T> key, ServiceFactory<? extends T> factory,
                                                   ServiceCleanup<? super T> cleanup,
                                                   LifecycleDependency... dependencies) {
@@ -34,7 +49,14 @@ public final class LifecycleBuilder {
         return this;
     }
 
-    /** Registers a startup/shutdown component without a retrievable service value. */
+    /**
+     * Registers startup and optional shutdown actions without publishing a retrievable service value.
+     * @param key identity of the component
+     * @param start startup action
+     * @param stop shutdown action, or {@code null} when resources registered by start are sufficient
+     * @param dependencies nodes that must be started first
+     * @return this builder
+     */
     public LifecycleBuilder component(ComponentKey key, LifecycleAction start, LifecycleAction stop,
                                       LifecycleDependency... dependencies) {
         ensureMutable();
@@ -47,7 +69,12 @@ public final class LifecycleBuilder {
         return this;
     }
 
-    /** Registers one explicit reload hook for an already registered service or component. */
+    /**
+     * Registers one opt-in reload action for a previously registered node.
+     * @param key identity of the service or component
+     * @param action reload callback
+     * @return this builder
+     */
     public LifecycleBuilder reload(LifecycleDependency key, LifecycleAction action) {
         ensureMutable();
         Objects.requireNonNull(key, "key");
@@ -64,7 +91,11 @@ public final class LifecycleBuilder {
         throw new IllegalArgumentException("Cannot register reload hook for unknown lifecycle node '" + key.name() + "'");
     }
 
-    /** Builds an immutable definition. The builder cannot be reused afterward. */
+    /**
+     * Builds an immutable, dependency-validated definition. The builder cannot be reused afterward.
+     * @return validated lifecycle definition
+     * @throws IllegalArgumentException if dependency identities are invalid or cyclic
+     */
     public LifecycleDefinition build() {
         ensureMutable();
         LifecycleDefinition definition = new LifecycleDefinition(nodes);

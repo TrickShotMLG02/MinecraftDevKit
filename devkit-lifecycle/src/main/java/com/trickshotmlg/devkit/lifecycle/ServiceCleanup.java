@@ -1,7 +1,8 @@
 package com.trickshotmlg.devkit.lifecycle;
 
-/** Explicit shutdown callback for services that do not implement {@link AutoCloseable}. */
+/** Explicit cleanup callback for a service that does not use automatic {@link AutoCloseable} ownership. */
 @FunctionalInterface
 public interface ServiceCleanup<T> {
+    /** Closes or otherwise releases the service. */
     void close(T service, LifecycleContext context) throws Exception;
 }

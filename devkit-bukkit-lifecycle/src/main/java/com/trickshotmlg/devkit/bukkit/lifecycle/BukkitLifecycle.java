@@ -30,7 +30,12 @@ public final class BukkitLifecycle implements Listener, AutoCloseable {
         if (registerListener) plugin.getServer().getPluginManager().registerEvents(this, plugin);
     }
 
-    /** Creates an adapter and closes it automatically when its plugin is disabled. */
+    /**
+     * Creates an adapter and closes it automatically when its plugin is disabled.
+     * @param plugin plugin that owns the lifecycle and logger
+     * @param manager core lifecycle manager to delegate to
+     * @return adapter bound to the plugin's traditional server thread
+     */
     public static BukkitLifecycle create(Plugin plugin, LifecycleManager manager) {
         return new BukkitLifecycle(plugin, manager, Bukkit::isPrimaryThread, true);
     }
@@ -47,7 +52,10 @@ public final class BukkitLifecycle implements Listener, AutoCloseable {
         }
     }
 
-    /** Runs registered reload hooks on the Bukkit server thread. */
+    /**
+     * Runs registered reload hooks on the Bukkit server thread.
+     * @return attempted hooks and individual failures
+     */
     public LifecycleReloadResult reload() {
         requireServerThread("reload");
         if (closed.get()) throw new IllegalStateException("Bukkit lifecycle adapter is closed");
@@ -59,9 +67,14 @@ public final class BukkitLifecycle implements Listener, AutoCloseable {
         return result;
     }
 
+    /** The lifecycle manager delegated to by this adapter. */
     public LifecycleManager manager() { return manager; }
+    /** Current state of the delegated lifecycle manager. */
     public LifecycleState state() { return manager.state(); }
 
+    /** Closes this adapter when its owning plugin is disabled.
+     * @param event plugin disable event
+     */
     @EventHandler
     public void onPluginDisable(PluginDisableEvent event) {
         closeForPlugin(event.getPlugin());

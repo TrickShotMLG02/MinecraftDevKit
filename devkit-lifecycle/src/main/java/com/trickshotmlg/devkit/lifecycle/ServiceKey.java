@@ -12,7 +12,13 @@ public final class ServiceKey<T> implements LifecycleDependency {
         this.serviceType = Objects.requireNonNull(serviceType, "serviceType");
     }
 
-    /** Creates a service key with a stable diagnostic name and runtime type. */
+    /**
+     * Creates a service key with a stable diagnostic name and runtime type.
+     * @param name stable logical service name unique within a lifecycle definition
+     * @param serviceType runtime service class
+     * @param <T> service type
+     * @return immutable typed service identity
+     */
     public static <T> ServiceKey<T> of(String name, Class<T> serviceType) {
         return new ServiceKey<>(name, serviceType);
     }

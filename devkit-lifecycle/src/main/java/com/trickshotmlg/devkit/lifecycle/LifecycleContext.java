@@ -25,13 +25,34 @@ public final class LifecycleContext {
     /** Name of the service or component whose callback is running. */
     public String componentName() { return node.name(); }
 
-    /** Gets a declared service dependency that has started successfully. */
+    /**
+     * Gets a declared service dependency that has started successfully.
+     * @param key dependency key declared when registering this node
+     * @param <T> service type
+     * @return started dependency instance
+     * @throws IllegalArgumentException if the dependency was not declared
+     * @throws IllegalStateException if the dependency is not yet started
+     */
     public <T> T require(ServiceKey<T> key) { return manager.requireDependency(node, key); }
 
-    /** Gets the current service itself, for example from its reload hook. */
+    /**
+     * Gets the current service itself, for example from its reload hook.
+     * @param key this node's service key
+     * @param <T> service type
+     * @return published service instance
+     * @throws IllegalArgumentException if the key is not this node's service key
+     * @throws IllegalStateException if the current service is not published
+     */
     public <T> T service(ServiceKey<T> key) { return manager.requireCurrentService(node, key); }
 
-    /** Registers a resource for automatic close. It is cleaned if startup fails or when this node stops. */
+    /**
+     * Registers a resource for automatic close. It is cleaned if startup fails or when this node stops.
+     * @param resource resource owned by this node after successful startup
+     * @param <T> resource type
+     * @return the same resource, for convenient inline registration
+     * @throws IllegalArgumentException if this lifecycle already owns the same resource identity
+     * @throws IllegalStateException if registration is attempted outside this node's startup callback
+     */
     public <T extends AutoCloseable> T manage(T resource) {
         Objects.requireNonNull(resource, "resource");
         synchronized (resourceLock) {
@@ -41,13 +62,19 @@ public final class LifecycleContext {
         return resource;
     }
 
-    /** Registers a cleanup action, invoked at most once during rollback or shutdown. */
+    /**
+     * Registers a cleanup action, invoked at most once during rollback or shutdown.
+     * @param cleanup cleanup callback with lifecycle context access
+     */
     public void onClose(LifecycleAction cleanup) {
         Objects.requireNonNull(cleanup, "cleanup");
         manage((AutoCloseable) () -> cleanup.run(this));
     }
 
-    /** Registers a simple cleanup action, invoked at most once during rollback or shutdown. */
+    /**
+     * Registers a simple cleanup action, invoked at most once during rollback or shutdown.
+     * @param cleanup cleanup callback
+     */
     public void onClose(Runnable cleanup) {
         Objects.requireNonNull(cleanup, "cleanup");
         manage((AutoCloseable) cleanup::run);
