@@ -1,0 +1,62 @@
+integration:
+  events:
+    join: 'Willkommen! Jetzt sind {count} Spieler online.'
+  menu:
+    title: MinecraftDevKit-Integration
+    profile: Dein Profil
+    players: Online-Spieler
+    settings: Einstellungen
+    status: Anwendungsstatus
+    close: Schließen
+  players:
+    title: Online-Spieler
+    page: Seite {current}/{total}
+    count: 'Online-Spieler: {count}'
+    empty: Niemand ist online
+    detail: 'Spielerdetails: {name}'
+    detail-title: Spielerdetails
+    back: Zurück zur Spielerliste
+    previous: Vorherige Seite
+    next: Nächste Seite
+    unavailable: Keine weitere Seite
+  settings:
+    title: Einstellungen
+    notifications: 'Benachrichtigungen: {state}'
+    enabled: Aktiviert
+    disabled: Deaktiviert
+    view: 'Listenansicht: {value}'
+    compact: Kompakt
+    detailed: Detailliert
+    unsaved: Nicht gespeicherte Konfigurationsänderungen
+    saved: Konfiguration gespeichert
+    save: Konfiguration speichern
+    reload: Konfiguration neu laden
+  status:
+    title: Status
+    lifecycle: 'Lebenszyklus: {state}'
+    config: 'Konfiguration: {state}'
+    online: 'Online-Spieler: {count}'
+  command:
+    denied: Du darfst dieses Menü nicht verwenden.
+    player-only: Dieser Befehl kann nur von Spielern verwendet werden.
+    reload-success: Neuladen abgeschlossen. {count} Hooks ausgeführt.
+    reload-partial: Neuladen mit {count} Fehler(n); erfolgreiche Änderungen bleiben aktiv.
+    save-success: Konfiguration gespeichert.
+    save-conflict: Konfigurationsdatei extern geändert; es wurde nichts überschrieben.
+    save-failure: 'Konfiguration konnte nicht gespeichert werden: {error}'
+    delayed: Verzögerte Aufgabe auf dem Serverthread ausgeführt.
+    async-started: Hintergrundberechnung gestartet.
+    async-result: 'Ergebnis der Hintergrundberechnung: {result}'
+    scheduled: Nachricht für 40 Ticks vorgemerkt.
+commands:
+  error:
+    unknown_command: Unbekannter Befehl.
+    invalid_syntax: 'Ungültige Befehlssyntax. Verwendung: {usage}'
+    missing_argument: Ein erforderliches Argument fehlt.
+    invalid_argument: 'Ein Argument ist ungültig: {argument}'
+    no_permission: Du hast keine Berechtigung dafür.
+    player_only: Dieser Befehl kann nur von einem Spieler verwendet werden.
+    console_only: Dieser Befehl kann nur von der Konsole verwendet werden.
+    execution: Der Befehl konnte nicht ausgeführt werden.
+  help:
+    page: Seite {page} von {pages}

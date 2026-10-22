@@ -1,0 +1,62 @@
+integration:
+  events:
+    join: 'Welcome! There are now {count} players online.'
+  menu:
+    title: MinecraftDevKit Integration
+    profile: Your profile
+    players: Online players
+    settings: Settings
+    status: Application status
+    close: Close
+  players:
+    title: Online players
+    page: Page {current}/{total}
+    count: 'Online players: {count}'
+    empty: Nobody is online
+    detail: 'Player details: {name}'
+    detail-title: Player details
+    back: Back to players
+    previous: Previous page
+    next: Next page
+    unavailable: No page here
+  settings:
+    title: Settings
+    notifications: 'Notifications: {state}'
+    enabled: Enabled
+    disabled: Disabled
+    view: 'List presentation: {value}'
+    compact: Compact
+    detailed: Detailed
+    unsaved: Unsaved configuration changes
+    saved: Configuration saved
+    save: Save configuration
+    reload: Reload configuration
+  status:
+    title: Status
+    lifecycle: 'Lifecycle: {state}'
+    config: 'Configuration: {state}'
+    online: 'Online players: {count}'
+  command:
+    denied: You do not have permission to use this menu.
+    player-only: This command must be used by a player.
+    reload-success: Reload completed. Attempted {count} reload hooks.
+    reload-partial: Reload completed with {count} failure(s); successful changes were kept.
+    save-success: Configuration saved.
+    save-conflict: Configuration file changed externally; no overwrite was made.
+    save-failure: 'Configuration save failed: {error}'
+    delayed: Delayed task ran on the server thread.
+    async-started: Started a background calculation.
+    async-result: 'Background calculation result: {result}'
+    scheduled: Scheduled a message for 40 ticks from now.
+commands:
+  error:
+    unknown_command: Unknown command.
+    invalid_syntax: 'Invalid command syntax. Usage: {usage}'
+    missing_argument: A required argument is missing.
+    invalid_argument: 'One of the arguments is invalid: {argument}'
+    no_permission: You do not have permission to do that.
+    player_only: This command can only be used by a player.
+    console_only: This command can only be used from the console.
+    execution: The command could not be completed.
+  help:
+    page: Page {page} of {pages}
