@@ -72,6 +72,20 @@ public final class LifecycleContext {
         }
     }
 
+    /** Transfers an early rollback registration of the returned service to its explicit service cleanup. */
+    void manageServiceCleanup(AutoCloseable service, LifecycleAction cleanup) {
+        synchronized (resourceLock) {
+            if (!acceptingResources) throw new IllegalStateException("Resource registration has ended for '" + componentName() + "'");
+            LifecycleManager.OwnedResource earlyServiceOwnership = resources.stream()
+                    .filter(owned -> owned.owns(service)).findFirst().orElse(null);
+            if (earlyServiceOwnership != null) {
+                resources.remove(earlyServiceOwnership);
+                manager.releaseResource(service);
+            }
+            resources.add(manager.claimResource((AutoCloseable) () -> cleanup.run(this)));
+        }
+    }
+
     /**
      * Registers a cleanup action, invoked at most once during rollback or shutdown.
      * @param cleanup cleanup callback with lifecycle context access

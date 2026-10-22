@@ -77,7 +77,9 @@ public final class LifecycleManager implements AutoCloseable {
                         }
                         if (node.cleanup() != null) {
                             Object created = serviceValue;
-                            context.onClose(ignored -> node.cleanup().close(created, context));
+                            LifecycleAction cleanup = ignored -> node.cleanup().close(created, context);
+                            if (serviceValue instanceof AutoCloseable closeable) context.manageServiceCleanup(closeable, cleanup);
+                            else context.onClose(cleanup);
                         } else if (serviceValue instanceof AutoCloseable closeable) context.manageServiceResult(closeable);
                     } else {
                         node.start().run(context);
@@ -314,6 +316,17 @@ public final class LifecycleManager implements AutoCloseable {
                 throw new IllegalArgumentException("Resource is already owned by this lifecycle");
             }
             return new OwnedResource(resource);
+        }
+    }
+
+    void releaseResource(AutoCloseable resource) {
+        synchronized (stateLock) {
+            if (operation != Operation.START || operationOwner != Thread.currentThread()) {
+                throw new IllegalStateException("Resources may only be transferred during their startup callback");
+            }
+            if (resourceIdentities.remove(resource) == null) {
+                throw new IllegalStateException("Resource ownership was not registered by this lifecycle");
+            }
         }
     }
 

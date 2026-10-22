@@ -44,6 +44,23 @@ class LifecycleResourceTest {
         assertEquals(List.of("service"), calls);
     }
 
+    @Test void explicitServiceCleanupTakesOverAnAlreadyManagedServiceInstance() {
+        List<String> calls = new ArrayList<>();
+        ServiceKey<ResourceService> key = ServiceKey.of("service", ResourceService.class);
+        LifecycleManager manager = LifecycleManager.builder()
+                .serviceWithCleanup(key, context -> {
+                    ResourceService service = new ResourceService("service.close", calls);
+                    context.manage(service);
+                    return service;
+                }, (service, context) -> calls.add("explicit:" + service.name()))
+                .build();
+
+        manager.start();
+        manager.close();
+
+        assertEquals(List.of("explicit:service.close"), calls);
+    }
+
     @Test void repeatedSameCleanupFailureDoesNotAbortRemainingShutdown() {
         List<String> calls = new ArrayList<>();
         IllegalStateException sharedFailure = new IllegalStateException("shared cleanup failure");
