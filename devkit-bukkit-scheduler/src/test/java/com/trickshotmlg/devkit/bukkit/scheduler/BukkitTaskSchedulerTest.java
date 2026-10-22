@@ -7,6 +7,7 @@ import com.trickshotmlg.devkit.scheduler.TickDelay;
 import com.trickshotmlg.devkit.scheduler.TickPeriod;
 import org.bukkit.Server;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.plugin.PluginManager;
 import org.bukkit.scheduler.BukkitScheduler;
 import org.bukkit.scheduler.BukkitTask;
 import org.junit.jupiter.api.Test;
@@ -59,7 +60,8 @@ class BukkitTaskSchedulerTest {
         List<Throwable> failures = new ArrayList<>();
         Plugin plugin = plugin(proxy(BukkitScheduler.class, (proxy, method, args) -> null), enabled);
         BukkitTaskScheduler scheduler = new BukkitTaskScheduler(TaskSchedulers.create(
-                new BukkitTaskBackend(plugin), failure -> failures.add(failure.cause())));
+                new BukkitTaskBackend(new java.util.concurrent.atomic.AtomicReference<>(plugin)),
+                failure -> failures.add(failure.cause())));
 
         TaskHandle task = scheduler.sync().run(() -> fail("disabled plugin task ran"));
         assertEquals(TaskState.FAILED, task.state());
@@ -68,9 +70,25 @@ class BukkitTaskSchedulerTest {
         scheduler.close();
     }
 
+    @Test void pluginDisableClosesSchedulerAndReleasesOwnedTasks() {
+        BukkitTask nativeTask = proxy(BukkitTask.class, (proxy, method, args) -> null);
+        BukkitScheduler nativeScheduler = proxy(BukkitScheduler.class, (proxy, method, args) -> nativeTask);
+        Plugin plugin = plugin(nativeScheduler, new AtomicBoolean(true));
+        BukkitTaskScheduler scheduler = BukkitTaskScheduler.create(plugin);
+        TaskHandle pending = scheduler.sync().later(TickDelay.of(50), () -> fail("disabled plugin task ran"));
+
+        scheduler.closeForPlugin(plugin);
+        assertTrue(scheduler.isClosed());
+        assertEquals(TaskState.CANCELLED, pending.state());
+        assertThrows(IllegalStateException.class, () -> scheduler.sync().run(() -> { }));
+        assertDoesNotThrow(scheduler::close);
+    }
+
     private static Plugin plugin(BukkitScheduler scheduler, AtomicBoolean enabled) {
+        PluginManager manager = proxy(PluginManager.class, (proxy, method, args) -> null);
         Server server = proxy(Server.class, (proxy, method, args) ->
-                method.getName().equals("getScheduler") ? scheduler : null);
+                method.getName().equals("getScheduler") ? scheduler
+                        : method.getName().equals("getPluginManager") ? manager : null);
         return proxy(Plugin.class, (proxy, method, args) -> switch (method.getName()) {
             case "getServer" -> server;
             case "getLogger" -> Logger.getLogger("scheduler-test");

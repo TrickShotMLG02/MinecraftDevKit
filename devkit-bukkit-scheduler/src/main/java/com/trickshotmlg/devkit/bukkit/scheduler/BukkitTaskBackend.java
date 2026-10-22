@@ -9,36 +9,40 @@ import org.bukkit.scheduler.BukkitScheduler;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
 
 /** Maps shared schedules to Bukkit's native plugin-owned scheduler tasks. */
 final class BukkitTaskBackend implements TaskBackend {
-    private final Plugin plugin;
+    private final AtomicReference<Plugin> plugin;
 
-    BukkitTaskBackend(Plugin plugin) { this.plugin = Objects.requireNonNull(plugin, "plugin"); }
+    BukkitTaskBackend(AtomicReference<Plugin> plugin) { this.plugin = Objects.requireNonNull(plugin, "plugin"); }
 
     @Override public BackendTask schedule(TaskExecutionTarget target, TaskSchedule schedule, Runnable callback) {
         Objects.requireNonNull(target, "target");
         Objects.requireNonNull(schedule, "schedule");
         Objects.requireNonNull(callback, "callback");
-        if (!plugin.isEnabled()) throw new IllegalStateException("Cannot schedule tasks for a disabled plugin");
-        BukkitScheduler scheduler = plugin.getServer().getScheduler();
+        Plugin owner = plugin.get();
+        if (owner == null || !owner.isEnabled()) throw new IllegalStateException("Cannot schedule tasks for a disabled or closed plugin");
+        BukkitScheduler scheduler = owner.getServer().getScheduler();
         BukkitTask task;
         if (schedule instanceof TaskSchedule.Once once) {
             long ticks = once.delay().ticks();
             task = target == TaskExecutionTarget.SYNC
-                    ? (ticks == 0 ? scheduler.runTask(plugin, callback)
-                                  : scheduler.runTaskLater(plugin, callback, (int) ticks))
-                    : (ticks == 0 ? scheduler.runTaskAsynchronously(plugin, callback)
-                                  : scheduler.runTaskLaterAsynchronously(plugin, callback, (int) ticks));
+                    ? (ticks == 0 ? scheduler.runTask(owner, callback)
+                                  : scheduler.runTaskLater(owner, callback, (int) ticks))
+                    : (ticks == 0 ? scheduler.runTaskAsynchronously(owner, callback)
+                                  : scheduler.runTaskLaterAsynchronously(owner, callback, (int) ticks));
         } else if (schedule instanceof TaskSchedule.Repeating repeating) {
             task = target == TaskExecutionTarget.SYNC
-                    ? scheduler.runTaskTimer(plugin, callback, (int) repeating.initialDelay().ticks(),
+                    ? scheduler.runTaskTimer(owner, callback, (int) repeating.initialDelay().ticks(),
                             (int) repeating.period().ticks())
-                    : scheduler.runTaskTimerAsynchronously(plugin, callback, (int) repeating.initialDelay().ticks(),
+                    : scheduler.runTaskTimerAsynchronously(owner, callback, (int) repeating.initialDelay().ticks(),
                             (int) repeating.period().ticks());
         } else {
             throw new IllegalArgumentException("Unsupported task schedule: " + schedule.getClass().getName());
         }
         return task::cancel;
     }
+
+    void close() { plugin.set(null); }
 }

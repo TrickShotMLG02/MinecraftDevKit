@@ -55,12 +55,14 @@ final class ManagedTaskScheduler implements TaskScheduler {
             if (closed) throw new IllegalStateException("Task scope is closed");
         }
 
-        private TaskHandle schedule(TaskExecutionTarget target, TaskSchedule schedule, TaskCallback callback) {
+        private TaskHandle schedule(TaskExecutionTarget target, TaskSchedule schedule, TaskFailurePolicy failurePolicy,
+                                    TaskCallback callback) {
             Objects.requireNonNull(target, "target");
             Objects.requireNonNull(schedule, "schedule");
+            Objects.requireNonNull(failurePolicy, "failurePolicy");
             Objects.requireNonNull(callback, "callback");
             TaskRecord record = new TaskRecord(ids.incrementAndGet(), target, schedule, this, callback,
-                    failureHandler);
+                    failureHandler, failurePolicy);
             synchronized (lock) {
                 ensureOpen();
                 tasks.add(record);
@@ -110,21 +112,26 @@ final class ManagedTaskScheduler implements TaskScheduler {
             return run(context -> action.run());
         }
         @Override public TaskHandle run(TaskCallback action) {
-            return scope.schedule(target, TaskSchedule.immediate(), action);
+            return scope.schedule(target, TaskSchedule.immediate(), TaskFailurePolicy.CANCEL_ON_FAILURE, action);
         }
         @Override public TaskHandle later(TickDelay delay, Runnable action) {
             Objects.requireNonNull(action, "action");
             return later(delay, context -> action.run());
         }
         @Override public TaskHandle later(TickDelay delay, TaskCallback action) {
-            return scope.schedule(target, TaskSchedule.later(Objects.requireNonNull(delay, "delay")), action);
+            return scope.schedule(target, TaskSchedule.later(Objects.requireNonNull(delay, "delay")),
+                    TaskFailurePolicy.CANCEL_ON_FAILURE, action);
         }
         @Override public TaskHandle repeat(TickDelay initialDelay, TickPeriod period, Runnable action) {
             Objects.requireNonNull(action, "action");
             return repeat(initialDelay, period, context -> action.run());
         }
         @Override public TaskHandle repeat(TickDelay initialDelay, TickPeriod period, TaskCallback action) {
-            return scope.schedule(target, TaskSchedule.repeat(initialDelay, period), action);
+            return repeat(initialDelay, period, TaskFailurePolicy.CANCEL_ON_FAILURE, action);
+        }
+        @Override public TaskHandle repeat(TickDelay initialDelay, TickPeriod period,
+                                           TaskFailurePolicy failurePolicy, TaskCallback action) {
+            return scope.schedule(target, TaskSchedule.repeat(initialDelay, period), failurePolicy, action);
         }
         @Override public <T> AsyncTaskResult<T> submit(Callable<T> action) {
             if (target != TaskExecutionTarget.ASYNC) {
@@ -137,7 +144,7 @@ final class ManagedTaskScheduler implements TaskScheduler {
             return nextTick(context -> action.run());
         }
         @Override public TaskHandle nextTick(TaskCallback action) {
-            return scope.schedule(target, TaskSchedule.nextTick(), action);
+            return scope.schedule(target, TaskSchedule.nextTick(), TaskFailurePolicy.CANCEL_ON_FAILURE, action);
         }
     }
 }

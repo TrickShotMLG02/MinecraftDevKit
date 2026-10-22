@@ -8,4 +8,6 @@ public interface TaskRunner {
     TaskHandle later(TickDelay delay, TaskCallback action);
     TaskHandle repeat(TickDelay initialDelay, TickPeriod period, Runnable action);
     TaskHandle repeat(TickDelay initialDelay, TickPeriod period, TaskCallback action);
+    /** Repeats with an explicit exception policy; one-shot failure behavior is always terminal. */
+    TaskHandle repeat(TickDelay initialDelay, TickPeriod period, TaskFailurePolicy failurePolicy, TaskCallback action);
 }

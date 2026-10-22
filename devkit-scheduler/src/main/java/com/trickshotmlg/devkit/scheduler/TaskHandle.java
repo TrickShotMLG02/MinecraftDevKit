@@ -9,6 +9,6 @@ public interface TaskHandle {
     boolean cancel();
     /** Completes normally on success, or exceptionally on cancellation or failure. */
     CompletionStage<Void> completion();
-    /** The original callback failure, when the task state is {@link TaskState#FAILED}. */
+    /** The most recent callback failure, or {@code null} if none was reported. */
     Throwable failure();
 }

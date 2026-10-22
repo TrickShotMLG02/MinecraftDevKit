@@ -113,6 +113,29 @@ class TaskScopeLifecycleTest {
         scheduler.close();
     }
 
+    @Test void continueOnFailureKeepsRepeatingTaskActiveWhenExplicitlyRequested() {
+        ManualBackend backend = new ManualBackend();
+        List<TaskFailure> failures = new ArrayList<>();
+        TaskScheduler scheduler = TaskSchedulers.create(backend, failures::add);
+        int[] calls = {0};
+        TaskHandle task = scheduler.sync().repeat(TickDelay.ZERO, TickPeriod.of(1),
+                TaskFailurePolicy.CONTINUE_ON_FAILURE, context -> {
+                    calls[0]++;
+                    if (calls[0] == 1) throw new IllegalArgumentException("first attempt");
+                });
+
+        backend.run(0);
+        assertEquals(TaskState.ACTIVE, task.state());
+        assertInstanceOf(IllegalArgumentException.class, task.failure());
+        backend.run(0);
+        assertEquals(2, calls[0]);
+        assertEquals(TaskState.ACTIVE, task.state());
+        assertEquals(1, failures.size());
+        task.cancel();
+        assertEquals(TaskState.CANCELLED, task.state());
+        scheduler.close();
+    }
+
     private static final class ManualBackend implements TaskBackend {
         private final List<Entry> entries = new ArrayList<>();
         @Override public synchronized BackendTask schedule(TaskExecutionTarget target, TaskSchedule schedule, Runnable callback) {

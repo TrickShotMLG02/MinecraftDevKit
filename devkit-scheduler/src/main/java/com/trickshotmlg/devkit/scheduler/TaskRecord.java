@@ -13,6 +13,7 @@ final class TaskRecord implements TaskHandle {
     private final TaskScope scope;
     private final TaskCallback callback;
     private final TaskFailureHandler failureHandler;
+    private final TaskFailurePolicy failurePolicy;
     private final CompletableFuture<Void> completion = new CompletableFuture<>();
     private TaskState state = TaskState.PENDING;
     private long executionCount;
@@ -21,13 +22,14 @@ final class TaskRecord implements TaskHandle {
     private Runnable terminalCallback;
 
     TaskRecord(long id, TaskExecutionTarget target, TaskSchedule schedule, TaskScope scope,
-               TaskCallback callback, TaskFailureHandler failureHandler) {
+               TaskCallback callback, TaskFailureHandler failureHandler, TaskFailurePolicy failurePolicy) {
         this.id = id;
         this.target = Objects.requireNonNull(target);
         this.schedule = Objects.requireNonNull(schedule);
         this.scope = Objects.requireNonNull(scope);
         this.callback = Objects.requireNonNull(callback);
         this.failureHandler = Objects.requireNonNull(failureHandler);
+        this.failurePolicy = Objects.requireNonNull(failurePolicy);
     }
 
     void setTerminalCallback(Runnable action) {
@@ -65,8 +67,22 @@ final class TaskRecord implements TaskHandle {
                 }
             }
         } catch (Throwable error) {
-            fail(error);
+            if (schedule instanceof TaskSchedule.Repeating
+                    && failurePolicy == TaskFailurePolicy.CONTINUE_ON_FAILURE) {
+                continueAfterFailure(error);
+            } else fail(error);
         }
+    }
+
+    private void continueAfterFailure(Throwable error) {
+        long count;
+        synchronized (this) {
+            if (state != TaskState.RUNNING) return;
+            failure = error;
+            state = TaskState.ACTIVE;
+            count = executionCount;
+        }
+        reportFailure(count, error);
     }
 
     private void finishSuccessfully() {
