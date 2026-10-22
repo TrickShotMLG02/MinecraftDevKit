@@ -37,7 +37,11 @@ public final class ConfigStore {
     public ConfigSnapshot snapshot() { return active.get(); }
     public <T> T get(ConfigKey<T> key) { return snapshot().get(key); }
     public long generation() { return snapshot().generation(); }
-    public boolean isDirty() { return generation() != persistedGeneration; }
+    public boolean isDirty() {
+        synchronized (mutationLock) {
+            return active.get().generation() != persistedGeneration;
+        }
+    }
 
     /** Atomically applies one validated value and marks the store dirty. */
     public <T> void set(ConfigKey<T> key, T value) { update(transaction -> transaction.set(key, value)); }
