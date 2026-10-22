@@ -64,7 +64,7 @@ storage.transaction(tx -> {
 });
 ```
 
-Success commits; callback or SQL failure attempts rollback. Rollback and connection-reset failures are suppressed onto the primary exception. Nested transactions are rejected. The `Transaction` is thread-confined and invalid after its callback; use it for all statements in the transaction instead of calling `Storage` methods. If commit fails because the server connection is lost, the final server-side outcome may be uncertain even though Storage reports failure.
+Success commits; callback or SQL failure attempts rollback. Rollback and connection-reset failures are suppressed onto the primary exception. If rollback or state restoration fails, Storage attempts to abort and discard the borrowed connection rather than returning a possibly transactional connection to a pool. A driver or external pool may still limit how reliably a broken connection can be discarded. Nested transactions are rejected. The `Transaction` is thread-confined and invalid after its callback; use it for all statements in the transaction instead of calling `Storage` methods. If commit fails because the server connection is lost, the final server-side outcome may be uncertain even though Storage reports failure.
 
 ## Background database work
 
