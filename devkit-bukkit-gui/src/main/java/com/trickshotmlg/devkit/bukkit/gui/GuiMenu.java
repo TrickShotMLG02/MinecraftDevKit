@@ -47,6 +47,10 @@ public final class GuiMenu {
         public Builder title(TextRef reference) { title = new Title(null, Objects.requireNonNull(reference, "title")); return this; }
         public Builder item(int slot, ItemStack item) { return component(slot, new StaticItem(item)); }
         public Builder button(int slot, GuiButton button) { return component(slot, Objects.requireNonNull(button, "button")); }
+        public Builder radioGroup(RadioGroup<?> group) {
+            Objects.requireNonNull(group, "group").components().forEach(this::component);
+            return this;
+        }
         public Builder component(int slot, GuiComponent component) {
             if (slot < 0 || slot >= rows * 9) throw new IllegalArgumentException("Slot " + slot + " is outside a " + rows + " row chest");
             Objects.requireNonNull(component, "component");
