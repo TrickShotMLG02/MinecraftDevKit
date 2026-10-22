@@ -31,3 +31,7 @@ SOFTWARE.
 The command example also redistributes `io.leangen.geantyref:geantyref` and `com.fasterxml.jackson.core:jackson-core`, licensed under Apache License 2.0, and the relocated `net.kyori:adventure-text-minimessage` implementation, licensed under MIT. The Apache license is provided in [`THIRD-PARTY-LICENSES/LICENSE-APACHE-2.0.txt`](THIRD-PARTY-LICENSES/LICENSE-APACHE-2.0.txt), and Adventure's license is provided in [`THIRD-PARTY-LICENSES/LICENSE-MIT-ADVENTURE.txt`](THIRD-PARTY-LICENSES/LICENSE-MIT-ADVENTURE.txt).
 
 The Paper API and Adventure API are compile-only/server-provided and are not included in the example plugin JAR. MiniMessage is relocated into the example namespace to avoid depending on the server's optional MiniMessage module.
+
+## Storage example runtime
+
+The standalone Bukkit storage example redistributes HikariCP, Flyway Community Edition and Xerial SQLite JDBC. HikariCP, Flyway and SQLite JDBC are Apache License 2.0; the Apache 2.0 license is included in the example JAR. SQLite itself is in the public domain. Flyway's optional database modules and their bundled third-party components remain subject to their respective notices. The default example does not redistribute a MySQL or MariaDB network JDBC driver.

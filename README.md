@@ -30,6 +30,8 @@ Shared modules contain ordinary Java APIs and must not depend on Bukkit, Paper, 
 | `devkit-config-yaml` | Safe YAML loading, defaults, unknown-field preservation, atomic save/reload, watching, and migrations | Implemented; Java 17 |
 | `devkit-scheduler` | Platform-independent tick schedules, task handles, cancellation, nested scopes, and async result handoff contracts | Implemented; Java 17 |
 | `devkit-lifecycle` | Platform-independent typed service keys, dependency ordering, lifecycle state, rollback, resource ownership, diagnostics, and reload hooks | Implemented; Java 17 |
+| `devkit-storage` | Explicit-SQL JDBC storage with HikariCP, SQLite defaults, prepared parameters, typed row mapping, transactions, and bounded async work | Implemented; Java 17 |
+| `devkit-storage-migrations` | Optional Flyway versioned SQL migration integration for SQLite/MySQL/MariaDB | Implemented; Java 17 |
 | `devkit-permissions` | Platform-independent permission definitions, sections, groups, and immutable catalog resolution | Implemented; depends on `devkit-core` |
 | `devkit-commands` | Immutable typed command definitions, Cloud v2 dispatch, suggestions, generated help/usage, and localized errors | Implemented; Java 17 |
 | `devkit-bukkit` | Common Bukkit/Spigot/Paper adapters | Minimal package structure; depends on shared modules |
@@ -42,6 +44,8 @@ Shared modules contain ordinary Java APIs and must not depend on Bukkit, Paper, 
 
 See the [`devkit-permissions` guide](devkit-permissions/README.md), [`devkit-commands` guide](devkit-commands/README.md), [`devkit-text` guide](devkit-text/README.md), [`devkit-localization` guide](devkit-localization/README.md), [`devkit-localization-yaml` guide](devkit-localization-yaml/README.md), [`devkit-config` guide](devkit-config/README.md), [`devkit-config-yaml` guide](devkit-config-yaml/README.md), [`devkit-scheduler` guide](devkit-scheduler/README.md), [`devkit-lifecycle` guide](devkit-lifecycle/README.md), [`devkit-bukkit-commands` guide](devkit-bukkit-commands/README.md), [`devkit-bukkit-gui` guide](devkit-bukkit-gui/README.md), [`devkit-bukkit-scheduler` guide](devkit-bukkit-scheduler/README.md), [`devkit-bukkit-lifecycle` guide](devkit-bukkit-lifecycle/README.md), and [`devkit-gradle-plugin` guide](devkit-gradle-plugin/README.md). Configuration comments and formatting are normalized only when explicit full-document save is invoked; unknown fields are retained. Shared configuration, command, text, localization, scheduler, and lifecycle modules contain no Bukkit API dependency.
 
+The JDBC storage modules are documented in the [`devkit-storage` guide](devkit-storage/README.md) and optional [`devkit-storage-migrations` guide](devkit-storage-migrations/README.md). SQLite JDBC is included by the storage module; applications add the MySQL or MariaDB JDBC driver they intend to use. Storage callbacks are asynchronous only when submitted through `Storage.async()` and must use an explicit scheduler handoff before touching Bukkit state.
+
 The standalone [`Bukkit permissions example`](examples/bukkit-permissions-example/README.md) supports explicit Maven Local and JitPack dependency modes, generates permission metadata during its own Gradle build, and packages a test plugin JAR for a Paper server. The standalone [`Bukkit commands example`](examples/bukkit-commands-example/README.md) supports the same repository modes, generates permission metadata and a localization reference manifest, validates English/German YAML catalogs with partial regional overrides, and packages a Cloud-backed plugin with reloadable external translations. The repository also includes a local [Paper test server provisioner and IntelliJ run/debug profiles](tools/devservers/README.md); server download and startup are opt-in and Paper's EULA is never accepted automatically.
 
 The independent [`Bukkit configuration example`](examples/bukkit-config-example/README.md) demonstrates typed settings, schema validation, programmatic updates, safe persistence, reload conflicts, and schema migration using the existing Cloud command adapter.
@@ -53,6 +57,8 @@ The standalone [`Bukkit scheduler example`](examples/bukkit-scheduler-example/RE
 The standalone [`Bukkit lifecycle example`](examples/bukkit-lifecycle-example/README.md) demonstrates typed service keys, dependency-ordered startup, managed task scopes and resources, reload hooks, diagnostics, and reverse-order shutdown.
 
 The standalone [`Bukkit integration example`](examples/bukkit-integration-example/README.md) composes lifecycle, typed YAML configuration, English/German localization, generated typed permissions, Cloud commands, protected paginated GUIs, and lifecycle-owned scheduled/asynchronous work in one Paper plugin.
+
+The standalone [`Bukkit storage example`](examples/bukkit-storage-example/README.md) demonstrates lifecycle-owned SQLite persistence, versioned migrations, a typed player repository, async balance reads, atomic updates, and safe handoff to the Paper thread.
 
 ## Installation
 
@@ -162,7 +168,7 @@ From the repository root, run the appropriate wrapper command:
 
 ## Platform compatibility
 
-The common modules are normal Java libraries and do not require a Minecraft runtime. `devkit-bukkit-metadata` and `devkit-gradle-plugin` generate Bukkit `plugin.yml` permissions without starting a server. `devkit-bukkit-commands` provides Cloud-backed runtime command registration for Bukkit/Spigot-style JavaPlugin lifecycle and Paper's legacy manager with native Brigadier enabled when available. `devkit-bukkit-gui`, `devkit-bukkit-scheduler`, and `devkit-bukkit-lifecycle` are compiled against Paper 1.21.11 and use Bukkit's JavaPlugin lifecycle and traditional synchronous server thread; older server versions, other platforms, Folia scheduling, and live-server behavior have not been verified. Modern Paper bootstrap command registration and other platform adapters remain future work. Java compatibility depends on the selected module: shared modules, metadata export, and the Gradle plugin target Java 17, while Bukkit adapters target Java 21.
+The common modules are normal Java libraries and do not require a Minecraft runtime. `devkit-bukkit-metadata` and `devkit-gradle-plugin` generate Bukkit `plugin.yml` permissions without starting a server. `devkit-bukkit-commands` provides Cloud-backed runtime command registration for Bukkit/Spigot-style JavaPlugin lifecycle and Paper's legacy manager with native Brigadier enabled when available. `devkit-bukkit-gui`, `devkit-bukkit-scheduler`, and `devkit-bukkit-lifecycle` are compiled against Paper 1.21.11 and use Bukkit's JavaPlugin lifecycle and traditional synchronous server thread; older server versions, other platforms, Folia scheduling, and live-server behavior have not been verified. Modern Paper bootstrap command registration and other platform adapters remain future work. Java compatibility depends on the selected module: shared modules, metadata export, the storage libraries, and the Gradle plugin target Java 17, while Bukkit adapters target Java 21.
 
 ## Roadmap
 
