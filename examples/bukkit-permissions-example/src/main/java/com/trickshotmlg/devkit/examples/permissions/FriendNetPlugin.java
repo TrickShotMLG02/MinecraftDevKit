@@ -1,4 +1,4 @@
-package com.trickshotmlg.devkit.examples.friendnet;
+package com.trickshotmlg.devkit.examples.permissions;
 
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;

@@ -28,7 +28,7 @@ dependencies {
 
 minecraftDevKit {
     bukkitPermissions {
-        catalogClass.set("com.trickshotmlg.devkit.examples.friendnet.FriendPermissions")
+        catalogClass.set("com.trickshotmlg.devkit.examples.permissions.FriendPermissions")
         catalogField.set("CATALOG")
     }
 }

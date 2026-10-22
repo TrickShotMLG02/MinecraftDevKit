@@ -1,4 +1,4 @@
-package com.trickshotmlg.devkit.examples.friendnet;
+package com.trickshotmlg.devkit.examples.permissions;
 
 import com.trickshotmlg.devkit.permissions.DefaultAccess;
 import com.trickshotmlg.devkit.permissions.Permission;

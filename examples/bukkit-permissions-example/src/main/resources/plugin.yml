@@ -1,6 +1,6 @@
 name: MinecraftDevKitPermissionsExample
 version: 0.1.0-SNAPSHOT
-main: com.trickshotmlg.devkit.examples.friendnet.FriendNetPlugin
+main: com.trickshotmlg.devkit.examples.permissions.FriendNetPlugin
 api-version: '1.21'
 description: End-to-end example of MinecraftDevKit Bukkit permission metadata generation.
 commands:
