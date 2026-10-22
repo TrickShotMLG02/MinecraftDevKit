@@ -12,6 +12,11 @@ class LifecycleResourceTest {
         @Override public void close() { calls.add(name); }
     }
     record PlainService(String name) { }
+    record EqualResource(String name, List<String> calls) implements AutoCloseable {
+        @Override public void close() { calls.add(name); }
+        @Override public boolean equals(Object other) { return other instanceof EqualResource; }
+        @Override public int hashCode() { return 1; }
+    }
 
     @Test void closesServiceThenAcquiredResourcesInReverseOrder() {
         List<String> calls = new ArrayList<>();
@@ -149,6 +154,25 @@ class LifecycleResourceTest {
 
         assertInstanceOf(IllegalArgumentException.class, failure.getCause());
         assertEquals(List.of("closed"), calls);
+    }
+
+    @Test void distinctEqualResourcesAreOwnedAndClosedIndependently() {
+        List<String> calls = new ArrayList<>();
+        EqualResource first = new EqualResource("first", calls);
+        EqualResource second = new EqualResource("second", calls);
+        assertEquals(first, second);
+        assertNotSame(first, second);
+        ServiceKey<PlainService> key = ServiceKey.of("service", PlainService.class);
+        LifecycleManager manager = LifecycleManager.builder().service(key, context -> {
+            context.manage(first);
+            context.manage(second);
+            return new PlainService("service");
+        }).build();
+
+        manager.start();
+        manager.close();
+
+        assertEquals(List.of("second", "first"), calls);
     }
 
     @Test void explicitCleanupSupportsServicesWithoutAutoCloseable() {
