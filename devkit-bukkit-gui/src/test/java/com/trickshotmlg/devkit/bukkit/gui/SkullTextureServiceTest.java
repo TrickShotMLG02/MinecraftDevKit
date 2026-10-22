@@ -27,6 +27,10 @@ class SkullTextureServiceTest {
                 .getBytes(StandardCharsets.UTF_8));
         assertEquals("https://textures.minecraft.net/texture/" + hash,
                 SkullTextureService.validateBase64Texture(payload).toExternalForm());
+        String completeProperty = Base64.getEncoder().encodeToString(("{\"timestamp\":12345,\"profileId\":\"abc\",\"textures\":{\"SKIN\":{\"url\":\"https://textures.minecraft.net/texture/" + hash + "\",\"metadata\":{\"model\":\"slim\"}},\"CAPE\":{\"url\":\"https://textures.minecraft.net/texture/" + hash + "\"}}}")
+                .getBytes(StandardCharsets.UTF_8));
+        assertEquals("https://textures.minecraft.net/texture/" + hash,
+                SkullTextureService.validateBase64Texture(completeProperty).toExternalForm());
         assertThrows(IllegalArgumentException.class, () -> SkullTextureService.validateBase64Texture("not-base64!"));
         String malicious = Base64.getEncoder().encodeToString("{\"url\":\"https://evil.example/\"}".getBytes(StandardCharsets.UTF_8));
         assertThrows(IllegalArgumentException.class, () -> SkullTextureService.validateBase64Texture(malicious));
@@ -34,6 +38,9 @@ class SkullTextureServiceTest {
         assertInvalidPayload("{\"other\":{\"url\":\"https://textures.minecraft.net/texture/" + hash + "\"}}");
         assertInvalidPayload("{\"textures\":{\"SKIN\":{\"url\":\"https://textures.minecraft.net/texture/" + hash + "\"},\"SKIN\":{\"url\":\"https://textures.minecraft.net/texture/" + hash + "\"}}}");
         assertInvalidPayload("{\"textures\":{\"SKIN\":{\"url\":\"https://textures.minecraft.net/texture/" + hash + "\"}}} trailing");
+        assertInvalidPayload("{" + "[".repeat(40) + "0" + "]".repeat(40) + "}");
+        String invalidUtf8 = Base64.getEncoder().encodeToString(new byte[]{'{', '}', (byte) 0xC3, (byte) 0x28});
+        assertThrows(IllegalArgumentException.class, () -> SkullTextureService.validateBase64Texture(invalidUtf8));
     }
 
     private static void assertInvalidPayload(String json) {

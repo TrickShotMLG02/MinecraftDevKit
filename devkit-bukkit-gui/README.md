@@ -88,7 +88,7 @@ GuiItemTemplate offline = GuiItems.offlinePlayerHead(
 
 Online profiles are used without a network lookup. UUID-based resolution uses Paper's asynchronous `PlayerProfile.update()` and deduplicates in-flight work in a bounded LRU cache. The template initially returns the placeholder, then requests a slot refresh on the server thread after resolution. Refresh checks the active session, menu, slot, and component identity to reject stale results. Call `skulls.close()` during plugin shutdown. It owns no executor or worker threads.
 
-Custom URL/hash inputs are restricted to HTTPS `textures.minecraft.net/texture/<32-hex-hash>`. Base64 input is size-limited and must contain exactly one allowed skin URL. Arbitrary URLs and custom texture hosts are rejected. Texture availability itself depends on Minecraft's profile/texture services.
+Custom URL/hash inputs are restricted to HTTPS `textures.minecraft.net/texture/<32-hex-hash>`. Base64 input is size- and nesting-limited, must be valid UTF-8 JSON, and must contain a string at `textures.SKIN.url`. That skin URL is subject to the same host and path allowlist; additional profile fields such as a cape are accepted but are not applied. Arbitrary skin hosts and malformed payloads are rejected. Texture availability itself depends on Minecraft's profile/texture services.
 
 ## Navigation and state
 
