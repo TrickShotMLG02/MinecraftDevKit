@@ -17,8 +17,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HexFormat;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -101,7 +104,7 @@ public final class YamlConfigFile {
         }
         try {
             return new YamlConfigLoadResult(ConfigStore.fromValues(schema, known), Collections.unmodifiableMap(unknown), issues,
-                    sourceVersion < schema.version(), sourceVersion);
+                    sourceVersion < schema.version(), sourceVersion, java.util.Optional.of(fingerprint(bytes)));
         } catch (RuntimeException exception) {
             List<ConfigIssue> validationIssues = exception instanceof com.trickshotmlg.devkit.config.ConfigValidationException validation
                     ? validation.issues().stream().map(issue -> new ConfigIssue(issue.path(), issue.severity(), issue.message(),
@@ -274,5 +277,10 @@ public final class YamlConfigFile {
         }
         if (value instanceof List<?> list) return list.stream().map(YamlConfigFile::freeze).toList();
         return value;
+    }
+
+    private static String fingerprint(byte[] bytes) {
+        try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes)); }
+        catch (NoSuchAlgorithmException impossible) { throw new IllegalStateException("SHA-256 unavailable", impossible); }
     }
 }

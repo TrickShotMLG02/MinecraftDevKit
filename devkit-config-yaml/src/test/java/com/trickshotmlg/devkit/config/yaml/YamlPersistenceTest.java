@@ -125,4 +125,30 @@ class YamlPersistenceTest {
         assertEquals(original, Files.readString(file));
         assertTrue(handle.store().isDirty());
     }
+
+    @Test void externalEditDuringInitialDecodeIsNotAcceptedAsTheLoadedDiskBaseline() throws Exception {
+        Path file = temp.resolve("racing.yml");
+        Files.writeString(file, "value: original\n");
+        AtomicBoolean editDuringDecode = new AtomicBoolean(true);
+        var codec = com.trickshotmlg.devkit.config.ConfigCodecs.of("string", raw -> {
+            if (!(raw instanceof String text)) throw new IllegalArgumentException("expected string");
+            if ("original".equals(text) && editDuringDecode.getAndSet(false)) {
+                try { Files.writeString(file, "value: external-edit\n"); }
+                catch (java.io.IOException exception) { throw new java.io.UncheckedIOException(exception); }
+            }
+            return text;
+        }, value -> value);
+        var value = com.trickshotmlg.devkit.config.ConfigKey.builder("value", codec).defaultValue("default").build();
+        YamlConfigHandle handle = YamlConfigHandle.load(file, ConfigSchema.builder().register(value).build());
+        assertEquals("original", handle.store().get(value));
+        handle.store().set(value, "local-change");
+
+        YamlSaveResult result = handle.save(YamlSaveOptions.safeRewrite());
+
+        assertFalse(result.success());
+        assertTrue(result.conflict());
+        assertEquals("value: external-edit\n", Files.readString(file));
+        assertEquals("local-change", handle.store().get(value));
+        assertTrue(handle.store().isDirty());
+    }
 }

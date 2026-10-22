@@ -25,7 +25,7 @@ YamlSaveResult save = config.save(YamlSaveOptions.safeRewrite());
 YamlReloadResult reload = config.reload();
 ```
 
-Save fingerprints the loaded file. Unexpected external modification returns a conflict and leaves the file untouched. `YamlSaveOptions` makes the external-change policy explicit; `safeRewrite()` rejects conflicts. `OVERWRITE` explicitly replaces external content. Save serializes one immutable store snapshot to a same-directory temporary file, flushes and validates it, then requires an atomic replacement move. If the filesystem does not support atomic replacement, saving fails and the old file remains. Failed saves keep the store dirty.
+Save fingerprints the exact bytes loaded or written by this handle. Unexpected external modification returns a conflict and leaves the file untouched. `YamlSaveOptions` makes the external-change policy explicit; `safeRewrite()` rejects conflicts. `OVERWRITE` explicitly replaces external content. Save serializes one immutable store snapshot to a same-directory temporary file, flushes and validates it, then requires an atomic replacement move. If the filesystem does not support atomic replacement, saving fails and the old file remains. Failed saves keep the store dirty. A small race remains between the final external-change check and atomic replacement because unrelated processes do not participate in a shared lock.
 
 SnakeYAML does not round-trip comments or formatting. Full-document rewriting is explicit through `save(YamlSaveOptions.safeRewrite())`; comments and layout are normalized on a successful save. Unknown fields are preserved, but comments are not. Do not use this save policy for files whose comments must remain intact.
 

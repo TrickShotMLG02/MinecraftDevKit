@@ -28,12 +28,13 @@ public final class YamlConfigHandle implements AutoCloseable {
     private volatile boolean migrationPending;
     private volatile int sourceVersion;
 
-    private YamlConfigHandle(Path file, YamlConfigFile yaml, YamlConfigLoadResult loaded, String fingerprint) {
+    private YamlConfigHandle(Path file, YamlConfigFile yaml, YamlConfigLoadResult loaded) {
         this.file = file.toAbsolutePath().normalize();
         this.yaml = yaml;
         store = loaded.store();
         unknownValues = loaded.unknownValues();
-        diskFingerprint = fingerprint;
+        diskFingerprint = loaded.sourceFingerprint().orElseThrow(
+                () -> new IllegalArgumentException("Loaded YAML result has no source fingerprint"));
         migrationPending = loaded.migrated();
         sourceVersion = loaded.sourceVersion();
         if (migrationPending) store.markUnsaved();
@@ -55,7 +56,7 @@ public final class YamlConfigHandle implements AutoCloseable {
     private static YamlConfigHandle load(Path file, YamlConfigFile yaml) throws IOException {
         Path normalized = file.toAbsolutePath().normalize();
         YamlConfigLoadResult result = yaml.load(normalized);
-        return new YamlConfigHandle(normalized, yaml, result, fingerprint(normalized));
+        return new YamlConfigHandle(normalized, yaml, result);
     }
 
     /** Creates default YAML only when missing, then opens it; existing files are never overwritten. */
@@ -85,7 +86,8 @@ public final class YamlConfigHandle implements AutoCloseable {
                     || !unknownValues.equals(candidate.unknownValues());
             store.replaceFromReload(candidate.store().snapshot().values(), expectedGeneration);
             unknownValues = candidate.unknownValues();
-            diskFingerprint = fingerprint(file);
+            diskFingerprint = candidate.sourceFingerprint().orElseThrow(
+                    () -> new IllegalStateException("Loaded YAML result has no source fingerprint"));
             migrationPending = candidate.migrated();
             sourceVersion = candidate.sourceVersion();
             if (migrationPending) store.markUnsaved();
@@ -182,7 +184,7 @@ public final class YamlConfigHandle implements AutoCloseable {
                     return failure(false, "filesystem does not support atomic replacement; original file was retained");
                 }
             } finally { Files.deleteIfExists(temporary); }
-            diskFingerprint = fingerprint(file);
+            diskFingerprint = fingerprint(bytes);
             migrationPending = false;
             sourceVersion = yaml.schemaVersion();
             try { store.markPersisted(savedGeneration); } catch (IllegalStateException concurrentChange) {
@@ -210,6 +212,11 @@ public final class YamlConfigHandle implements AutoCloseable {
             }
             return HexFormat.of().formatHex(digest.digest());
         } catch (NoSuchAlgorithmException impossible) { throw new IllegalStateException("SHA-256 unavailable", impossible); }
+    }
+
+    private static String fingerprint(byte[] bytes) {
+        try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes)); }
+        catch (NoSuchAlgorithmException impossible) { throw new IllegalStateException("SHA-256 unavailable", impossible); }
     }
 
     private void createMigrationBackup(int version) throws IOException {
