@@ -39,6 +39,9 @@ class LifecycleStartupTest {
         assertTrue(repeatedStart.getMessage().contains("Cannot start lifecycle while it is RUNNING"));
         manager.close();
         assertEquals(LifecycleState.STOPPED, manager.state());
+        assertNull(manager.definition());
+        assertEquals(List.of("config", "database"), manager.startupOrder());
+        assertEquals(List.of("database", "config"), manager.shutdownOrder());
         assertThrows(IllegalStateException.class, () -> manager.get(config));
     }
 
@@ -71,6 +74,20 @@ class LifecycleStartupTest {
         assertEquals("config", failure.componentName());
         assertInstanceOf(IllegalStateException.class, failure.getCause());
         assertEquals(ServiceState.FAILED, manager.serviceStates().get("config"));
+        assertNull(manager.definition());
+    }
+
+    @Test void closingBeforeStartReleasesDefinitionsButKeepsDiagnostics() {
+        ServiceKey<Config> config = ServiceKey.of("config", Config.class);
+        LifecycleManager manager = LifecycleManager.builder()
+                .service(config, context -> new Config("unused"))
+                .build();
+
+        manager.close();
+
+        assertEquals(LifecycleState.STOPPED, manager.state());
+        assertNull(manager.definition());
+        assertEquals(List.of("config"), manager.diagnostics().startupOrder());
     }
 
     @Test void reentrantStartIsRejectedAndCausesNormalStartupFailure() {

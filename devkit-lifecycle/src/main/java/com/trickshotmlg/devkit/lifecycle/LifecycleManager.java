@@ -13,7 +13,9 @@ import java.util.Optional;
 public final class LifecycleManager implements AutoCloseable {
     private enum Operation { NONE, START, CLOSE, RELOAD }
 
-    private final LifecycleDefinition definition;
+    private LifecycleDefinition definition;
+    private final List<String> startupOrder;
+    private final List<String> shutdownOrder;
     private final Object stateLock = new Object();
     private final Map<String, Object> services = new LinkedHashMap<>();
     private final Map<String, ServiceState> serviceStates = new LinkedHashMap<>();
@@ -26,15 +28,27 @@ public final class LifecycleManager implements AutoCloseable {
 
     private LifecycleManager(LifecycleDefinition definition) {
         this.definition = Objects.requireNonNull(definition, "definition");
+        this.startupOrder = definition.startupOrder();
+        List<String> reverseOrder = new ArrayList<>(startupOrder);
+        Collections.reverse(reverseOrder);
+        this.shutdownOrder = List.copyOf(reverseOrder);
         for (LifecycleNodeDefinition node : definition.registrationOrder()) serviceStates.put(node.name(), ServiceState.NEW);
     }
 
-    /** Fluent manager builder. */
+    /** Creates a fluent manager builder. */
     public static Builder builder() { return new Builder(); }
-    /** Creates a manager from a previously validated immutable definition. */
+    /**
+     * Creates a manager from a previously validated immutable definition.
+     * @param definition immutable service graph
+     * @return new one-shot lifecycle manager
+     */
     public static LifecycleManager create(LifecycleDefinition definition) { return new LifecycleManager(definition); }
 
-    /** Starts nodes in validated dependency order. Startup is synchronous on the calling thread. */
+    /**
+     * Starts nodes in validated dependency order on the calling thread.
+     * @throws LifecycleException if startup fails; successful nodes are rolled back before it is thrown
+     * @throws IllegalStateException if this manager has already started, stopped, or failed
+     */
     public void start() {
         begin(Operation.START);
         LifecycleNodeDefinition current = null;
@@ -84,7 +98,10 @@ public final class LifecycleManager implements AutoCloseable {
                 List<Throwable> cleanupFailures = new ArrayList<>();
                 if (currentContext != null) cleanupFailures.addAll(currentContext.closeResources());
                 cleanupFailures.addAll(rollbackStarted());
-                synchronized (stateLock) { state = LifecycleState.FAILED; }
+                synchronized (stateLock) {
+                    state = LifecycleState.FAILED;
+                    definition = null;
+                }
                 LifecycleException failure = new LifecycleException(LifecyclePhase.STARTUP,
                         current == null ? null : current.name(), "Failed to start lifecycle component '"
                         + (current == null ? "unknown" : current.name()) + "'", startupFailure);
@@ -96,7 +113,14 @@ public final class LifecycleManager implements AutoCloseable {
         }
     }
 
-    /** Retrieves a successfully started service. Lookup is only available while the manager is RUNNING. */
+    /**
+     * Retrieves a successfully started service. Lookup is only available while the manager is RUNNING.
+     * @param key typed service identity
+     * @param <T> service type
+     * @return started service
+     * @throws IllegalArgumentException if no service with this key exists or the key type is incompatible
+     * @throws IllegalStateException if the manager is not running
+     */
     public <T> T get(ServiceKey<T> key) {
         Objects.requireNonNull(key, "key");
         synchronized (stateLock) {
@@ -107,7 +131,13 @@ public final class LifecycleManager implements AutoCloseable {
         }
     }
 
-    /** Optional typed lookup for a registered service while the manager is running. */
+    /**
+     * Optional typed lookup for a registered service while the manager is running.
+     * @param key typed service identity
+     * @param <T> service type
+     * @return present value when the registered service has started
+     * @throws IllegalStateException if the manager is not running
+     */
     public <T> Optional<T> find(ServiceKey<T> key) {
         Objects.requireNonNull(key, "key");
         synchronized (stateLock) {
@@ -117,23 +147,27 @@ public final class LifecycleManager implements AutoCloseable {
         }
     }
 
+    /** Current manager state. */
     public LifecycleState state() { synchronized (stateLock) { return state; } }
+    /** Immutable snapshot of per-node states keyed by lifecycle name. */
     public Map<String, ServiceState> serviceStates() {
         synchronized (stateLock) { return Collections.unmodifiableMap(new LinkedHashMap<>(serviceStates)); }
     }
-    public List<String> startupOrder() { return definition.startupOrder(); }
-    public List<String> shutdownOrder() {
-        List<String> order = new ArrayList<>(definition.startupOrder());
-        Collections.reverse(order);
-        return List.copyOf(order);
-    }
+    /** Validated deterministic startup order. */
+    public List<String> startupOrder() { return startupOrder; }
+    /** Reverse dependency order used for shutdown. */
+    public List<String> shutdownOrder() { return shutdownOrder; }
 
     /** Immutable point-in-time diagnostics for service and component states. */
     public LifecycleDiagnostics diagnostics() {
-        synchronized (stateLock) { return new LifecycleDiagnostics(state, serviceStates, startupOrder(), shutdownOrder()); }
+        synchronized (stateLock) { return new LifecycleDiagnostics(state, serviceStates, startupOrder, shutdownOrder); }
     }
 
-    /** Runs only explicitly registered reload hooks in dependency order. Partial failures are reported, not rolled back. */
+    /**
+     * Runs only explicitly registered reload hooks in dependency order. Partial failures are reported, not rolled back.
+     * @return attempted hooks and any per-component failures
+     * @throws LifecycleException if reload is attempted outside the RUNNING state
+     */
     public LifecycleReloadResult reload() {
         begin(Operation.RELOAD);
         List<String> attempted = new ArrayList<>();
@@ -163,12 +197,15 @@ public final class LifecycleManager implements AutoCloseable {
         try {
             synchronized (stateLock) {
                 if (state == LifecycleState.STOPPED || state == LifecycleState.FAILED) return;
-                if (state == LifecycleState.NEW) { state = LifecycleState.STOPPED; return; }
+                if (state == LifecycleState.NEW) { state = LifecycleState.STOPPED; definition = null; return; }
                 if (state != LifecycleState.RUNNING) throw invalidTransition("close", state);
                 state = LifecycleState.STOPPING;
             }
             List<Throwable> failures = stopStarted();
-            synchronized (stateLock) { state = LifecycleState.STOPPED; }
+            synchronized (stateLock) {
+                state = LifecycleState.STOPPED;
+                definition = null;
+            }
             if (!failures.isEmpty()) {
                 Throwable primary = failures.get(0);
                 failures.stream().skip(1).forEach(primary::addSuppressed);
@@ -180,7 +217,7 @@ public final class LifecycleManager implements AutoCloseable {
         }
     }
 
-    LifecycleDefinition definition() { return definition; }
+    LifecycleDefinition definition() { synchronized (stateLock) { return definition; } }
 
     <T> T requireDependency(LifecycleNodeDefinition requester, ServiceKey<T> key) {
         Objects.requireNonNull(key, "key");
@@ -329,22 +366,27 @@ public final class LifecycleManager implements AutoCloseable {
     /** Builder convenience for creating a manager directly. */
     public static final class Builder {
         private final LifecycleBuilder delegate = LifecycleDefinition.builder();
+        /** Registers a service, automatically closing its value when it implements {@link AutoCloseable}. */
         public <T> Builder service(ServiceKey<T> key, ServiceFactory<? extends T> factory,
                                    LifecycleDependency... dependencies) {
             delegate.service(key, factory, dependencies); return this;
         }
+        /** Registers a service with a caller-provided cleanup action. */
         public <T> Builder serviceWithCleanup(ServiceKey<T> key, ServiceFactory<? extends T> factory,
                                               ServiceCleanup<? super T> cleanup,
                                               LifecycleDependency... dependencies) {
             delegate.serviceWithCleanup(key, factory, cleanup, dependencies); return this;
         }
+        /** Registers a non-retrievable lifecycle component. */
         public Builder component(ComponentKey key, LifecycleAction start, LifecycleAction stop,
                                  LifecycleDependency... dependencies) {
             delegate.component(key, start, stop, dependencies); return this;
         }
+        /** Registers an optional reload callback for a registered node. */
         public Builder reload(LifecycleDependency key, LifecycleAction action) {
             delegate.reload(key, action); return this;
         }
+        /** Builds a manager with an immutable, validated lifecycle definition. */
         public LifecycleManager build() { return LifecycleManager.create(delegate.build()); }
     }
 }
