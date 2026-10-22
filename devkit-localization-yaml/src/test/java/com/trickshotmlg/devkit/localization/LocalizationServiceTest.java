@@ -17,6 +17,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -86,6 +88,56 @@ class LocalizationServiceTest {
             assertTrue(result.successful());
             assertEquals("Hello", resolve(service, "hello", "en-US"));
         } finally { service.close(); }
+    }
+
+    @Test
+    void defaultAsyncReloadQueueIsBoundedAndRejectedTasksCompleteTheirStages() throws Exception {
+        CountDownLatch loading = new CountDownLatch(1);
+        CountDownLatch continueLoad = new CountDownLatch(1);
+        AtomicInteger loads = new AtomicInteger();
+        TranslationSource source = new TranslationSource() {
+            @Override public Map<Locale, TranslationCatalog> load() throws IOException {
+                if (loads.incrementAndGet() == 2) {
+                    loading.countDown();
+                    try {
+                        if (!continueLoad.await(5, TimeUnit.SECONDS)) throw new IOException("test load timed out");
+                    } catch (InterruptedException exception) {
+                        Thread.currentThread().interrupt();
+                        throw new IOException(exception);
+                    }
+                }
+                return Map.of(Locale.ENGLISH, TranslationCatalog.of(Locale.ENGLISH, Map.of("key", "value")));
+            }
+        };
+        LocalizationService service = LocalizationService.builder().source(source).build();
+        try {
+            assertTrue(service.reload().successful());
+            var active = service.reloadAsync();
+            assertTrue(loading.await(5, TimeUnit.SECONDS));
+            var queued = service.reloadAsync();
+            var rejected = service.reloadAsync();
+            assertTrue(rejected.toCompletableFuture().isCompletedExceptionally());
+
+            continueLoad.countDown();
+            assertTrue(active.toCompletableFuture().get(5, TimeUnit.SECONDS).successful());
+            assertTrue(queued.toCompletableFuture().get(5, TimeUnit.SECONDS).successful());
+            assertEquals(3, loads.get());
+        } finally {
+            continueLoad.countDown();
+            service.close();
+        }
+    }
+
+    @Test
+    void closingServiceDoesNotShutDownCallerOwnedExecutor() throws Exception {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        LocalizationService service = LocalizationService.builder().reloadExecutor(executor).build();
+        service.close();
+        try {
+            assertFalse(executor.isShutdown());
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     @Test
@@ -234,6 +286,9 @@ class LocalizationServiceTest {
             Files.writeString(folder.resolve("notes.txt"), "not a translation");
             Thread.sleep(300);
             assertEquals(before, service.generation());
+            Files.delete(folder.resolve("notes.txt"));
+            Thread.sleep(300);
+            assertEquals(before, service.generation());
 
             Files.delete(file);
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(8);
@@ -261,6 +316,10 @@ class LocalizationServiceTest {
 
             assertTrue(service.generation() > before);
             assertEquals("hello", resolve(service, "hello", "de"));
+            long afterRemoval = service.generation();
+            Files.writeString(temp.resolve("removed-de/friends.yml"), "hello: \"Changed outside watched tree\"\n");
+            Thread.sleep(300);
+            assertEquals(afterRemoval, service.generation());
         } finally { service.close(); }
     }
 

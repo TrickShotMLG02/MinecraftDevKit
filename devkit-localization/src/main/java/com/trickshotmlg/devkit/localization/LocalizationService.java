@@ -28,8 +28,10 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -62,7 +64,9 @@ public final class LocalizationService implements TextProvider, AutoCloseable {
         diagnosticSink = builder.diagnosticSink;
         watcherFailureHandler = builder.watcherFailureHandler;
         if (builder.reloadExecutor == null) {
-            ownedExecutor = Executors.newSingleThreadExecutor(daemonFactory("minecraftdevkit-localization-reload"));
+            ownedExecutor = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
+                    new ArrayBlockingQueue<>(1), daemonFactory("minecraftdevkit-localization-reload"),
+                    new ThreadPoolExecutor.AbortPolicy());
             reloadExecutor = ownedExecutor;
         } else {
             ownedExecutor = null;
@@ -94,7 +98,11 @@ public final class LocalizationService implements TextProvider, AutoCloseable {
         }
     }
 
-    /** Schedules a serialized reload on the configured executor. */
+    /**
+     * Schedules a serialized reload on the configured executor. The default executor allows one
+     * active and one queued reload; if both slots are occupied, the returned stage completes
+     * exceptionally with a rejection instead of growing an unbounded work queue.
+     */
     public CompletionStage<ReloadResult> reloadAsync() {
         ensureOpen();
         CompletableFuture<ReloadResult> future = new CompletableFuture<>();
@@ -227,11 +235,12 @@ public final class LocalizationService implements TextProvider, AutoCloseable {
 
     @Override
     public void close() {
-        synchronized (reloadLock) {
-            if (!closed.compareAndSet(false, true)) return;
-        }
+        if (!closed.compareAndSet(false, true)) return;
+        // Wait for an already-running synchronous load to finish before releasing resources.
+        synchronized (reloadLock) { }
         stopWatching();
-        if (ownedExecutor != null) ownedExecutor.shutdownNow();
+        // Queued reloads now observe the closed state and complete their futures exceptionally.
+        if (ownedExecutor != null) ownedExecutor.shutdown();
     }
 
     private void report(TextDiagnostic diagnostic) {
@@ -304,16 +313,23 @@ public final class LocalizationService implements TextProvider, AutoCloseable {
         private final AtomicBoolean running = new AtomicBoolean(true);
         private final WatchService watchService;
         private final Map<WatchKey, Path> directories = new ConcurrentHashMap<>();
+        private final Set<Path> registeredDirectories = ConcurrentHashMap.newKeySet();
         private final Thread thread;
 
         Watcher(List<Path> roots, Duration debounce) throws IOException {
             this.debounce = debounce;
             watchService = FileSystems.getDefault().newWatchService();
-            for (Path root : roots) {
-                Files.createDirectories(root);
-                registerTree(root);
+            try {
+                for (Path root : roots) {
+                    Files.createDirectories(root);
+                    registerTree(root);
+                }
+                thread = daemonFactory("minecraftdevkit-localization-watch").newThread(this);
+            } catch (IOException | RuntimeException failure) {
+                try { watchService.close(); }
+                catch (IOException closeFailure) { failure.addSuppressed(closeFailure); }
+                throw failure;
             }
-            thread = daemonFactory("minecraftdevkit-localization-watch").newThread(this);
         }
 
         void start() { thread.start(); }
@@ -326,9 +342,16 @@ public final class LocalizationService implements TextProvider, AutoCloseable {
         }
 
         private void register(Path directory) throws IOException {
-            WatchKey key = directory.register(watchService, StandardWatchEventKinds.ENTRY_CREATE,
-                    StandardWatchEventKinds.ENTRY_MODIFY, StandardWatchEventKinds.ENTRY_DELETE);
-            directories.put(key, directory);
+            Path normalized = directory.toAbsolutePath().normalize();
+            if (!registeredDirectories.add(normalized)) return;
+            try {
+                WatchKey key = directory.register(watchService, StandardWatchEventKinds.ENTRY_CREATE,
+                        StandardWatchEventKinds.ENTRY_MODIFY, StandardWatchEventKinds.ENTRY_DELETE);
+                directories.put(key, normalized);
+            } catch (IOException | RuntimeException failure) {
+                registeredDirectories.remove(normalized);
+                throw failure;
+            }
         }
 
         @Override public void run() {
@@ -341,7 +364,7 @@ public final class LocalizationService implements TextProvider, AutoCloseable {
                         Path directory = directories.get(key);
                         for (WatchEvent<?> event : key.pollEvents()) {
                             if (event.kind() == StandardWatchEventKinds.OVERFLOW || directory == null) continue;
-                            Path changed = directory.resolve((Path) event.context());
+                            Path changed = directory.resolve((Path) event.context()).toAbsolutePath().normalize();
                             if (event.kind() == StandardWatchEventKinds.ENTRY_CREATE && Files.isDirectory(changed)) {
                                 try { registerTree(changed); }
                                 catch (IOException failure) { reportWatcherFailure(failure); }
@@ -355,18 +378,31 @@ public final class LocalizationService implements TextProvider, AutoCloseable {
                                     }
                                 } catch (IOException failure) { reportWatcherFailure(failure); }
                             }
-                            if (event.kind() == StandardWatchEventKinds.ENTRY_DELETE
-                                    && !changed.getFileName().toString().endsWith(".yml")) {
-                                // A removed locale directory may have contained many translation files.
-                                dirty = true;
-                                lastChange = System.nanoTime();
+                            if (event.kind() == StandardWatchEventKinds.ENTRY_DELETE) {
+                                boolean removedDirectory = directories.entrySet().stream()
+                                        .anyMatch(entry -> entry.getValue().startsWith(changed));
+                                if (removedDirectory) {
+                                    // Cancel watches below a removed locale directory and reload its removed keys.
+                                    for (Map.Entry<WatchKey, Path> entry : directories.entrySet()) {
+                                        if (entry.getValue().startsWith(changed)) {
+                                            entry.getKey().cancel();
+                                            directories.remove(entry.getKey(), entry.getValue());
+                                            registeredDirectories.remove(entry.getValue());
+                                        }
+                                    }
+                                    dirty = true;
+                                    lastChange = System.nanoTime();
+                                }
                             }
                             if (changed.getFileName().toString().endsWith(".yml")) {
                                 dirty = true;
                                 lastChange = System.nanoTime();
                             }
                         }
-                        if (!key.reset()) directories.remove(key);
+                        if (!key.reset()) {
+                            Path removed = directories.remove(key);
+                            if (removed != null) registeredDirectories.remove(removed);
+                        }
                     }
                     if (dirty && System.nanoTime() - lastChange >= debounce.toNanos()) {
                         reloadAsync().thenAccept(result -> {

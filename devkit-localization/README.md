@@ -92,7 +92,7 @@ Dynamic values are inserted as plain Adventure components and are never parsed a
 
 `reload()` loads and validates every source into a new immutable `TranslationSnapshot`; only then does one atomic reference publish it. If any source fails, the prior active snapshot remains available. `ReloadResult` reports success, whether content changed, generation, locales, entry count, source descriptions, and an error when loading failed.
 
-`reloadAsync()` runs on a single owned daemon executor by default. Supply a caller-owned executor with `.reloadExecutor(executor)` if the application controls its own lifecycle; the service will not shut that executor down. Reload calls are serialized. Call `close()` during plugin shutdown.
+`reloadAsync()` runs on a single owned daemon executor by default. The default executor allows one running reload and one queued reload; overload is reported through an exceptionally completed stage instead of an unbounded queue. Supply a caller-owned executor with `.reloadExecutor(executor)` if the application controls its own lifecycle; the service will not shut that executor down. Reload calls are serialized. Call `close()` during plugin shutdown.
 
 External file watching is opt-in:
 
@@ -102,7 +102,7 @@ localization.startWatching();
 localization.stopWatching();
 ```
 
-The watcher creates and watches configured external YAML directories, watches locale subdirectories, and debounces create/modify/delete events before invoking the same reload pipeline. Bundled JAR resources are not watched. File-system watch notifications vary by OS and editor, so explicit reload remains the reliable fallback. `watcherFailureHandler(...)` receives watcher and automatic-reload failures. Close the service to stop the watcher and its owned executor.
+The watcher creates and watches configured external YAML directories, watches locale subdirectories, and debounces YAML create/modify/delete events before invoking the same reload pipeline. It also reloads when a watched locale directory is removed, then cancels registrations beneath that directory. Bundled JAR resources are not watched. File-system watch notifications vary by OS and editor, so explicit reload remains the reliable fallback. `watcherFailureHandler(...)` receives watcher and automatic-reload failures. Close the service to stop the watcher and its owned executor.
 
 ## Existing `.properties` provider
 
