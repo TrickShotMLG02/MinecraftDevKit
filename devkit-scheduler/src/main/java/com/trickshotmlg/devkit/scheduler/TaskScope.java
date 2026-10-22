@@ -6,5 +6,7 @@ public interface TaskScope extends AutoCloseable {
     AsyncTaskRunner async();
     TaskScope childScope();
     boolean isClosed();
+    /** Number of currently owned non-terminal tasks. */
+    int activeTaskCount();
     @Override void close();
 }

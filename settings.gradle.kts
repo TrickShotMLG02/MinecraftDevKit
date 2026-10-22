@@ -13,6 +13,7 @@ include(
     "devkit-bukkit",
     "devkit-bukkit-commands",
     "devkit-bukkit-gui",
+    "devkit-scheduler",
     "devkit-bukkit-metadata",
     "devkit-gradle-plugin",
 )
