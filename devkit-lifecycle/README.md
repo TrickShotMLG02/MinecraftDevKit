@@ -48,7 +48,7 @@ LifecycleManager lifecycle = LifecycleManager.builder()
     .build();
 ```
 
-Resources are closed in reverse acquisition order, after a service's own automatic or explicit cleanup action. `context.onClose(...)` registers an action; `context.manage(...)` registers an `AutoCloseable`. The manager rejects duplicate ownership of the same resource identity. Resources remain owned by the lifecycle after successful startup and are released during rollback or shutdown. Cleanup is best-effort for resources the framework owns: external effects that a resource cannot reverse are not transactional.
+Resources are closed in reverse acquisition order, after a service's own automatic or explicit cleanup action. `context.onClose(...)` registers an action; `context.manage(...)` registers an `AutoCloseable`. Explicitly registering the same identity twice is rejected. When an automatically closed service is also registered with `context.manage(...)` in its own factory, the returned service is recognized as already owned and is closed once. Resources remain owned by the lifecycle after successful startup and are released during rollback or shutdown. Cleanup is best-effort for resources the framework owns: external effects that a resource cannot reverse are not transactional.
 
 Use `serviceWithCleanup` when the service has a close operation that is not represented by `AutoCloseable`:
 

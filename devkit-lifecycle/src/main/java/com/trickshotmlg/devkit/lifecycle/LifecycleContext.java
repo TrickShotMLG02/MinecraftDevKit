@@ -62,6 +62,16 @@ public final class LifecycleContext {
         return resource;
     }
 
+    /** Ensures an automatically closeable service result is owned without duplicating ownership
+     * when the factory already registered that exact instance for rollback safety. */
+    void manageServiceResult(AutoCloseable resource) {
+        synchronized (resourceLock) {
+            if (!acceptingResources) throw new IllegalStateException("Resource registration has ended for '" + componentName() + "'");
+            if (resources.stream().anyMatch(owned -> owned.owns(resource))) return;
+            resources.add(manager.claimResource(resource));
+        }
+    }
+
     /**
      * Registers a cleanup action, invoked at most once during rollback or shutdown.
      * @param cleanup cleanup callback with lifecycle context access

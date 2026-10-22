@@ -29,6 +29,46 @@ class LifecycleResourceTest {
         assertEquals(ServiceState.STOPPED, manager.serviceStates().get("service"));
     }
 
+    @Test void returnedServiceAlreadyManagedByItsFactoryIsClosedOnce() {
+        List<String> calls = new ArrayList<>();
+        ServiceKey<ResourceService> key = ServiceKey.of("service", ResourceService.class);
+        LifecycleManager manager = LifecycleManager.builder().service(key, context -> {
+            ResourceService service = new ResourceService("service", calls);
+            context.manage(service);
+            return service;
+        }).build();
+
+        manager.start();
+        manager.close();
+
+        assertEquals(List.of("service"), calls);
+    }
+
+    @Test void repeatedSameCleanupFailureDoesNotAbortRemainingShutdown() {
+        List<String> calls = new ArrayList<>();
+        IllegalStateException sharedFailure = new IllegalStateException("shared cleanup failure");
+        ServiceKey<ResourceService> dependency = ServiceKey.of("dependency", ResourceService.class);
+        ServiceKey<ResourceService> service = ServiceKey.of("service", ResourceService.class);
+        LifecycleManager manager = LifecycleManager.builder()
+                .service(dependency, context -> new ResourceService("dependency", calls))
+                .service(service, context -> {
+                    context.manage(() -> { calls.add("first"); throw sharedFailure; });
+                    context.manage(() -> { calls.add("second"); throw sharedFailure; });
+                    return new ResourceService("service", calls);
+                }, dependency)
+                .build();
+
+        manager.start();
+        LifecycleException failure = assertThrows(LifecycleException.class, manager::close);
+
+        assertEquals(List.of("service", "second", "first", "dependency"), calls);
+        assertEquals(LifecycleState.STOPPED, manager.state());
+        assertEquals(LifecyclePhase.SHUTDOWN, failure.phase());
+        assertSame(sharedFailure, failure.getCause().getCause());
+        assertEquals(0, sharedFailure.getSuppressed().length);
+        assertDoesNotThrow(manager::close);
+    }
+
     @Test void failedFactoryClosesItsPartialResourcesThenRollsBackStartedDependencies() {
         List<String> calls = new ArrayList<>();
         ServiceKey<ResourceService> database = ServiceKey.of("database", ResourceService.class);

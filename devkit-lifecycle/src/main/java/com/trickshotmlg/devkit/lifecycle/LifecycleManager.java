@@ -71,14 +71,14 @@ public final class LifecycleManager implements AutoCloseable {
                         if (!node.serviceType().isInstance(serviceValue)) {
                             // A factory may violate its generic contract through raw types or unchecked code.
                             // The returned object was still acquired during startup, so own it before rejecting it.
-                            if (serviceValue instanceof AutoCloseable closeable) context.manage(closeable);
+                            if (serviceValue instanceof AutoCloseable closeable) context.manageServiceResult(closeable);
                             throw new IllegalStateException("Factory for service '" + node.name() + "' returned "
                                     + serviceValue.getClass().getName() + ", expected " + node.serviceType().getName());
                         }
                         if (node.cleanup() != null) {
                             Object created = serviceValue;
                             context.onClose(ignored -> node.cleanup().close(created, context));
-                        } else if (serviceValue instanceof AutoCloseable closeable) context.manage(closeable);
+                        } else if (serviceValue instanceof AutoCloseable closeable) context.manageServiceResult(closeable);
                     } else {
                         node.start().run(context);
                         if (node.stop() != null) context.onClose(node.stop());
@@ -105,7 +105,7 @@ public final class LifecycleManager implements AutoCloseable {
                 LifecycleException failure = new LifecycleException(LifecyclePhase.STARTUP,
                         current == null ? null : current.name(), "Failed to start lifecycle component '"
                         + (current == null ? "unknown" : current.name()) + "'", startupFailure);
-                cleanupFailures.forEach(failure::addSuppressed);
+                cleanupFailures.forEach(cleanupFailure -> addSuppressedIfDistinct(failure, cleanupFailure));
                 throw failure;
             }
         } finally {
@@ -208,7 +208,7 @@ public final class LifecycleManager implements AutoCloseable {
             }
             if (!failures.isEmpty()) {
                 Throwable primary = failures.get(0);
-                failures.stream().skip(1).forEach(primary::addSuppressed);
+                failures.stream().skip(1).forEach(secondary -> addSuppressedIfDistinct(primary, secondary));
                 throw new LifecycleException(LifecyclePhase.SHUTDOWN, null,
                         "Lifecycle stopped with " + failures.size() + " cleanup failure(s)", primary);
             }
@@ -279,7 +279,7 @@ public final class LifecycleManager implements AutoCloseable {
                 setNodeState(node.name(), ServiceState.STOPPED);
             } else {
                 Throwable primary = nodeFailures.get(0);
-                nodeFailures.stream().skip(1).forEach(primary::addSuppressed);
+                nodeFailures.stream().skip(1).forEach(secondary -> addSuppressedIfDistinct(primary, secondary));
                 failures.add(new LifecycleException(LifecyclePhase.SHUTDOWN, node.name(),
                         "Failed to stop lifecycle component '" + node.name() + "'", primary));
                 setNodeState(node.name(), ServiceState.FAILED);
@@ -321,6 +321,7 @@ public final class LifecycleManager implements AutoCloseable {
         private final AutoCloseable resource;
         private boolean closed;
         private OwnedResource(AutoCloseable resource) { this.resource = resource; }
+        boolean owns(AutoCloseable candidate) { return resource == candidate; }
         synchronized void close() throws Exception {
             if (closed) return;
             closed = true;
@@ -361,6 +362,12 @@ public final class LifecycleManager implements AutoCloseable {
     private LifecycleException invalidTransition(String action, LifecycleState current) {
         return new LifecycleException(LifecyclePhase.STARTUP, null,
                 "Cannot " + action + " lifecycle while it is " + current, null);
+    }
+
+    private static void addSuppressedIfDistinct(Throwable primary, Throwable secondary) {
+        // Throwable rejects self-suppression. A resource can surface the same exception instance
+        // from more than one cleanup callback; do not abort cleanup of remaining nodes.
+        if (primary != secondary) primary.addSuppressed(secondary);
     }
 
     /** Builder convenience for creating a manager directly. */
