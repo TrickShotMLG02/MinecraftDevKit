@@ -75,6 +75,7 @@ tasks.shadowJar {
     }
     relocate("org.incendo.cloud", "com.trickshotmlg.devkit.examples.internal.cloud")
     relocate("io.leangen.geantyref", "com.trickshotmlg.devkit.examples.internal.geantyref")
+    relocate("com.trickshotmlg.devkit.permissions", "com.trickshotmlg.devkit.examples.internal.permissions")
     relocate("org.yaml.snakeyaml", "com.trickshotmlg.devkit.examples.internal.snakeyaml")
     relocate("net.kyori.adventure.text.minimessage", "com.trickshotmlg.devkit.examples.internal.minimessage")
     from(rootProject.file("../../THIRD-PARTY-NOTICES.md")) {

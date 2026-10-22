@@ -55,7 +55,7 @@ The deployable shaded plugin is `build/libs/minecraftdevkit-bukkit-permissions-e
 - `FriendPermissions` declares individual permissions, child names, nested sections, and the `DEFAULT`, `DEFAULT_EXTENDED`, `MODERATOR`, and `ADMIN` groups. Its public static `CATALOG` field is the Gradle plugin input.
 - The `com.trickshotmlg.devkit.bukkit-permissions` plugin loads that compiled field in an isolated worker and merges exported metadata into `src/main/resources/plugin.yml`.
 - The Paper API is `compileOnly`; it is not bundled.
-- `devkit-permissions` is an implementation dependency and its runtime dependency graph is included in the Shadow JAR. The Paper API remains server-provided. SnakeYAML packages are relocated when present to reduce collisions with server/plugin classpaths.
+- `devkit-permissions` is an implementation dependency and its runtime dependency graph is included in the Shadow JAR. Its classes are relocated into this example's private package to avoid collisions with other plugins. The Paper API remains server-provided. SnakeYAML packages are relocated when present to reduce collisions with server/plugin classpaths.
 - The ordinary `jar` task is disabled so `build` produces one deployable shaded JAR rather than a thin JAR alongside it.
 
 The generator writes to `build/generated/minecraftdevkit/resources/plugin.yml`; it does not change the source descriptor. YAML comments and formatting can be normalized by serialization. Generated group children are flattened positive grants. They do not create group-to-group permission relationships, and exclusions are omitted rather than emitted as negative children.

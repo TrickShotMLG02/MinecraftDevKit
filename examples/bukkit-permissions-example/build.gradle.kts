@@ -41,6 +41,10 @@ tasks.jar {
 tasks.shadowJar {
     archiveClassifier.set("")
     relocate(
+        "com.trickshotmlg.devkit.permissions",
+        "com.trickshotmlg.devkit.examples.permissions.internal.permissions"
+    )
+    relocate(
         "org.yaml.snakeyaml",
         "com.trickshotmlg.devkit.examples.internal.snakeyaml"
     )
