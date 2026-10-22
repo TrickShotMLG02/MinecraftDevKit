@@ -50,7 +50,8 @@ public final class StorageExamplePlugin extends JavaPlugin {
                 .service(CONFIG, context -> YamlConfigHandle.createIfMissing(dataDirectory.resolve("config.yml"), StorageConfig.SCHEMA))
                 .service(STORAGE, context -> createStorage(context.require(CONFIG), dataDirectory), CONFIG)
                 .service(SCHEDULER, context -> BukkitTaskScheduler.create(plugin))
-                .service(TASKS, context -> context.require(SCHEDULER).scope(), SCHEDULER)
+                // Storage outlives the scope because callbacks from database work are handed off through it.
+                .service(TASKS, context -> context.require(SCHEDULER).scope(), SCHEDULER, STORAGE)
                 .component(MIGRATIONS, context -> {
                     StorageMigrations.builder(context.require(STORAGE))
                             .locations("classpath:db/migration")

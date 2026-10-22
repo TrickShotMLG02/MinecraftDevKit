@@ -25,13 +25,14 @@ flowchart TD
     Config[Typed YAML config] --> Storage[JDBC Storage]
     Storage --> Migrations[Flyway migrations]
     Storage --> Repository[PlayerRepository]
+    Storage --> TaskScope[Plugin task scope]
     Migrations --> Repository
     BukkitScheduler[Plugin scheduler] --> TaskScope[Plugin task scope]
     Repository --> Commands[Cloud commands]
     TaskScope --> Commands
 ```
 
-Startup follows declared dependencies. Shutdown closes the task scope and scheduler, then the repository and migrations, storage, and configuration. The lifecycle owns the Storage, BukkitTaskScheduler, and TaskScope instances. Repositories retain no connections.
+Startup follows declared dependencies. Shutdown closes the repository and migrations, then the task scope and scheduler before Storage, and configuration last. The lifecycle owns the Storage, BukkitTaskScheduler, and TaskScope instances. Repositories retain no connections.
 
 ## Commands and permissions
 
