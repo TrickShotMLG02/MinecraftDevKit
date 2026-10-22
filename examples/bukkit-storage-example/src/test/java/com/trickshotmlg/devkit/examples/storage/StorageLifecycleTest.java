@@ -35,4 +35,21 @@ class StorageLifecycleTest {
         lifecycle.close();
         assertTrue(created.get().isClosed());
     }
+
+    @Test void databaseTaskScopeClosesBeforeStorageItHandsResultsThrough() {
+        ServiceKey<Storage> storageKey = ServiceKey.of("scope-test-storage", Storage.class);
+        ServiceKey<AutoCloseable> taskScope = ServiceKey.of("scope-test-tasks", AutoCloseable.class);
+        LifecycleManager lifecycle = LifecycleManager.builder()
+                .service(storageKey, context -> Storage.sqliteMemory())
+                .service(taskScope, context -> {
+                    Storage storage = context.require(storageKey);
+                    return () -> assertFalse(storage.isClosed(), "Storage must outlive its async continuation scope");
+                }, storageKey)
+                .build();
+
+        lifecycle.start();
+        Storage storage = lifecycle.get(storageKey);
+        lifecycle.close();
+        assertTrue(storage.isClosed());
+    }
 }
