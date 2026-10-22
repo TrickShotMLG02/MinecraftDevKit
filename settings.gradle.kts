@@ -15,6 +15,8 @@ include(
     "devkit-bukkit-gui",
     "devkit-scheduler",
     "devkit-bukkit-scheduler",
+    "devkit-lifecycle",
+    "devkit-bukkit-lifecycle",
     "devkit-bukkit-metadata",
     "devkit-gradle-plugin",
 )
