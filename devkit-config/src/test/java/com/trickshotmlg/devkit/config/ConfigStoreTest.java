@@ -75,4 +75,41 @@ class ConfigStoreTest {
         assertEquals(0, store.generation());
         assertFalse(store.isDirty());
     }
+
+    @Test void sensitiveDefaultAndProgrammaticCodecFailuresDoNotExposeValues() {
+        String secret = "private-token-7f9a";
+        IllegalArgumentException invalidDefault = assertThrows(IllegalArgumentException.class, () ->
+                ConfigKey.string("database.password", secret)
+                        .sensitive()
+                        .validate(value -> java.util.Optional.of("rejected value: " + value))
+                        .build());
+        assertFalse(invalidDefault.getMessage().contains(secret));
+
+        ConfigCodec<String> codec = ConfigCodecs.of("credential", raw -> {
+            if ("safe".equals(raw)) return "safe";
+            throw new IllegalArgumentException("rejected value: " + raw);
+        }, value -> value);
+        ConfigKey<String> password = ConfigKey.builder("database.password", codec)
+                .defaultValue("safe").sensitive().build();
+        ConfigStore store = ConfigStore.defaults(ConfigSchema.builder().register(password).build());
+        IllegalArgumentException invalidUpdate = assertThrows(IllegalArgumentException.class,
+                () -> store.set(password, secret));
+        assertFalse(invalidUpdate.getMessage().contains(secret));
+        assertEquals("safe", store.get(password));
+    }
+
+    @Test void sensitiveCrossFieldValidationMessagesAreRedacted() {
+        String secret = "private-token-7f9a";
+        ConfigKey<String> password = ConfigKey.string("database.password", secret).sensitive().build();
+        ConfigSchema schema = ConfigSchema.builder().register(password)
+                .validate(values -> java.util.List.of(ConfigIssue.error(password.path(),
+                        "invalid credential " + values.get(password))))
+                .build();
+
+        ConfigValidationException failure = assertThrows(ConfigValidationException.class,
+                () -> ConfigStore.defaults(schema));
+
+        assertFalse(failure.getMessage().contains(secret));
+        assertTrue(failure.getMessage().contains("database.password"));
+    }
 }

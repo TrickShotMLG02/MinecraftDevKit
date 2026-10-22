@@ -60,10 +60,10 @@ YamlConfigHandle config = YamlConfigHandle.load(path, FriendConfig.SCHEMA,
     UnknownKeyPolicy.PRESERVE_AND_WARN, migrations);
 ```
 
-Migrations are contiguous one-version steps over a detached dotted-path candidate. Missing steps, future versions, collisions, exceptions, or invalid migrated values reject loading without editing the original. A migrated handle starts dirty. Its first successful save creates a non-overwriting `config.yml.vN.bak` source backup and only then atomically replaces the document with the current schema version. A matching existing backup can be reused on retry; a different backup is never overwritten.
+Migrations are contiguous one-version steps over a detached dotted-path candidate. Missing steps, future versions, collisions, exceptions, or invalid migrated values reject loading without editing the original. Migration callback exception messages and causes are omitted from diagnostics because callbacks can include raw credentials in them; the failing version step and exception type are reported instead. A migrated handle starts dirty. Its first successful save creates a non-overwriting `config.yml.vN.bak` source backup and only then atomically replaces the document with the current schema version. A matching existing backup can be reused on retry; a different backup is never overwritten.
 
 Schema version 1 is assumed when `config-version` is absent. The metadata key is emitted by generated defaults and successful saves. Migration does not automatically persist during load.
 
 ## Sensitive values
 
-Mark credentials with `.sensitive()`. Validation findings redact source values and codec exception details for those keys. Values still must be persisted when configured. Local YAML files are not encrypted or a secure secret vault; use filesystem permissions and platform secret facilities where appropriate.
+Mark credentials with `.sensitive()`. Validation findings, default validation failures, programmatic codec failures, and YAML encoding failures redact source values and unsafe validator/codec messages for those keys. Cross-field validator exceptions are reported generically because they may inspect any value. Values still must be persisted when configured. Local YAML files are not encrypted or a secure secret vault; use filesystem permissions and platform secret facilities where appropriate.

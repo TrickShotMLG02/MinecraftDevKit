@@ -62,6 +62,7 @@ public final class ConfigKey<T> {
             try { validator.validate(value).ifPresent(failures::add); }
             catch (RuntimeException exception) { failures.add("validator failed: " + exception.getMessage()); }
         }
+        if (sensitive && !failures.isEmpty()) return List.of("invalid sensitive value");
         return List.copyOf(failures);
     }
 

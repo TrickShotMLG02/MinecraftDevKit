@@ -71,8 +71,13 @@ public final class YamlConfigFile {
             if (migration == null) throw new YamlConfigException("No configuration migration from version "
                     + migrationVersion + " to " + (migrationVersion + 1) + " in " + file, List.of());
             try { migration.migrate(new MutableConfigValues(candidate)); }
-            catch (Exception exception) { throw new YamlConfigException("Configuration migration " + migrationVersion
-                    + " -> " + (migrationVersion + 1) + " failed in " + file + ": " + exception.getMessage(), exception, List.of()); }
+            catch (Exception exception) {
+                // Migration code can inspect arbitrary raw values, including credentials. Do not
+                // propagate its message or cause into diagnostics where it could disclose them.
+                throw new YamlConfigException("Configuration migration " + migrationVersion
+                        + " -> " + (migrationVersion + 1) + " failed in " + file
+                        + " (" + exception.getClass().getSimpleName() + ")", List.of());
+            }
             migrationVersion++;
         }
         LinkedHashMap<String, Object> known = new LinkedHashMap<>();
@@ -155,7 +160,13 @@ public final class YamlConfigFile {
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
-    private static Object encode(ConfigKey key, Object value) { return key.codec().encode(value); }
+    private static Object encode(ConfigKey key, Object value) {
+        try { return key.codec().encode(value); }
+        catch (RuntimeException exception) {
+            if (key.sensitive()) throw new IllegalArgumentException("Unable to encode sensitive configuration value at '" + key.path() + "'");
+            throw exception;
+        }
+    }
 
     private String dump(Map<String, Object> root) {
         DumperOptions options = new DumperOptions();

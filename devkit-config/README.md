@@ -26,7 +26,7 @@ public final class FriendConfig {
 
 `ConfigKey` has factories for strings, booleans, integer/long/float/double values, enums, UUIDs, and ISO-8601 `Duration`. `ConfigCodecs.list(codec)` and `ConfigCodecs.map(codec)` create immutable typed collections. `ConfigCodecs.of(...)` creates custom codecs. Enum names use exact, case-sensitive Java enum names. Numeric codecs reject overflow and fractional integer inputs. Null is rejected for all regular keys; represent absence with a key default or an explicit custom optional-value codec.
 
-Keys are registered directly in Java. Registration is explicit rather than reflective. Paths use dot-separated identifiers; a path cannot be both a scalar and a parent section. `config-version` is reserved. Missing keys with defaults receive those values; missing keys without defaults are validation errors. Invalid values are never silently replaced by defaults. Sensitive keys redact codec/validator failure details.
+Keys are registered directly in Java. Registration is explicit rather than reflective. Paths use dot-separated identifiers; a path cannot be both a scalar and a parent section. `config-version` is reserved. Missing keys with defaults receive those values; missing keys without defaults are validation errors. Invalid values are never silently replaced by defaults. Sensitive keys redact codec and validator failure details, including cross-field findings that identify a sensitive key.
 
 ## Read and update
 
@@ -46,7 +46,7 @@ AutoCloseable subscription = store.onChange(FriendConfig.MAX_FRIENDS, change -> 
 });
 ```
 
-Updates validate all values and cross-field constraints against a complete candidate. Any error rejects the entire transaction. A snapshot is immutable and continues to represent the generation from which it was obtained. Listener callbacks run synchronously on the publishing thread, after publication and outside the update lock. Listener failures are isolated through the store's configurable failure handler. Close the returned subscription when it is no longer needed.
+Updates validate all values and cross-field constraints against a complete candidate. Any error rejects the entire transaction. Do not call a store mutation method from inside the transaction callback or a validator; nested mutations are rejected because they could otherwise overwrite the outer candidate. Add all related values through the supplied transaction. A snapshot is immutable and continues to represent the generation from which it was obtained. Listener callbacks run synchronously on the publishing thread, after publication and outside the update lock. Listener failures are isolated through the store's configurable failure handler. Close the returned subscription when it is no longer needed.
 
 `ConfigStore.defaults(schema)` creates an in-memory store from defaults. YAML adapters use `ConfigStore.fromValues(schema, decodedValues)`. Successful source reloads replace the full candidate atomically. Multiple stores can be created for independent files.
 

@@ -55,4 +55,21 @@ class ConfigMigrationTest {
         assertThrows(YamlConfigException.class, () -> new YamlConfigFile(schema, UnknownKeyPolicy.PRESERVE, failing).load(file));
         assertTrue(Files.readString(file).contains("max-count: 99"));
     }
+
+    @Test void migrationFailureDoesNotExposeSensitiveYamlValues() throws Exception {
+        String secret = "migration-secret-29bc";
+        ConfigKey<String> password = ConfigKey.string("database.password", "safe").sensitive().build();
+        ConfigSchema sensitiveSchema = ConfigSchema.builder().version(2).register(password).build();
+        Path file = temp.resolve("sensitive.yml");
+        Files.writeString(file, "config-version: 1\ndatabase:\n  password: " + secret + "\n");
+        ConfigMigrationRegistry failing = ConfigMigrationRegistry.builder().register(1, 2, values -> {
+            throw new IllegalStateException("cannot migrate credential " + values.get(password.path()));
+        }).build();
+
+        YamlConfigException failure = assertThrows(YamlConfigException.class,
+                () -> new YamlConfigFile(sensitiveSchema, UnknownKeyPolicy.PRESERVE, failing).load(file));
+
+        assertFalse(failure.toString().contains(secret));
+        assertTrue(Files.readString(file).contains(secret));
+    }
 }

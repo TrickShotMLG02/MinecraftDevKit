@@ -190,8 +190,18 @@ public final class ConfigStore {
                 }
             };
             for (ConfigConstraint constraint : schema.constraints()) {
-                try { issues.addAll(constraint.validate(view)); }
-                catch (RuntimeException exception) { issues.add(ConfigIssue.error("", "cross-field validator failed: " + exception.getMessage())); }
+                try {
+                    for (ConfigIssue issue : constraint.validate(view)) {
+                        ConfigKey<?> key = schema.key(issue.path()).orElse(null);
+                        issues.add(key != null && key.sensitive()
+                                ? new ConfigIssue(issue.path(), issue.severity(), "invalid sensitive value", issue.source(), issue.expected())
+                                : issue);
+                    }
+                } catch (RuntimeException exception) {
+                    // Cross-field validators can inspect every value, so their exception messages
+                    // cannot be assumed safe even when the failing key is not identified.
+                    issues.add(ConfigIssue.error("", "cross-field validator failed"));
+                }
             }
         }
         if (issues.stream().anyMatch(issue -> issue.severity() == ConfigIssue.Severity.ERROR)) throw new ConfigValidationException(issues);
@@ -211,7 +221,12 @@ public final class ConfigStore {
         public <T> Transaction set(ConfigKey<T> key, T value) {
             requireKey(key);
             Objects.requireNonNull(value, "value");
-            values.put(key.path(), ConfigCodecs.freeze(key.codec().decode(key.codec().encode(value))));
+            try {
+                values.put(key.path(), ConfigCodecs.freeze(key.codec().decode(key.codec().encode(value))));
+            } catch (RuntimeException exception) {
+                if (key.sensitive()) throw new IllegalArgumentException("Invalid sensitive value for configuration key '" + key.path() + "'");
+                throw exception;
+            }
             return this;
         }
     }

@@ -98,4 +98,31 @@ class YamlPersistenceTest {
         assertTrue(Files.readString(file).contains("value: 1"));
         assertEquals(2, handle.store().get(value));
     }
+
+    @Test void sensitiveCodecFailureDuringSaveDoesNotExposeTheValueOrReplaceTheFile() throws Exception {
+        String secret = "private-token-7f9a";
+        AtomicBoolean rejectEncoding = new AtomicBoolean();
+        var codec = com.trickshotmlg.devkit.config.ConfigCodecs.of("credential", raw -> {
+            if (!(raw instanceof String text)) throw new IllegalArgumentException("expected string");
+            return text;
+        }, value -> {
+            if (rejectEncoding.get() && value.equals(secret)) throw new IllegalArgumentException("cannot encode " + value);
+            return value;
+        });
+        var key = com.trickshotmlg.devkit.config.ConfigKey.builder("database.password", codec)
+                .defaultValue("safe").sensitive().build();
+        Path file = temp.resolve("secret.yml");
+        YamlConfigHandle handle = YamlConfigHandle.createIfMissing(file,
+                ConfigSchema.builder().register(key).build());
+        String original = Files.readString(file);
+        handle.store().set(key, secret);
+        rejectEncoding.set(true);
+
+        YamlSaveResult result = handle.save(YamlSaveOptions.safeRewrite());
+
+        assertFalse(result.success());
+        assertFalse(result.error().orElse("").contains(secret));
+        assertEquals(original, Files.readString(file));
+        assertTrue(handle.store().isDirty());
+    }
 }
