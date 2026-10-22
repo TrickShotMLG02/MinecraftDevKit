@@ -26,6 +26,7 @@ public final class StorageConfiguration {
         validateTimeout("connectionTimeout", connectionTimeout, false);
         validateTimeout("idleTimeout", idleTimeout, true);
         validateTimeout("busyTimeout", busyTimeout, true);
+        if (sqlite && busyTimeout == null) throw new IllegalArgumentException("SQLite busyTimeout is required");
         if (!sqlite && (busyTimeout != null || sqliteWal))
             throw new IllegalArgumentException("SQLite settings cannot be used with a network database");
         this.jdbcUrl = jdbcUrl;

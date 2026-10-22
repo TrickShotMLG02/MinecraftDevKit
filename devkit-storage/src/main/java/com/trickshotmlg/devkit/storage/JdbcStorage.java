@@ -11,6 +11,11 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 
 final class JdbcStorage implements Storage {
     private final StorageConfiguration configuration;
@@ -18,41 +23,54 @@ final class JdbcStorage implements Storage {
     private final boolean ownsDataSource;
     private final AtomicBoolean closed = new AtomicBoolean();
     private final ThreadLocal<Boolean> transactionActive = ThreadLocal.withInitial(() -> false);
+    private final Object asyncLifecycleLock = new Object();
+    private final java.util.Set<AsyncOperation<?>> asyncOperations = ConcurrentHashMap.newKeySet();
+    private final Executor asyncExecutor;
+    private final boolean ownsAsyncExecutor;
+    private final StorageAsync async = new StorageAsync(this);
 
-    JdbcStorage(StorageConfiguration configuration, DataSource external, boolean ownsExternal) throws Exception {
+    JdbcStorage(StorageConfiguration configuration, DataSource external, boolean ownsExternal,
+                Executor executor, boolean ownsExecutor, int asyncThreads, int asyncQueueCapacity) throws Exception {
         this.configuration = configuration;
+        DataSource resolved;
         if (external != null) {
-            dataSource = external;
+            resolved = external;
             ownsDataSource = ownsExternal;
-            return;
-        }
-        if (configuration.sqliteWal()) StorageBuilder.enableWal(configuration.jdbcUrl());
-        HikariConfig hikari = new HikariConfig();
-        hikari.setJdbcUrl(configuration.jdbcUrl());
-        if (configuration.username() != null) hikari.setUsername(configuration.username());
-        char[] password = configuration.password();
-        if (password != null) {
-            hikari.setPassword(new String(password));
-            java.util.Arrays.fill(password, '\0');
-        }
-        hikari.setMaximumPoolSize(configuration.maximumPoolSize());
-        hikari.setConnectionTimeout(configuration.connectionTimeout().toMillis());
-        if (configuration.idleTimeout() != null && !configuration.idleTimeout().isZero())
-            hikari.setIdleTimeout(configuration.idleTimeout().toMillis());
-        hikari.setPoolName("MinecraftDevKitStorage");
-        if (configuration.sqlite()) {
-            hikari.setConnectionInitSql("PRAGMA foreign_keys=ON");
-            Properties properties = new Properties();
-            properties.setProperty("busy_timeout", Long.toString(configuration.busyTimeout().toMillis()));
-            hikari.setDataSourceProperties(properties);
-        }
-        try {
-            dataSource = new HikariDataSource(hikari);
+        } else {
+            if (configuration.sqliteWal()) StorageBuilder.enableWal(configuration.jdbcUrl());
+            HikariConfig hikari = new HikariConfig();
+            hikari.setJdbcUrl(configuration.jdbcUrl());
+            if (configuration.username() != null) hikari.setUsername(configuration.username());
+            char[] password = configuration.password();
+            if (password != null) {
+                hikari.setPassword(new String(password));
+                java.util.Arrays.fill(password, '\0');
+            }
+            hikari.setMaximumPoolSize(configuration.maximumPoolSize());
+            hikari.setConnectionTimeout(configuration.connectionTimeout().toMillis());
+            if (configuration.idleTimeout() != null && !configuration.idleTimeout().isZero())
+                hikari.setIdleTimeout(configuration.idleTimeout().toMillis());
+            hikari.setPoolName("MinecraftDevKitStorage");
+            if (configuration.sqlite()) {
+                hikari.setConnectionInitSql("PRAGMA foreign_keys=ON");
+                Properties properties = new Properties();
+                properties.setProperty("busy_timeout", Long.toString(configuration.busyTimeout().toMillis()));
+                hikari.setDataSourceProperties(properties);
+            }
+            try {
+                resolved = new HikariDataSource(hikari);
+            } catch (RuntimeException failure) {
+                configuration.clearPassword();
+                throw new StorageException("Could not create JDBC connection pool", failure);
+            }
             ownsDataSource = true;
-        } catch (RuntimeException failure) {
-            configuration.clearPassword();
-            throw new StorageException("Could not create JDBC connection pool", failure);
         }
+        dataSource = resolved;
+        asyncExecutor = executor == null ? new java.util.concurrent.ThreadPoolExecutor(asyncThreads, asyncThreads, 0L,
+                java.util.concurrent.TimeUnit.MILLISECONDS, new java.util.concurrent.ArrayBlockingQueue<>(asyncQueueCapacity),
+                runnable -> { Thread thread = new Thread(runnable, "MinecraftDevKit-Storage"); thread.setDaemon(true); return thread; },
+                new java.util.concurrent.ThreadPoolExecutor.AbortPolicy()) : executor;
+        ownsAsyncExecutor = executor == null || ownsExecutor;
     }
 
     @Override public StorageConfiguration configuration() { return configuration; }
@@ -62,6 +80,59 @@ final class JdbcStorage implements Storage {
     }
     @Override public boolean isClosed() { return closed.get(); }
     void ensureOpen() { if (closed.get()) throw new StorageClosedException(); }
+
+    @Override public StorageAsync async() { ensureOpen(); return async; }
+
+    <T> StorageTask<T> submitAsync(java.util.concurrent.Callable<T> work) {
+        synchronized (asyncLifecycleLock) {
+            ensureOpen();
+            AsyncOperation<T> operation = new AsyncOperation<>(work);
+            asyncOperations.add(operation);
+            operation.task.cancellation(operation::cancelFromHandle);
+            try {
+                asyncExecutor.execute(operation);
+                operation.submissionReturned.set(true);
+            } catch (RejectedExecutionException rejected) {
+                operation.task.fail(new StorageException("Asynchronous storage queue is full or shutting down", rejected));
+                operation.finish();
+            } catch (RuntimeException failure) {
+                operation.task.fail(new StorageException("Asynchronous storage executor rejected work", failure));
+                operation.finish();
+            }
+            return operation.task;
+        }
+    }
+
+    private final class AsyncOperation<T> implements Runnable {
+        private final java.util.concurrent.Callable<T> work;
+        private final StorageTask<T> task = new StorageTask<>();
+        private final AtomicBoolean finished = new AtomicBoolean();
+        private final AtomicBoolean submissionReturned = new AtomicBoolean();
+        private final Thread submittingThread = Thread.currentThread();
+        private AsyncOperation(java.util.concurrent.Callable<T> work) { this.work = work; }
+        @Override public void run() {
+            if (Thread.currentThread() == submittingThread && !submissionReturned.get()) {
+                task.fail(new IllegalStateException("The configured async executor ran storage work inline"));
+                finish();
+                return;
+            }
+            if (!task.begin()) { finish(); return; }
+            try { task.complete(work.call()); }
+            catch (Throwable failure) {
+                if (failure instanceof Error error) task.fail(error);
+                else task.fail(failure instanceof StorageException ? failure : new StorageException("Asynchronous storage operation failed", failure));
+            } finally { finish(); }
+        }
+        private void cancelFromHandle() { cancel(false); }
+        private void cancel(boolean fromClose) {
+            task.cancelState();
+            if (asyncExecutor instanceof ThreadPoolExecutor pool) pool.remove(this);
+            finish();
+        }
+        private void finish() {
+            if (finished.compareAndSet(false, true)) asyncOperations.remove(this);
+        }
+    }
 
     @Override public <T> Optional<T> queryOne(String sql, SqlParameters parameters, RowMapper<T> mapper) {
         List<T> rows = executeQuery(sql, parameters, mapper, true);
@@ -258,7 +329,11 @@ final class JdbcStorage implements Storage {
     }
 
     @Override public void close() {
-        if (!closed.compareAndSet(false, true)) return;
+        synchronized (asyncLifecycleLock) {
+            if (!closed.compareAndSet(false, true)) return;
+            for (AsyncOperation<?> operation : List.copyOf(asyncOperations)) operation.cancel(true);
+        }
+        if (ownsAsyncExecutor && asyncExecutor instanceof ExecutorService service) service.shutdownNow();
         configuration.clearPassword();
         if (!ownsDataSource) return;
         try {
