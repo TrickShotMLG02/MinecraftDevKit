@@ -24,6 +24,26 @@ class StorageFoundationTest {
         }
     }
 
+    @Test void sqliteFileSettingsAreAppliedToEveryPooledConnection() throws Exception {
+        try (Storage storage = Storage.builder().maximumPoolSize(2)
+                .sqlite(temporary.resolve("pragmas/database.db")).build();
+             var first = storage.dataSource().getConnection();
+             var second = storage.dataSource().getConnection()) {
+            assertEquals("wal", pragma(first, "journal_mode").toLowerCase(java.util.Locale.ROOT));
+            for (var connection : java.util.List.of(first, second)) {
+                assertEquals(1, Integer.parseInt(pragma(connection, "foreign_keys")));
+                assertEquals(5000, Integer.parseInt(pragma(connection, "busy_timeout")));
+            }
+        }
+    }
+
+    private static String pragma(java.sql.Connection connection, String name) throws Exception {
+        try (var statement = connection.createStatement(); var result = statement.executeQuery("PRAGMA " + name)) {
+            assertTrue(result.next());
+            return result.getString(1);
+        }
+    }
+
     @Test void sqliteUsesOneConnectionForInMemoryDatabase() throws Exception {
         try (Storage storage = Storage.sqliteMemory()) {
             try (var connection = storage.dataSource().getConnection(); var statement = connection.createStatement()) {
