@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 /** Resolves offline player profiles asynchronously and prepares safe custom texture profiles.
- * Paper owns the profile update executor; this service creates no worker threads. */
+ * The server API owns the profile update executor; this service creates no worker threads. */
 public final class SkullTextureService implements AutoCloseable {
     private static final int MAX_PAYLOAD_BYTES = 16_384;
     private final Plugin plugin;
@@ -44,7 +44,7 @@ public final class SkullTextureService implements AutoCloseable {
         };
     }
 
-    /** Returns a completed future for a cached profile or deduplicates Paper's async profile lookup. */
+    /** Returns a completed future for a cached profile or deduplicates the server API's asynchronous profile lookup. */
     public CompletionStage<PlayerProfile> resolve(UUID uuid) {
         requireMainThread();
         Objects.requireNonNull(uuid, "uuid");
@@ -96,7 +96,7 @@ public final class SkullTextureService implements AutoCloseable {
         return head(textureProfile(textureHashOrUrl));
     }
 
-    /** Prepares a Paper player profile containing a validated custom skin URL. */
+    /** Prepares a Bukkit player profile containing a validated custom skin URL. */
     public static PlayerProfile textureProfile(String hashOrUrl) {
         URL url = validateTextureUrl(hashOrUrl);
         PlayerProfile profile = Bukkit.createPlayerProfile(UUID.randomUUID());

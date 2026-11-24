@@ -1,24 +1,30 @@
 # devkit-bukkit-gui
 
-`devkit-bukkit-gui` is a Java 21 Bukkit/Paper adapter for chest inventory menus. It owns inventory listeners, isolates mutable state per viewer, renders immutable reusable menu definitions, blocks item movement through managed inventories, and provides navigation, controls, pagination, reactive refresh, localization, permissions, and player skull helpers. It does not depend on Cloud, so plugins can use it without the command framework.
+`devkit-bukkit-gui` is a Java 21 Bukkit/Spigot-compatible adapter for chest inventory menus. It owns inventory listeners, isolates mutable state per viewer, renders immutable reusable menu definitions, blocks item movement through managed inventories, and provides navigation, controls, pagination, reactive refresh, localization, permissions, and player skull helpers. It does not depend on Cloud, so plugins can use it without the command framework.
 
-The module is compiled against Paper API `1.21.11-R0.1-SNAPSHOT`. It uses public Bukkit/Paper APIs and does not include server classes in its artifact. Other server versions have not been verified. Folia is not supported because scheduling uses Bukkit's main-thread scheduler.
+The common module is compiled against Spigot API `1.21.11-R0.1-SNAPSHOT`; Paper implements this API surface. This is compile compatibility, not live Spigot or Paper runtime verification. Other server versions have not been verified. Folia is not supported because GUI mutation and deferred refresh use the traditional Bukkit main-thread scheduler.
 
 ## Dependencies
 
 ```kotlin
 repositories {
-    maven("https://repo.papermc.io/repository/maven-public/")
+    maven("https://hub.spigotmc.org/nexus/content/repositories/snapshots/")
     mavenCentral()
 }
 
 dependencies {
     implementation("com.trickshotmlg.devkit:devkit-bukkit-gui:<version>")
-    compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+    compileOnly("org.spigotmc:spigot-api:1.21.11-R0.1-SNAPSHOT")
 }
 ```
 
-`devkit-text`, `devkit-permissions`, and Adventure API are API dependencies. MiniMessage is used for explicitly formatted item text. Keep Paper/Bukkit APIs `compileOnly`; do not shade them into a plugin. If packaging dependencies into a plugin, relocate Cloud or other shared libraries as appropriate and retain the required third-party notices.
+`devkit-text`, `devkit-permissions`, and Adventure API are API dependencies. MiniMessage and the legacy Adventure serializer are used for explicitly formatted item text. Keep Spigot/Paper APIs `compileOnly`; do not shade them into the plugin. Spigot does not provide Adventure as part of its API runtime, so Spigot plugins must package compatible Adventure dependencies. Paper supplies Adventure; avoid bundling conflicting copies in Paper plugin artifacts. Retain required third-party notices.
+
+## Optional Paper enhancements
+
+The common GUI module serializes Adventure item names, lore, and inventory titles to legacy formatting on Spigot. For native Adventure component metadata and inventory titles, add `devkit-paper-gui` at runtime on Paper. Its service provider is discovered automatically and `GuiPlatformCapabilities` reports whether native components are available. Modern item-model keys are part of the targeted Spigot API and work through the common `ItemBuilder` API. Do not include this Paper-specific module in a Spigot plugin.
+
+`ItemBuilder.itemModel(key)` remains available in the common Spigot-compatible module. Online/offline profile lookup and skull ownership remain common because the target Spigot API exposes those profile APIs.
 
 ## Basic menu
 
@@ -72,7 +78,7 @@ ItemStack formatted = ItemBuilder.of(Material.PAPER)
     .build();
 ```
 
-`ItemBuilder.from(existing)` clones its input. Every `build()` returns another independent stack. Supported metadata includes Adventure/plain/MiniMessage name and lore, enchantments, glint override, unbreakable, item flags, damage, legacy custom model data, modern Paper item model, persistent data, leather color, potion type, and player profiles. Type-incompatible metadata calls fail with an actionable exception. Item metadata operations require a running Bukkit/Paper server; the pure JUnit test runtime does not initialize Paper registries.
+`ItemBuilder.from(existing)` clones its input. Every `build()` returns another independent stack. Common metadata includes Adventure/plain/MiniMessage name and lore, enchantments, glint override, unbreakable, item flags, damage, legacy custom model data, modern item-model keys, persistent data, leather color, potion type, and player profiles. Type-incompatible metadata calls fail with an actionable exception. Item metadata operations require a running Bukkit/Spigot/Paper server; pure JUnit tests do not initialize server registries.
 
 ## Player and custom skulls
 
@@ -86,7 +92,7 @@ GuiItemTemplate offline = GuiItems.offlinePlayerHead(
     playerUuid, skulls, guis, GuiItems.of(Material.SKELETON_SKULL, "Loading…"));
 ```
 
-Online profiles are used without a network lookup. UUID-based resolution uses Paper's asynchronous `PlayerProfile.update()` and deduplicates in-flight work in a bounded LRU cache. The template initially returns the placeholder, then requests a slot refresh on the server thread after resolution. Refresh checks the active session, menu, slot, and component identity to reject stale results. Call `skulls.close()` during plugin shutdown. It owns no executor or worker threads.
+Online profiles are used without a network lookup. UUID-based resolution uses the Bukkit `PlayerProfile.update()` API and deduplicates in-flight work in a bounded LRU cache. The template initially returns the placeholder, then requests a slot refresh on the server thread after resolution. Refresh checks the active session, menu, slot, and component identity to reject stale results. Call `skulls.close()` during plugin shutdown. It owns no executor or worker threads. Runtime profile behavior has not been verified on Spigot in this repository.
 
 Custom URL/hash inputs are restricted to HTTPS `textures.minecraft.net/texture/<32-hex-hash>`. Base64 input is size- and nesting-limited, must be valid UTF-8 JSON, and must contain a string at `textures.SKIN.url`. That skin URL is subject to the same host and path allowlist; additional profile fields such as a cape are accepted but are not applied. Arbitrary skin hosts and malformed payloads are rejected. Texture availability itself depends on Minecraft's profile/texture services.
 
@@ -214,7 +220,7 @@ Item templates are resolved for each viewer, so a localization service reload is
 
 Managed top inventory clicks and drags are always cancelled, including stale inventory instances. In the default `PROTECT_GUI` policy, ordinary bottom-inventory actions remain available while shift transfers into the GUI and double-click collection are cancelled. Use `.interactionPolicy(GuiInteractionPolicy.LOCK_ALL)` to cancel all clicks/drags for the view. Each manager handles only inventories it created; close events also verify the session viewer and inventory identity. Component callbacks run only for the active viewer/session and the exact currently registered slot component. Typed permissions are checked at render and again at click time using Bukkit's native `hasPermission` check. Click predicates receive the actual top-inventory slot in their render context.
 
-Construct and open GUIs on the server thread. All inventory mutation and refresh callbacks run on the server thread; `executeOnMainThread` always schedules to the next tick. Close `GuiManager` and `SkullTextureService` in `JavaPlugin.onDisable()`. Close/disconnect clears manager-held player sessions, their navigation history, and session state. Paper is the only verified runtime target; Folia's region/entity scheduler is not supported.
+Construct and open GUIs on the server thread. All inventory mutation and refresh callbacks run on the traditional Bukkit primary thread; `executeOnMainThread` always schedules to the next tick. Close `GuiManager` and `SkullTextureService` in `JavaPlugin.onDisable()`. Close/disconnect clears manager-held player sessions, their navigation history, and session state. Spigot and Paper API compilation are checked; neither live runtime is claimed here. Folia's region/entity scheduler is not supported.
 
 ## Tests and live verification
 

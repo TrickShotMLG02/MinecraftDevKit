@@ -46,8 +46,8 @@ public final class ItemBuilder {
         return this;
     }
 
-    public ItemBuilder name(String plainText) { return edit(meta -> meta.displayName(Component.text(Objects.requireNonNull(plainText, "name")))); }
-    public ItemBuilder name(Component component) { return edit(meta -> meta.displayName(Objects.requireNonNull(component, "name"))); }
+    public ItemBuilder name(String plainText) { return name(Component.text(Objects.requireNonNull(plainText, "name"))); }
+    public ItemBuilder name(Component component) { return edit(meta -> GuiPlatformCapabilities.displayName(meta, Objects.requireNonNull(component, "name"))); }
     /** Parses an explicitly trusted MiniMessage formatting template. */
     public ItemBuilder nameMiniMessage(String template) {
         return name(MiniMessage.miniMessage().deserialize(Objects.requireNonNull(template, "template")));
@@ -61,7 +61,7 @@ public final class ItemBuilder {
     }
     public ItemBuilder lore(List<Component> lines) {
         List<Component> copy = List.copyOf(Objects.requireNonNull(lines, "lines"));
-        return edit(meta -> meta.lore(copy));
+        return edit(meta -> GuiPlatformCapabilities.lore(meta, copy));
     }
     /** Parses explicitly trusted MiniMessage formatting templates. */
     public ItemBuilder loreMiniMessage(String... templates) {
@@ -102,7 +102,7 @@ public final class ItemBuilder {
         if (value != null && value < 0) throw new IllegalArgumentException("Custom model data cannot be negative");
         return edit(meta -> meta.setCustomModelData(value));
     }
-    /** Sets the modern Paper item-model key used by 1.21.4+ data components. */
+    /** Sets the modern item-model key exposed by the common Spigot API. */
     public ItemBuilder itemModel(NamespacedKey key) { return edit(meta -> meta.setItemModel(Objects.requireNonNull(key, "key"))); }
     public ItemBuilder leatherColor(Color color) {
         Objects.requireNonNull(color, "color");

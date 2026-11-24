@@ -32,7 +32,7 @@ public final class GuiItems {
     public static ItemStack skullTexture(String hashOrUrl) { return SkullTextureService.customHead(hashOrUrl); }
     public static ItemStack skullBase64(String base64) { return SkullTextureService.customHead(SkullTextureService.validateBase64Texture(base64).toExternalForm()); }
 
-    /** Creates a reactive offline head template with a placeholder until Paper resolves the profile. */
+    /** Creates a reactive offline head template with a placeholder until the Bukkit profile API resolves it. */
     public static GuiItemTemplate offlinePlayerHead(UUID playerId, SkullTextureService service,
                                                      GuiManager manager, ItemStack placeholder) {
         Objects.requireNonNull(playerId, "playerId");

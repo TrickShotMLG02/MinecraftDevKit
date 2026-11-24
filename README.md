@@ -35,14 +35,15 @@ Shared modules contain ordinary Java APIs and must not depend on Bukkit, Paper, 
 | `devkit-permissions` | Platform-independent permission definitions, sections, groups, and immutable catalog resolution | Implemented; depends on `devkit-core` |
 | `devkit-commands` | Immutable typed command definitions, Cloud v2 dispatch, suggestions, generated help/usage, and localized errors | Implemented; Java 17 |
 | `devkit-bukkit` | Common Bukkit/Spigot/Paper adapters | Minimal package structure; depends on shared modules |
-| `devkit-bukkit-commands` | Cloud v2 command registration, Bukkit sender bridge, player arguments, localized messages | Implemented for JavaPlugin lifecycle; Java 21 |
-| `devkit-bukkit-gui` | Managed Bukkit/Paper chest menus, isolated player sessions, safe interaction handling, pagination, controls, skull profiles, and reactive refresh | Implemented against Paper 1.21.11; Java 21 |
-| `devkit-bukkit-scheduler` | Plugin-owned native Bukkit task scheduling, sync/async dispatch, failure reporting, and disable lifecycle cleanup | Implemented against Paper 1.21.11; Java 21; not Folia compatible |
-| `devkit-bukkit-lifecycle` | Synchronous JavaPlugin lifecycle bridge with thread checks, plugin logging, and disable cleanup | Implemented against Paper 1.21.11; Java 21; not Folia compatible |
+| `devkit-bukkit-commands` | Cloud v2 command registration, Bukkit sender bridge, player arguments, localized messages | Compiled against Spigot API 1.21.11; Cloud legacy Bukkit path; Java 21 |
+| `devkit-bukkit-gui` | Managed chest menus, isolated sessions, safe interactions, pagination, controls, skull profiles, reactive refresh | Compiled against Spigot API 1.21.11; Java 21; Paper enhancements optional |
+| `devkit-paper-gui` | Native Adventure GUI metadata and component inventory titles | Optional Paper 1.21.11 extension; Java 21 |
+| `devkit-bukkit-scheduler` | Plugin-owned native Bukkit task scheduling, sync/async dispatch, failure reporting, disable cleanup | Compiled against Spigot API 1.21.11; Java 21; not Folia compatible |
+| `devkit-bukkit-lifecycle` | Synchronous JavaPlugin lifecycle bridge with thread checks, plugin logging, disable cleanup | Compiled against Spigot API 1.21.11; Java 21; not Folia compatible |
 | `devkit-bukkit-metadata` | Bukkit-compatible build-time metadata exporters, including permission YAML | Permission catalog exporter implemented; Java 17; does not require a server or Bukkit API |
 | `devkit-gradle-plugin` | Gradle plugins for Bukkit permission metadata and localization scanning | Implemented; Java 17; Maven Local and JitPack module publication configured; public JitPack build not verified |
 
-See the [`devkit-permissions` guide](devkit-permissions/README.md), [`devkit-commands` guide](devkit-commands/README.md), [`devkit-text` guide](devkit-text/README.md), [`devkit-localization` guide](devkit-localization/README.md), [`devkit-localization-yaml` guide](devkit-localization-yaml/README.md), [`devkit-config` guide](devkit-config/README.md), [`devkit-config-yaml` guide](devkit-config-yaml/README.md), [`devkit-scheduler` guide](devkit-scheduler/README.md), [`devkit-lifecycle` guide](devkit-lifecycle/README.md), [`devkit-bukkit-commands` guide](devkit-bukkit-commands/README.md), [`devkit-bukkit-gui` guide](devkit-bukkit-gui/README.md), [`devkit-bukkit-scheduler` guide](devkit-bukkit-scheduler/README.md), [`devkit-bukkit-lifecycle` guide](devkit-bukkit-lifecycle/README.md), and [`devkit-gradle-plugin` guide](devkit-gradle-plugin/README.md). Configuration comments and formatting are normalized only when explicit full-document save is invoked; unknown fields are retained. Shared configuration, command, text, localization, scheduler, and lifecycle modules contain no Bukkit API dependency.
+See the [`devkit-permissions` guide](devkit-permissions/README.md), [`devkit-commands` guide](devkit-commands/README.md), [`devkit-text` guide](devkit-text/README.md), [`devkit-localization` guide](devkit-localization/README.md), [`devkit-localization-yaml` guide](devkit-localization-yaml/README.md), [`devkit-config` guide](devkit-config/README.md), [`devkit-config-yaml` guide](devkit-config-yaml/README.md), [`devkit-scheduler` guide](devkit-scheduler/README.md), [`devkit-lifecycle` guide](devkit-lifecycle/README.md), [`devkit-bukkit-commands` guide](devkit-bukkit-commands/README.md), [`devkit-bukkit-gui` guide](devkit-bukkit-gui/README.md), [`devkit-paper-gui` guide](devkit-paper-gui/README.md), [`devkit-bukkit-scheduler` guide](devkit-bukkit-scheduler/README.md), [`devkit-bukkit-lifecycle` guide](devkit-bukkit-lifecycle/README.md), and [`devkit-gradle-plugin` guide](devkit-gradle-plugin/README.md). Configuration comments and formatting are normalized only when explicit full-document save is invoked; unknown fields are retained. Shared configuration, command, text, localization, scheduler, and lifecycle modules contain no Bukkit API dependency.
 
 The JDBC storage modules are documented in the [`devkit-storage` guide](devkit-storage/README.md) and optional [`devkit-storage-migrations` guide](devkit-storage-migrations/README.md). SQLite JDBC is included by the storage module; applications add the MySQL or MariaDB JDBC driver they intend to use. Storage callbacks are asynchronous only when submitted through `Storage.async()` and must use an explicit scheduler handoff before touching Bukkit state.
 
@@ -50,13 +51,13 @@ The standalone [`Bukkit permissions example`](examples/bukkit-permissions-exampl
 
 The independent [`Bukkit configuration example`](examples/bukkit-config-example/README.md) demonstrates typed settings, schema validation, programmatic updates, safe persistence, reload conflicts, and schema migration using the existing Cloud command adapter.
 
-The standalone [`Bukkit GUI example`](examples/bukkit-gui-example/README.md) demonstrates localized chest menus, protected inventory interaction, per-player navigation/state, online player pagination, controls, async skull profiles, and Paper event-driven refresh using the published GUI module from Maven Local.
+The standalone [`Bukkit GUI example`](examples/bukkit-gui-example/README.md) demonstrates localized chest menus, protected inventory interaction, per-player navigation/state, online player pagination, controls, async skull profiles, and Paper-native component/profile behavior using the published GUI modules from Maven Local.
 
 The standalone [`Bukkit scheduler example`](examples/bukkit-scheduler-example/README.md) demonstrates plugin-owned immediate, delayed, repeating, scoped, and asynchronous tasks, with a nonblocking handoff back to the Paper server thread.
 
 The standalone [`Bukkit lifecycle example`](examples/bukkit-lifecycle-example/README.md) demonstrates typed service keys, dependency-ordered startup, managed task scopes and resources, reload hooks, diagnostics, and reverse-order shutdown.
 
-The standalone [`Bukkit integration example`](examples/bukkit-integration-example/README.md) composes lifecycle, typed YAML configuration, English/German localization, generated typed permissions, Cloud commands, protected paginated GUIs, and lifecycle-owned scheduled/asynchronous work in one Paper plugin.
+The standalone [`Bukkit integration example`](examples/bukkit-integration-example/README.md) composes lifecycle, typed YAML configuration, English/German localization, generated typed permissions, Cloud commands, protected paginated GUIs, and lifecycle-owned scheduled/asynchronous work. The same sources have Paper and Spigot build modes.
 
 The standalone [`Bukkit storage example`](examples/bukkit-storage-example/README.md) demonstrates lifecycle-owned SQLite persistence, versioned migrations, a typed player repository, async balance reads, atomic updates, and safe handoff to the Paper thread.
 
@@ -148,7 +149,7 @@ JitPack builds multi-module artifacts using `com.github.USER.REPO:MODULE:TAG`. T
 
 ## Building
 
-The project uses JDK 21 to run Gradle and build the Bukkit adapters, and JDK 17 to compile shared libraries, metadata exporter, and Gradle plugin. Ensure both toolchains are available to Gradle. Shared libraries including `devkit-scheduler`, `devkit-lifecycle`, `devkit-bukkit-metadata`, and `devkit-gradle-plugin` compile to Java 17 bytecode; Bukkit runtime adapters including `devkit-bukkit-scheduler` and `devkit-bukkit-lifecycle` target Java 21.
+The project uses JDK 21 to run Gradle and build Bukkit adapters, and JDK 17 to compile shared libraries, metadata exporter, and Gradle plugin. Ensure both toolchains are available to Gradle. Shared libraries including `devkit-scheduler`, `devkit-lifecycle`, `devkit-bukkit-metadata`, and `devkit-gradle-plugin` compile to Java 17 bytecode; Bukkit runtime adapters, including `devkit-bukkit-scheduler`, `devkit-bukkit-lifecycle`, and optional `devkit-paper-gui`, target Java 21.
 
 From the repository root, run the appropriate wrapper command:
 
@@ -168,7 +169,7 @@ From the repository root, run the appropriate wrapper command:
 
 ## Platform compatibility
 
-The common modules are normal Java libraries and do not require a Minecraft runtime. `devkit-bukkit-metadata` and `devkit-gradle-plugin` generate Bukkit `plugin.yml` permissions without starting a server. `devkit-bukkit-commands` provides Cloud-backed runtime command registration for Bukkit/Spigot-style JavaPlugin lifecycle and Paper's legacy manager with native Brigadier enabled when available. `devkit-bukkit-gui`, `devkit-bukkit-scheduler`, and `devkit-bukkit-lifecycle` are compiled against Paper 1.21.11 and use Bukkit's JavaPlugin lifecycle and traditional synchronous server thread; older server versions, other platforms, Folia scheduling, and live-server behavior have not been verified. Modern Paper bootstrap command registration and other platform adapters remain future work. Java compatibility depends on the selected module: shared modules, metadata export, the storage libraries, and the Gradle plugin target Java 17, while Bukkit adapters target Java 21.
+The common modules are ordinary Java libraries and do not require a Minecraft runtime. `devkit-bukkit-metadata` and `devkit-gradle-plugin` generate Bukkit `plugin.yml` permissions without starting a server. The common Bukkit command, GUI, scheduler, and lifecycle adapters now compile against Spigot API `1.21.11-R0.1-SNAPSHOT`; Paper provides this API surface, but no live Spigot or Paper runtime is claimed here. Commands use Cloud's legacy Bukkit manager, which Cloud documents for Spigot and Paper. GUI Adventure names/lore/titles use legacy serialization on Spigot; optional `devkit-paper-gui` preserves native Paper components. Modern item-model metadata is part of the targeted Spigot API and remains common. Bukkit adapters use the traditional global server thread and are not Folia-compatible. Older server versions, Folia, Paper bootstrap registration, and non-Bukkit platforms remain unsupported or unverified.
 
 ## Roadmap
 

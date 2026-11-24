@@ -1,22 +1,22 @@
 # devkit-bukkit-commands
 
-This Java 21 adapter connects platform-independent `devkit-commands` definitions to Incendo Cloud v2's Bukkit/Paper integration. It delegates parsing, dispatch, suggestions, and native permission checks to Cloud and Bukkit. It does not implement a second command parser or player permission store.
+This Java 21 adapter connects platform-independent `devkit-commands` definitions to Incendo Cloud v2's Bukkit integration. It delegates parsing, dispatch, suggestions, and native permission checks to Cloud and Bukkit. Cloud's Paper extension retains Bukkit/Spigot support through `LegacyPaperCommandManager`, with Paper features enabled only when Cloud detects the capability. It does not implement a second command parser or player permission store.
 
 ## Dependencies
 
 ```kotlin
 repositories {
-    maven("https://repo.papermc.io/repository/maven-public/")
+    maven("https://hub.spigotmc.org/nexus/content/repositories/snapshots/")
     mavenCentral()
 }
 
 dependencies {
     implementation("com.trickshotmlg.devkit:devkit-bukkit-commands:<version>")
-    compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+    compileOnly("org.spigotmc:spigot-api:1.21.11-R0.1-SNAPSHOT")
 }
 ```
 
-The adapter publishes `devkit-commands` and `org.incendo:cloud-paper:2.0.0` as API dependencies. Keep the server API `compileOnly`; do not shade Bukkit/Paper classes into the plugin. Cloud is MIT-licensed. If you shade Cloud into your plugin, preserve its license notice and relocate it when multiple plugins may bundle their own Cloud version.
+The adapter publishes `devkit-commands` and `org.incendo:cloud-paper:2.0.0` as API dependencies. It compiles against Spigot API 1.21.11 and Cloud's legacy manager, but this is not live Spigot runtime verification. Keep the server API `compileOnly`; do not shade Bukkit/Spigot/Paper classes into the plugin. Spigot does not supply Adventure API classes, so package compatible Adventure runtime libraries for Spigot; Paper supplies them. Cloud is MIT-licensed. If you shade Cloud into your plugin, preserve its license notice and relocate it when multiple plugins may bundle their own Cloud version.
 
 ## Register commands
 
@@ -40,7 +40,7 @@ public final class FriendNetPlugin extends JavaPlugin {
 }
 ```
 
-The adapter maps `Player` to `PLAYER`, console senders to `CONSOLE`, and other Bukkit senders to `OTHER`. Permission checks call `CommandSender.hasPermission(permission.node())`; inherited command requirements are combined by the shared model before reaching Bukkit. Player messages resolve the current `Player#getLocale()` at send time; console messages use the configured default locale. Components are delivered through Bukkit/Paper's Adventure audience API.
+The adapter maps `Player` to `PLAYER`, console senders to `CONSOLE`, and other Bukkit senders to `OTHER`. Permission checks call `CommandSender.hasPermission(permission.node())`; inherited command requirements are combined by the shared model before reaching Bukkit. Player messages resolve the current `Player#getLocale()` at send time; console messages use the configured default locale. Components are sent through Adventure's `Audience` API when the sender provides it (as Paper does), and serialized to legacy section text for Bukkit senders such as Spigot's `Player`.
 
 `BukkitArguments.player("target")` creates a strongly typed `Argument<Player>` using Cloud's native Bukkit player parser and suggestions. Other platform-specific argument types can be registered through the exposed `cloudManager()` and the Cloud parser registry, or represented as custom parsers in shared definitions.
 

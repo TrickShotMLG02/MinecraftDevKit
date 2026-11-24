@@ -28,7 +28,7 @@ subprojects {
     apply(plugin = "java-library")
     apply(plugin = "maven-publish")
 
-    val isBukkitAdapter = name == "devkit-bukkit" || name == "devkit-bukkit-commands" || name == "devkit-bukkit-gui" || name == "devkit-bukkit-scheduler" || name == "devkit-bukkit-lifecycle"
+    val isBukkitAdapter = name == "devkit-bukkit" || name == "devkit-bukkit-commands" || name == "devkit-bukkit-gui" || name == "devkit-bukkit-scheduler" || name == "devkit-bukkit-lifecycle" || name == "devkit-paper-gui"
     val targetJava = if (isBukkitAdapter) 21 else 17
 
     extensions.configure<org.gradle.api.plugins.JavaPluginExtension> {

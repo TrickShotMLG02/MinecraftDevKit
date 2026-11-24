@@ -15,6 +15,7 @@ include(
     "devkit-bukkit",
     "devkit-bukkit-commands",
     "devkit-bukkit-gui",
+    "devkit-paper-gui",
     "devkit-scheduler",
     "devkit-bukkit-scheduler",
     "devkit-lifecycle",

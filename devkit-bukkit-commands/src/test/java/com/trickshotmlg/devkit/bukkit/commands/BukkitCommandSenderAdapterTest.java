@@ -16,12 +16,12 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BukkitCommandSenderAdapterTest {
-    @Test void playerLocalePermissionAndAdventureMessagesUseNativeSender() {
-        AtomicReference<Component> delivered = new AtomicReference<>();
+    @Test void playerLocalePermissionAndAdventureMessagesUseSpigotCompatibleLegacyText() {
+        AtomicReference<Object> delivered = new AtomicReference<>();
         Player player = proxy(Player.class, (method, args) -> switch (method) {
             case "getLocale" -> "de_DE";
             case "hasPermission" -> "friends.add".equals(args[0]);
-            case "sendMessage" -> { delivered.set((Component) args[0]); yield null; }
+            case "sendMessage" -> { delivered.set(args[0]); yield null; }
             default -> defaultValue(method);
         });
         CommandSender sender = new BukkitCommandSenderAdapter(Locale.US).adapt(player);
@@ -32,7 +32,7 @@ class BukkitCommandSenderAdapterTest {
         assertSame(player, ((BukkitCommandSender) sender).bukkitSender());
         assertEquals(Locale.GERMANY, sender.locale());
         assertTrue(sender.hasPermission(permission));
-        assertSame(message, delivered.get());
+        assertEquals("Hallo", delivered.get());
     }
 
     @Test void consoleUsesConfiguredFallbackLocaleAndOtherSendersRemainOther() {

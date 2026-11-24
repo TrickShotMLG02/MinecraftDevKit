@@ -1,20 +1,20 @@
 # devkit-bukkit-scheduler
 
-Java 21 Paper/Bukkit adapter for the platform-independent `devkit-scheduler` module. It uses the plugin-owned native `BukkitScheduler`; it does not create an executor or a thread per task. Paper API is compile-only and is not bundled in the published module.
+Java 21 Bukkit/Spigot adapter for the platform-independent `devkit-scheduler` module. It uses the plugin-owned native `BukkitScheduler`; it does not create an executor or a thread per task. The common implementation compiles against Spigot API 1.21.11; Spigot/Paper APIs are compile-only and are not bundled in the published module.
 
-Compiled against Paper API `1.21.11-R0.1-SNAPSHOT`. Other Paper/Spigot versions have not been verified. This adapter targets the traditional Bukkit primary server thread and is **not Folia compatible**. Folia's entity and region ownership requires a future adapter with explicit ownership targets, not fallback to its global scheduler.
+Spigot API compilation is checked, but live Spigot or Paper runtime behavior is not verified. Other server versions have not been verified. This adapter targets the traditional Bukkit primary server thread and is **not Folia compatible**. Folia's entity and region ownership requires a future adapter with explicit ownership targets, not fallback to its global scheduler.
 
 ## Setup
 
 ```kotlin
 repositories {
-    maven("https://repo.papermc.io/repository/maven-public/")
+    maven("https://hub.spigotmc.org/nexus/content/repositories/snapshots/")
     mavenCentral()
 }
 
 dependencies {
     implementation("com.trickshotmlg.devkit:devkit-bukkit-scheduler:<version>")
-    compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+    compileOnly("org.spigotmc:spigot-api:1.21.11-R0.1-SNAPSHOT")
 }
 ```
 

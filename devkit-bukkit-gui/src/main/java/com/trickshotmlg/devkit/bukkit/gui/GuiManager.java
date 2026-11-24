@@ -245,7 +245,8 @@ public final class GuiManager implements Listener, AutoCloseable {
         Set<Integer> slots = requestedSlots;
         if (inventory == null) {
             ManagedHolder holder = new ManagedHolder(this, session, menu);
-            inventory = Bukkit.createInventory(holder, menu.size(), menu.title(new GuiRenderContext(session.viewer(), menu, session)));
+            inventory = GuiPlatformCapabilities.createInventory(holder, menu.size(),
+                    menu.title(new GuiRenderContext(session.viewer(), menu, session)));
             holder.inventory = inventory;
             session.inventory(inventory);
             slots = null;
@@ -284,7 +285,7 @@ public final class GuiManager implements Listener, AutoCloseable {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onClick(InventoryClickEvent event) {
-        if (!(event.getView().getTopInventory().getHolder(false) instanceof ManagedHolder holder)
+        if (!(event.getView().getTopInventory().getHolder() instanceof ManagedHolder holder)
                 || !GuiInteractionRules.ownedBy(this, holder.manager)) return;
         GuiSession session = holder.session;
         int rawSlot = event.getRawSlot();
@@ -312,7 +313,7 @@ public final class GuiManager implements Listener, AutoCloseable {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onDrag(InventoryDragEvent event) {
-        if (event.getView().getTopInventory().getHolder(false) instanceof ManagedHolder holder
+        if (event.getView().getTopInventory().getHolder() instanceof ManagedHolder holder
                 && GuiInteractionRules.ownedBy(this, holder.manager)
                 && GuiInteractionRules.cancelDrag(holder.menu.interactionPolicy(),
                 event.getView().getTopInventory().getSize(), event.getRawSlots())) event.setCancelled(true);
@@ -320,7 +321,7 @@ public final class GuiManager implements Listener, AutoCloseable {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onClose(InventoryCloseEvent event) {
-        if (!(event.getInventory().getHolder(false) instanceof ManagedHolder holder)
+        if (!(event.getInventory().getHolder() instanceof ManagedHolder holder)
                 || holder.manager != this || !event.getPlayer().getUniqueId().equals(holder.session.viewerId())
                 || event.getInventory() != holder.inventory) return;
         GuiSession session = holder.session;
