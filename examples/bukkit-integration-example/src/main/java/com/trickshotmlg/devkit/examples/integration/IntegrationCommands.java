@@ -141,10 +141,10 @@ final class IntegrationCommands {
         context.sender().sendMessage(text.resolve(TextRef.translated(key, fallback), context.sender().locale(), placeholders));
     }
     private void send(Player player, String key, String fallback) {
-        player.sendMessage(text.resolve(TextRef.translated(key, fallback), locale(player)));
+        IntegrationMessages.send(player, text.resolve(TextRef.translated(key, fallback), locale(player)));
     }
     private void send(Player player, String key, String fallback, Map<String, ?> placeholders) {
-        player.sendMessage(text.resolve(TextRef.translated(key, fallback), locale(player), placeholders));
+        IntegrationMessages.send(player, text.resolve(TextRef.translated(key, fallback), locale(player), placeholders));
     }
     @SuppressWarnings("deprecation")
     private static Locale locale(Player player) { return Locale.forLanguageTag(player.getLocale().replace('_', '-')); }

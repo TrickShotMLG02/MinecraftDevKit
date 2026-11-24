@@ -24,6 +24,7 @@ dependencyResolutionManagement {
         mavenCentral()
         if (mode == "mavenlocal") mavenLocal() else maven("https://jitpack.io")
         maven("https://repo.papermc.io/repository/maven-public/")
+        maven("https://hub.spigotmc.org/nexus/content/repositories/snapshots/")
     }
 }
 rootProject.name = "minecraftdevkit-bukkit-integration-example"

@@ -16,13 +16,23 @@ val mdkVersion = when (mode) {
     else -> throw GradleException("Unsupported -PmdkRepository='$mode'; use mavenLocal or jitpack")
 }
 val mdkGroup = if (mode == "mavenlocal") "com.trickshotmlg.devkit" else "com.github.TrickShotMLG02.MinecraftDevKit"
+val serverPlatform = providers.gradleProperty("mdkPlatform").orElse("paper").get().lowercase()
+if (serverPlatform !in setOf("paper", "spigot")) {
+    throw GradleException("Unsupported -PmdkPlatform='$serverPlatform'; use paper or spigot")
+}
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+    if (serverPlatform == "paper") {
+        compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+        implementation("$mdkGroup:devkit-paper-gui:$mdkVersion")
+    } else {
+        compileOnly("org.spigotmc:spigot-api:1.21.11-R0.1-SNAPSHOT")
+    }
     implementation("$mdkGroup:devkit-bukkit-lifecycle:$mdkVersion")
     implementation("$mdkGroup:devkit-bukkit-scheduler:$mdkVersion")
     implementation("$mdkGroup:devkit-bukkit-gui:$mdkVersion")
     implementation("$mdkGroup:devkit-bukkit-commands:$mdkVersion")
+    implementation("net.kyori:adventure-text-serializer-legacy:4.26.1")
     implementation("$mdkGroup:devkit-localization-yaml:$mdkVersion")
     implementation("$mdkGroup:devkit-config-yaml:$mdkVersion")
     implementation("$mdkGroup:devkit-permissions:$mdkVersion")
@@ -66,9 +76,11 @@ tasks.shadowJar {
     archiveClassifier.set("")
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
     mergeServiceFiles()
-    dependencies {
-        exclude(dependency("net.kyori:adventure-api:.*"))
-        exclude(dependency("net.kyori:adventure-key:.*"))
+    if (serverPlatform == "paper") {
+        dependencies {
+            exclude(dependency("net.kyori:adventure-api:.*"))
+            exclude(dependency("net.kyori:adventure-key:.*"))
+        }
     }
     relocate("org.incendo.cloud", "com.trickshotmlg.devkit.examples.internal.cloud")
     relocate("io.leangen.geantyref", "com.trickshotmlg.devkit.examples.internal.geantyref")

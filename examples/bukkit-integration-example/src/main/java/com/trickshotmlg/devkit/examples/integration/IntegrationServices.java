@@ -102,7 +102,7 @@ final class IntegrationServices {
             main = GuiMenu.chest(3).title(ref("integration.menu.title"))
                     .fillEmpty(pane)
                     .button(10, GuiButton.of(ctx -> named(Material.PLAYER_HEAD, ctx.text(ref("integration.menu.profile"))), click ->
-                            click.viewer().sendMessage(Component.text(click.viewer().getName()))))
+                            IntegrationMessages.send(click.viewer(), Component.text(click.viewer().getName()))))
                     .button(12, GuiButton.of(localized(Material.PLAYER_HEAD, "integration.menu.players"), click -> click.open(players)))
                     .button(14, GuiButton.builder().item(localized(Material.COMPARATOR, "integration.menu.settings"))
                             .permission(IntegrationPermissions.SETTINGS).onClick(click -> click.open(settings)).build())
@@ -146,7 +146,7 @@ final class IntegrationServices {
                             localized(Material.GRAY_DYE, "integration.settings.compact"), null, context -> true, null)
                     .option(15, "detailed", localized(Material.GOLD_INGOT, "integration.settings.detailed"),
                             localized(Material.GRAY_DYE, "integration.settings.detailed"), null, context -> true, null)
-                    .onChange((click, value) -> click.viewer().sendMessage(text.resolve(
+                    .onChange((click, value) -> IntegrationMessages.send(click.viewer(), text.resolve(
                             ref("integration.settings.view"), Locale.forLanguageTag(
                                     click.viewer().getLocale().replace('_', '-')), Map.of("value", value))))
                     .build();
@@ -164,7 +164,7 @@ final class IntegrationServices {
                     .button(24, GuiButton.builder().item(localized(Material.CLOCK, "integration.settings.reload"))
                             .permission(IntegrationPermissions.ADMIN).onClick(click -> {
                                 var result = config.reload();
-                                click.viewer().sendMessage(Component.text(result.success()
+                                IntegrationMessages.send(click.viewer(), Component.text(result.success()
                                         ? "Configuration reloaded." : result.error().orElse("Reload failed; active values were kept.")));
                                 manager.refreshOpen(settings);
                             }).build())
@@ -213,7 +213,7 @@ final class IntegrationServices {
                     : "Configuration save failed: {error}";
             Map<String, ?> values = result.success() || result.conflict() ? Map.of()
                     : Map.of("error", result.error().orElse("unknown error"));
-            player.sendMessage(text.resolve(ref(key, fallback), Locale.forLanguageTag(player.getLocale().replace('_', '-')), values));
+            IntegrationMessages.send(player, text.resolve(ref(key, fallback), Locale.forLanguageTag(player.getLocale().replace('_', '-')), values));
             refreshAll();
         }
         private ItemStack toggleItem(GuiRenderContext context, boolean enabled) {
@@ -257,7 +257,7 @@ final class IntegrationServices {
             menus.refreshPlayers();
             if (config.store().get(IntegrationConfig.NOTIFICATIONS)) {
                 Player player = event.getPlayer();
-                player.sendMessage(text.resolve(ref("integration.events.join"),
+                IntegrationMessages.send(player, text.resolve(ref("integration.events.join"),
                         Locale.forLanguageTag(player.getLocale().replace('_', '-')),
                         Map.of("count", Bukkit.getOnlinePlayers().size())));
             }

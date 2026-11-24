@@ -1,10 +1,10 @@
-# MinecraftDevKit Paper Integration Example
+# MinecraftDevKit Bukkit Integration Example
 
-This standalone Paper plugin composes MinecraftDevKit's lifecycle, typed configuration, localization, permissions, Cloud commands, inventory GUI, and scheduler APIs. It is a small reference application, not a new framework or a game mode.
+This standalone plugin composes MinecraftDevKit's lifecycle, typed configuration, localization, permissions, Cloud commands, inventory GUI, and scheduler APIs. The same application sources target Spigot or Paper; Paper adds an optional GUI extension for native Adventure metadata.
 
 ## Platform and build
 
-- Paper `1.21.11`
+- Spigot or Paper `1.21.11`
 - Java `21`
 - Build from this directory with the repository wrapper:
 
@@ -18,7 +18,13 @@ The default dependency mode is Maven Local. From the repository root, publish th
 ../../gradlew.bat -PmdkRepository=jitpack -PmdkVersion=<published-version> build
 ```
 
-The Shadow JAR is `build/libs/minecraftdevkit-bukkit-integration-example-0.1.0-SNAPSHOT.jar`. It bundles MinecraftDevKit and the required runtime libraries, relocates Cloud and SnakeYAML, and leaves Paper/Adventure API classes to the server. The permissions Gradle plugin generates plugin permission declarations from `IntegrationPermissions`; Cloud registers `/mdkintegration` at runtime, so the checked-in `plugin.yml` has no duplicate command root.
+The default `mdkPlatform` is `paper`. To compile the same plugin sources against Spigot and package the required Adventure runtime:
+
+```powershell
+../../gradlew.bat -PmdkPlatform=spigot clean build
+```
+
+The Shadow JAR is `build/libs/minecraftdevkit-bukkit-integration-example-0.1.0-SNAPSHOT.jar`. Both modes bundle MinecraftDevKit and required runtime libraries and relocate Cloud and SnakeYAML. Paper mode includes `devkit-paper-gui` and leaves Paper/Adventure API classes to the server. Spigot mode compiles against Spigot API and bundles Adventure API because Spigot does not provide it. Both modes produce the same filename, so build one mode at a time and copy the intended artifact. The permissions Gradle plugin generates plugin permission declarations from `IntegrationPermissions`; Cloud registers `/mdkintegration` at runtime, so the checked-in `plugin.yml` has no duplicate command root.
 
 ## Framework roles
 
@@ -30,13 +36,13 @@ The Shadow JAR is `build/libs/minecraftdevkit-bukkit-integration-example-0.1.0-S
 - **GUI** owns protected inventories, per-viewer radio selection, navigation, and pagination.
 - **Scheduler** groups periodic and asynchronous work in a lifecycle-owned scope.
 
-The actual service graph is:
+The actual service graph is shared by Spigot and Paper. The scheduler service binds the Bukkit scheduler implementation for the selected server:
 
 ```mermaid
 flowchart TD
   Config[Configuration]
   Text[Localization]
-  Scheduler[Paper scheduler]
+  Scheduler[Bukkit scheduler]
   Menus[GUI manager and menu definitions]
   Features[Join/quit listeners and refresh scope]
   Config --> Menus
@@ -47,7 +53,7 @@ flowchart TD
   Scheduler --> Features
 ```
 
-Services start in stable registration order when dependencies permit. Shutdown reverses the dependency order: feature listeners and their task scope close first, then menus, scheduler, localization, and configuration. `BukkitLifecycle` delegates synchronous startup and shutdown to `LifecycleManager` on the Paper server thread. The Cloud adapter registers commands during ordinary `onEnable`, after services are available.
+Services start in stable registration order when dependencies permit. Shutdown reverses the dependency order: feature listeners and their task scope close first, then menus, scheduler, localization, and configuration. `BukkitLifecycle` delegates synchronous startup and shutdown to the platform's traditional Bukkit primary thread. The Cloud adapter uses its legacy Bukkit command manager; Paper enhancements activate only when Cloud detects them. This build establishes Spigot/Paper API compile compatibility, not live runtime verification.
 
 ## Commands and permissions
 

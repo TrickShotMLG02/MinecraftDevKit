@@ -19,6 +19,7 @@ val mdkGroup = if (mode == "mavenlocal") "com.trickshotmlg.devkit" else "com.git
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     implementation("$mdkGroup:devkit-bukkit-gui:$mdkVersion")
+    implementation("$mdkGroup:devkit-paper-gui:$mdkVersion")
     implementation("$mdkGroup:devkit-bukkit-commands:$mdkVersion")
     implementation("$mdkGroup:devkit-localization:$mdkVersion")
     implementation("$mdkGroup:devkit-localization-yaml:$mdkVersion")
