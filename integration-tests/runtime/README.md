@@ -7,11 +7,11 @@ This optional harness starts isolated, local Minecraft 1.21.11 server processes 
 - Windows PowerShell 5.1 or PowerShell 7
 - Java 21 on `PATH` (or pass `-JavaExecutable`)
 - The root project and Maven Local dependencies can build
-- A locally obtained Spigot 1.21.11 server jar and/or Paper 1.21.11 server jar
-- A separate, already accepted EULA file for each server implementation
+- A locally obtained Spigot 1.21.11 server jar and/or Paper 1.21.11 server jar, or opt-in `-Provision`
+- A separate accepted EULA file for each manually supplied server jar
 - To complete player-facing acceptance: an authorized Minecraft 1.21.11 client and at least one authenticated test account; two accounts are needed for multi-viewer isolation
 
-The harness does not download server artifacts, change an EULA file, disable authentication, open firewall ports, or connect to public servers. It copies the supplied accepted EULA into its own generated directory and binds server and RCON listeners to `127.0.0.1`. The caller is responsible for obtaining server artifacts and accepting the EULA for the test instance. Do not point this harness at a production server directory; it starts the supplied jar against a new run-owned data directory.
+The harness binds server and RCON listeners to `127.0.0.1`, keeps `online-mode=true`, and starts each server in a new run-owned directory. Manual mode never changes a supplied EULA file. The explicitly opted-in provisioning mode uses official SpigotMC BuildTools and the PaperMC Downloads Service, caches artifacts under ignored `build/runtime-acceptance/provision`, verifies SHA-256 on cache reuse/download, and writes `eula=true` only for the disposable server directories created by this harness. This test-server EULA change was explicitly authorized for this repository. It does not alter any other server. The harness never changes firewall rules or connects to public Minecraft servers.
 
 ## Configure and run
 
@@ -28,6 +28,14 @@ $env:MDK_PAPER_EULA_FILE = 'D:\test-artifacts\paper-eula.txt'
 ./integration-tests/runtime/run.ps1 -Platform all
 ```
 
+Provision missing official artifacts, reusing checksum-verified cache entries:
+
+```powershell
+./integration-tests/runtime/run.ps1 -Platform all -Provision
+```
+
+Provisioning targets Minecraft 1.21.11 only. Spigot is built locally with official BuildTools (Git and Java 21 required); Paper is resolved from PaperMC's current v3 Downloads Service metadata. Both logs and provenance JSON are retained under `build/runtime-acceptance/provision`. If the verified cached Spigot build 4598 or Paper build 132 artifact exists, provisioning reuses it without network access or rebuilding. An invalid cache is not silently accepted. `-Provision` checks Java 21. Manual jar/EULA parameters and existing `MDK_*` environment variables continue to work without provisioning.
+
 Or pass paths directly:
 
 ```powershell
@@ -38,7 +46,15 @@ Or pass paths directly:
 
 The runner publishes the current project to Maven Local and builds platform-specific artifacts before launch. `-SkipBuild` reuses already-built artifacts. `-StartupTimeoutSeconds` and `-ShutdownTimeoutSeconds` bound process waits. Each invocation uses fresh server data under `build/runtime-acceptance/<platform>/<run-id>/server`; the two server cycles within a run intentionally share that data directory to check restart persistence. Reports and logs remain under that run ID. Build outputs and acceptance results are ignored by Git.
 
-When a server jar or accepted EULA is missing, the runner writes `NOT VERIFIED` results and exits with code 2. This is not a database/mock fallback and is not a successful runtime test. A startup/assertion failure is recorded as `FAIL`. The runner first requests an ordinary `stop`; if the exact server process it created does not exit before the configured timeout, it records shutdown as failed before force-cleaning up that process. It never terminates unrelated Java processes.
+When a server jar or accepted EULA is missing, the runner writes `NOT VERIFIED` results and exits with code 2. A provisioning failure is an explicit failed prerequisite and never falls back to a mock or alternate version. A startup/assertion failure is recorded as `FAIL`. The runner first requests an ordinary `stop`; if the exact server process it created does not exit before the configured timeout, it records shutdown as failed before force-cleaning up that process. It never terminates unrelated Java processes.
+
+The harness helper regressions can be run on Windows PowerShell 5.1 or PowerShell 7 without starting a Minecraft server:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File integration-tests/runtime/tests/Test-Harness.ps1
+```
+
+The shaded storage and runtime probe standalone `test` tasks also depend on their shaded JAR and test migration discovery through a plugin-style URLClassLoader while the thread context loader cannot see the scripts.
 
 ## What the automated server probe covers
 
