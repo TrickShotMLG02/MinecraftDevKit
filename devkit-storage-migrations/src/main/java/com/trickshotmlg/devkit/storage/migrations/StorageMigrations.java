@@ -16,8 +16,15 @@ public final class StorageMigrations {
         private final Storage storage;
         private String[] locations = {"classpath:db/migration"};
         private String schemaHistoryTable = "flyway_schema_history";
+        private ClassLoader classLoader;
 
         private Builder(Storage storage) { this.storage = Objects.requireNonNull(storage, "storage"); }
+
+        /** Sets the class loader used to discover classpath migrations and Flyway extensions. */
+        public Builder classLoader(ClassLoader classLoader) {
+            this.classLoader = Objects.requireNonNull(classLoader, "classLoader");
+            return this;
+        }
 
         /** Sets Flyway locations, such as {@code classpath:db/migration/sqlite}. */
         public Builder locations(String... locations) {
@@ -43,17 +50,19 @@ public final class StorageMigrations {
         /** Validates applied migrations, applies pending migrations, and returns an immutable summary. */
         public MigrationReport migrate() {
             try {
-                var result = flyway().migrate();
+                var flyway = flyway();
+                var result = flyway.migrate();
+                var current = flyway.info().current();
                 return new MigrationReport(result.migrationsExecuted,
-                        result.targetSchemaVersion == null ? java.util.Optional.empty()
-                                : java.util.Optional.of(result.targetSchemaVersion.toString()));
+                        current == null || current.getVersion() == null ? java.util.Optional.empty()
+                                : java.util.Optional.of(current.getVersion().toString()));
             } catch (RuntimeException failure) {
                 throw new StorageMigrationException("Database migrations failed", failure);
             }
         }
 
         private Flyway flyway() {
-            return Flyway.configure()
+            return (classLoader == null ? Flyway.configure() : Flyway.configure(classLoader))
                     .dataSource(storage.dataSource())
                     .locations(locations)
                     .table(schemaHistoryTable)

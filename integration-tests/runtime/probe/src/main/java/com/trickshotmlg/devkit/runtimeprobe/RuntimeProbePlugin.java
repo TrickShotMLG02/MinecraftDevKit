@@ -205,7 +205,11 @@ public final class RuntimeProbePlugin extends JavaPlugin {
         try {
             Path file = getDataFolder().toPath().resolve("runtime.sqlite");
             storage = Storage.builder().sqlite(file).build();
-            var migration = StorageMigrations.builder(storage).locations("classpath:db/migration/runtime").migrate();
+            var migration = StorageMigrations.builder(storage).classLoader(getClass().getClassLoader())
+                    .locations("classpath:db/migration/runtime").migrate();
+            if (!migration.currentVersion().filter("1"::equals).isPresent()) {
+                throw new IllegalStateException("Required runtime schema migration V1 was not applied");
+            }
             int cycle = Integer.getInteger("mdk.runtime.cycle", 1);
             String migrated = storage.queryOne("SELECT value FROM runtime_probe WHERE id = ?",
                     SqlParameters.of(1), row -> row.getString("value")).orElse("");

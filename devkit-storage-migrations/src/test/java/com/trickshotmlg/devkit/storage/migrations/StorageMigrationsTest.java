@@ -12,6 +12,17 @@ import static org.junit.jupiter.api.Assertions.*;
 class StorageMigrationsTest {
     @TempDir Path temporary;
 
+    @Test void explicitResourceClassLoaderWorksWhenThreadContextCannotSeeMigrations() throws Exception {
+        ClassLoader original = Thread.currentThread().getContextClassLoader();
+        try (Storage storage = Storage.sqlite(temporary.resolve("loader.db"))) {
+            Thread.currentThread().setContextClassLoader(ClassLoader.getPlatformClassLoader());
+            MigrationReport result = StorageMigrations.builder(storage)
+                    .classLoader(getClass().getClassLoader()).locations("classpath:db/migration/test").migrate();
+            assertEquals(2, result.migrationsExecuted());
+            assertEquals("2", result.currentVersion().orElseThrow());
+        } finally { Thread.currentThread().setContextClassLoader(original); }
+    }
+
     @Test void packagedMigrationsApplyOnceAndCreateExpectedSchema() throws Exception {
         try (Storage storage = Storage.sqlite(temporary.resolve("migration.db"))) {
             StorageMigrations.Builder migrations = StorageMigrations.builder(storage)
@@ -19,7 +30,9 @@ class StorageMigrationsTest {
             MigrationReport first = migrations.migrate();
             assertEquals(2, first.migrationsExecuted());
             assertEquals("2", first.currentVersion().orElseThrow());
-            assertEquals(0, migrations.migrate().migrationsExecuted());
+            MigrationReport repeated = migrations.migrate();
+            assertEquals(0, repeated.migrationsExecuted());
+            assertEquals("2", repeated.currentVersion().orElseThrow());
             assertEquals(2, storage.queryOne("SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name IN ('players', 'player_settings')",
                     com.trickshotmlg.devkit.storage.SqlParameters.none(), row -> row.getInt(1)).orElseThrow());
             migrations.validate();

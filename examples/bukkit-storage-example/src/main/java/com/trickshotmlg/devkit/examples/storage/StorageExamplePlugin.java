@@ -53,9 +53,13 @@ public final class StorageExamplePlugin extends JavaPlugin {
                 // Storage outlives the scope because callbacks from database work are handed off through it.
                 .service(TASKS, context -> context.require(SCHEDULER).scope(), SCHEDULER, STORAGE)
                 .component(MIGRATIONS, context -> {
-                    StorageMigrations.builder(context.require(STORAGE))
+                    var report = StorageMigrations.builder(context.require(STORAGE))
+                            .classLoader(plugin.getClass().getClassLoader())
                             .locations("classpath:db/migration")
                             .migrate();
+                    if (!report.currentVersion().filter("1"::equals).isPresent()) {
+                        throw new IllegalStateException("Required player schema migration V1 was not applied");
+                    }
                 }, null, STORAGE)
                 .service(PLAYERS, context -> new PlayerRepository(context.require(STORAGE)), STORAGE, MIGRATIONS)
                 .build();
