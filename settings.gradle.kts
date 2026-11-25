@@ -21,6 +21,8 @@ include(
     "devkit-paper-gui",
     "devkit-scheduler",
     "devkit-bukkit-scheduler",
+    "devkit-bukkit-events",
+    "devkit-cooldowns",
     "devkit-lifecycle",
     "devkit-bukkit-lifecycle",
     "devkit-bukkit-metadata",
