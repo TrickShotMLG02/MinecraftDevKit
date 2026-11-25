@@ -48,6 +48,12 @@ public abstract class GenerateBukkitPermissionsTask extends DefaultTask {
     @Input
     public abstract Property<String> getCatalogField();
 
+    /** Whether the selected descriptor mode emits Bukkit plugin.yml metadata.
+     * @return generation mode input
+     */
+    @Input
+    public abstract Property<Boolean> getGenerationEnabled();
+
     /** The conventional source descriptor, which is allowed not to exist.
      * @return input descriptor files, normally {@code src/main/resources/plugin.yml}
      */

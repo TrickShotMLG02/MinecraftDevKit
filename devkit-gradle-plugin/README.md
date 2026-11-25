@@ -2,7 +2,7 @@
 
 The `devkit-gradle-plugin` module provides `com.trickshotmlg.devkit.bukkit-permissions` and `com.trickshotmlg.devkit.localization-scan`. The first loads a compiled Java `PermissionCatalog`, exports traditional Bukkit/Spigot `plugin.yml` permission metadata, and merges that metadata during normal Gradle resource processing. The second validates UTF-8 `.properties` and YAML localization catalogs against a JSON text-reference manifest, using hierarchical locale fallback.
 
-This plugin does not generate Paper `paper-plugin.yml`, command metadata, runtime registrations, or metadata for Velocity, Fabric, Forge, or NeoForge. It has no server runtime requirement.
+The plugin can generate either traditional Bukkit `plugin.yml` metadata (the default) or opt-in native Paper `paper-plugin.yml` metadata. It does not generate command metadata or runtime registrations, and does not support metadata for Velocity, Fabric, Forge, or NeoForge. It has no server runtime requirement.
 
 ## Localization scanning
 
@@ -87,6 +87,9 @@ pluginManagement {
 Then apply and configure the plugin in `build.gradle.kts`:
 
 ```kotlin
+import com.trickshotmlg.devkit.gradle.paper.PaperDependencyLoadOrder
+import com.trickshotmlg.devkit.gradle.paper.PluginDescriptorPlatform
+
 plugins {
     java
     id("com.trickshotmlg.devkit.bukkit-permissions") version "0.1.0-SNAPSHOT"
@@ -103,6 +106,31 @@ dependencies {
 }
 
 minecraftDevKit {
+    // Optional: defaults to Bukkit-compatible plugin.yml generation.
+    platform.set(PluginDescriptorPlatform.PAPER_NATIVE)
+    paperPlugin {
+        name.set("ExamplePlugin")
+        version.set(project.version.toString())
+        mainClass.set("com.example.ExamplePlugin")
+        apiVersion.set("1.21.11")
+        bootstrapper.set("com.example.ExampleBootstrap") // optional
+        serverDependency("StoragePlugin") {
+            load.set(PaperDependencyLoadOrder.AFTER)
+            required.set(true)
+            joinClasspath.set(false) // opt in explicitly when sharing dependency classes
+        }
+    }
+}
+```
+
+For Paper-native metadata, `mainClass` is required. `bootstrapper`, `loader`, description, authors, API version, and dependencies are optional. Dependencies can be declared in `bootstrapDependency(...)` or `serverDependency(...)`; each declaration serializes `load`, `required`, and `join-classpath` deterministically. The generator rejects self-dependencies, malformed names/classes, and duplicates within a phase. It cannot detect cycles involving metadata from other plugins. A safe `joinClasspath=false` default avoids exposing another plugin's classes unless explicitly requested.
+
+The descriptor target is explicit: `PluginDescriptorPlatform.BUKKIT` is the default and generates only `plugin.yml`; `PAPER_NATIVE` generates only `paper-plugin.yml`. Applying Paper API or the Paper command module does not change the descriptor choice. Cloud-managed commands are registered at runtime and should not be duplicated in descriptor metadata.
+
+Traditional Bukkit configuration remains:
+
+```kotlin
+minecraftDevKit {
     bukkitPermissions {
         catalogClass.set("com.example.plugin.permissions.PluginPermissions")
         // Optional; defaults to CATALOG.
@@ -115,9 +143,9 @@ The field must be public, static, and declared with type `PermissionCatalog`. Ja
 
 ## Lifecycle and generated files
 
-The plugin applies Gradle's Java plugin and registers `generateBukkitPermissions`. The task depends on `compileJava`, then reads main compiled classes and the main runtime dependency configuration. It deliberately does not include the main processed-resources output, so it does not depend on `processResources` and cannot form a cycle with that task.
+The plugin applies Gradle's Java plugin and registers `generateBukkitPermissions` and `generatePaperPluginMetadata`. The Bukkit task depends on `compileJava`, then reads main compiled classes and the main runtime dependency configuration. It deliberately does not include the main processed-resources output, so it does not depend on `processResources` and cannot form a cycle with that task. The Paper task serializes only the configured descriptor model and needs no server/API dependency.
 
-`processResources` depends on generation. The task merges the generated mapping with `src/main/resources/plugin.yml` when that file exists, writes `build/generated/minecraftdevkit/resources/plugin.yml`, and excludes the original root `plugin.yml` from normal resource copying. Other resources continue through the usual Gradle resource pipeline. The JAR therefore receives one root `plugin.yml`, and the source descriptor is never modified. If no source descriptor exists, the generated file contains a root `permissions` mapping.
+`processResources` depends on both descriptor tasks. It merges generated permission metadata with `src/main/resources/plugin.yml` in Bukkit mode. In native Paper mode it emits the configured `paper-plugin.yml`. Both source descriptor paths are excluded before the selected generated descriptor is added, so stale source metadata cannot leak into the wrong artifact. The source descriptors are never modified.
 
 The generated permission declarations come from `BukkitPermissionYamlExporter`. Ordinary permission declarations and group nodes are emitted; sections are omitted. Inherited grants are flattened from `PermissionCatalog.effectivePermissions(group)`, exclusions are omitted from the corresponding group, and no false/negative Bukkit child relationship is generated. Catalog output order is retained.
 
