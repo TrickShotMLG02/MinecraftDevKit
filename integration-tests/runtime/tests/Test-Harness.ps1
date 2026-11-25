@@ -54,6 +54,15 @@ try {
     Write-RunReport $interactiveReportDir 'paper' ([ordered]@{ interactiveMode=$true }) $interactiveChecks
     $interactiveReport = Get-Content (Join-Path $interactiveReportDir 'results.json') -Raw | ConvertFrom-Json
     Assert ($interactiveReport.totals.byCategory.'client-dependent'.notVerified -eq 1) 'interactive no-client result stays NOT VERIFIED in its own report category'
+    $completeSession = [pscustomobject]@{ status='PASS'; complete=$true; sessionId='current-session'; platform='paper'; progress=[pscustomobject]@{completed=2;total=2;failed=0;remaining=0}; requirements=@([pscustomobject]@{status='PASS'},[pscustomobject]@{status='PASS'}) }
+    Assert (Test-InteractiveResultPassed $completeSession 'paper') 'harness accepts a matching complete session with every requirement passed'
+    $incompleteSession = $completeSession | Select-Object *
+    $incompleteSession.requirements = @([pscustomobject]@{status='PASS'},[pscustomobject]@{status='PENDING'})
+    Assert (-not (Test-InteractiveResultPassed $incompleteSession 'paper')) 'harness rejects a completion flag while any required scenario remains pending'
+    $inconsistentSession = $completeSession | Select-Object *
+    $inconsistentSession.progress = [pscustomobject]@{completed=1;total=2;failed=0;remaining=1}
+    Assert (-not (Test-InteractiveResultPassed $inconsistentSession 'paper')) 'harness rejects inconsistent completion counts'
+    Assert (-not (Test-InteractiveResultPassed $completeSession 'spigot')) 'harness rejects a terminal result from another platform'
 
     $java = Join-Path $PSHOME 'powershell.exe'
     $exitProcess = Start-Process -FilePath $java -ArgumentList '-NoProfile -Command exit 17' -PassThru -WindowStyle Hidden
