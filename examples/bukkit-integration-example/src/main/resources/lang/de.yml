@@ -1,4 +1,8 @@
 integration:
+  voucher:
+    name: "Integrationsgutschein"
+    lore: "Ein wiederverwendbarer Gegenstand mit Tags"
+    given: "Der markierte Gutschein wurde deinem Inventar hinzugefügt."
   events:
     join: 'Willkommen! Jetzt sind {count} Spieler online.'
   menu:

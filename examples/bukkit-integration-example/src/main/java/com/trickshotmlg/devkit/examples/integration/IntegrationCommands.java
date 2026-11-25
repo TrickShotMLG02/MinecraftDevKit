@@ -53,6 +53,9 @@ final class IntegrationCommands {
                         .subcommand("delayed", delayed -> delayed.execute(this::delayed))
                         .subcommand("async", async -> async.execute(this::async))
                         .subcommand("cooldown", cooldown -> cooldown.execute(this::cooldown)))
+                .subcommand("voucher", voucher -> voucher.permission(IntegrationPermissions.USE).playerOnly()
+                        .description("Give a localized example item with typed persistent data")
+                        .execute(this::voucher))
                 .subcommand("typed", typed -> typed.required(NATIVE_VALUE)
                         .execute(context -> context.sender().sendMessage(Component.text(
                                 "MDK_TYPED_" + context.get(NATIVE_VALUE)))))
@@ -145,6 +148,17 @@ final class IntegrationCommands {
             IntegrationMessages.send(player, Component.text("Cooldown active for "
                     + String.format(Locale.ROOT, "%.1f", cooldowns.remaining(id).toNanos() / 1_000_000_000.0)
                     + " seconds."));
+        }
+    }
+
+    private void voucher(CommandContext context) {
+        Player player = player(context);
+        if (player == null) return;
+        var features = lifecycle.get(IntegrationServices.FEATURES);
+        if (lifecycle.get(IntegrationServices.MENUS).giveVoucher(player)) {
+            features.feedback().message(player, TextRef.translated("integration.voucher.given", "Tagged voucher added to your inventory."));
+        } else {
+            features.feedback().actionBar(player, Component.text("Your inventory is full."));
         }
     }
 

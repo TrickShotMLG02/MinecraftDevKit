@@ -3,6 +3,10 @@ package com.trickshotmlg.devkit.examples.integration;
 import com.trickshotmlg.devkit.bukkit.gui.*;
 import com.trickshotmlg.devkit.bukkit.scheduler.BukkitTaskScheduler;
 import com.trickshotmlg.devkit.bukkit.events.BukkitEvents;
+import com.trickshotmlg.devkit.bukkit.data.BukkitData;
+import com.trickshotmlg.devkit.bukkit.data.DataKey;
+import com.trickshotmlg.devkit.bukkit.feedback.BukkitFeedback;
+import com.trickshotmlg.devkit.bukkit.items.ItemTemplate;
 import com.trickshotmlg.devkit.cooldowns.CooldownManager;
 import com.trickshotmlg.devkit.cooldowns.TokenBucketRateLimiter;
 import com.trickshotmlg.devkit.config.yaml.YamlConfigHandle;
@@ -93,11 +97,19 @@ final class IntegrationServices {
         private GuiMenu status;
         private final LocalizationService text;
         private final TokenBucketRateLimiter<UUID> guiLimiter;
+        private final DataKey<String> voucherId;
+        private final ItemTemplate voucher;
 
         Menus(JavaPlugin plugin, YamlConfigHandle config, LocalizationService text,
               com.trickshotmlg.devkit.lifecycle.LifecycleContext lifecycleContext) {
             this.config = config;
             this.text = text;
+            this.voucherId = DataKey.string(plugin, "voucher_id");
+            this.voucher = ItemTemplate.builder(Material.PAPER)
+                    .localizedName(ref("integration.voucher.name", "Integration voucher"))
+                    .localizedLore(List.of(ref("integration.voucher.lore", "A reusable tagged example item")))
+                    .data(voucherId, "welcome")
+                    .build();
             this.guiLimiter = lifecycleContext.manage(new TokenBucketRateLimiter<>(2, 1, Duration.ofSeconds(2)));
             manager = GuiManager.create(plugin, text);
             lifecycleContext.manage(manager);
@@ -186,6 +198,11 @@ final class IntegrationServices {
                             .name(context.text(ref("integration.status.online"), Map.of("count", Bukkit.getOnlinePlayers().size())))
                             .build()).visibleWhen(context -> config.store().get(IntegrationConfig.SHOW_ONLINE_COUNT))
                             .onClick(GuiClickContext::refresh).build())
+                    .button(15, GuiButton.builder().item(GuiItems.template(voucher))
+                            .onClick(click -> {
+                                String id = BukkitData.get(click.event().getCurrentItem(), voucherId).orElse("missing");
+                                IntegrationMessages.send(click.viewer(), Component.text("Tagged GUI item: " + id));
+                            }).build())
                     .button(22, GuiButtons.back()).build();
         }
 
@@ -194,6 +211,10 @@ final class IntegrationServices {
         GuiMenu settings() { return settings; }
         GuiMenu status() { return status; }
         GuiManager manager() { return manager; }
+        boolean giveVoucher(Player player) {
+            ItemStack rendered = voucher.create(text, Locale.forLanguageTag(player.getLocale().replace('_', '-')), Map.of());
+            return player.getInventory().addItem(rendered).isEmpty();
+        }
         void playerQuit(UUID playerId) { guiLimiter.remove(playerId); }
         void refreshAll() {
             manager.refreshOpen(main); manager.refreshOpen(players); manager.refreshOpen(settings); manager.refreshOpen(status);
@@ -243,11 +264,13 @@ final class IntegrationServices {
         private final TaskScope scope;
         private com.trickshotmlg.devkit.scheduler.TaskHandle refreshTask;
         private final CooldownManager<UUID> commandCooldowns;
+        private final BukkitFeedback feedback;
         Features(JavaPlugin plugin, YamlConfigHandle config, Menus menus, LocalizationService text,
                  TaskScope scope, com.trickshotmlg.devkit.lifecycle.LifecycleContext lifecycleContext) {
             this.plugin = plugin; this.config = config; this.menus = menus; this.text = text;
             this.scope = scope;
             this.commandCooldowns = lifecycleContext.manage(CooldownManager.create());
+            this.feedback = lifecycleContext.manage(BukkitFeedback.create(plugin, text));
             BukkitEvents events = lifecycleContext.manage(BukkitEvents.create(plugin));
             events.subscribe(PlayerJoinEvent.class, EventPriority.NORMAL, false, this::onJoin);
             events.subscribe(PlayerQuitEvent.class, this::onQuit);
@@ -259,6 +282,7 @@ final class IntegrationServices {
         }
         TaskScope scope() { return scope; }
         CooldownManager<UUID> commandCooldowns() { return commandCooldowns; }
+        BukkitFeedback feedback() { return feedback; }
         private void scheduleRefresh() {
             if (refreshTask != null) refreshTask.cancel();
             int interval = config.store().get(IntegrationConfig.REFRESH_INTERVAL);
@@ -269,9 +293,7 @@ final class IntegrationServices {
             menus.refreshPlayers();
             if (config.store().get(IntegrationConfig.NOTIFICATIONS)) {
                 Player player = event.getPlayer();
-                IntegrationMessages.send(player, text.resolve(ref("integration.events.join"),
-                        Locale.forLanguageTag(player.getLocale().replace('_', '-')),
-                        Map.of("count", Bukkit.getOnlinePlayers().size())));
+                feedback.message(player, ref("integration.events.join"), Map.of("count", Bukkit.getOnlinePlayers().size()));
             }
         }
         private void onQuit(PlayerQuitEvent event) {

@@ -1,4 +1,8 @@
 integration:
+  voucher:
+    name: "Integration Voucher"
+    lore: "A reusable tagged example item"
+    given: "Tagged voucher added to your inventory."
   events:
     join: 'Welcome! There are now {count} players online.'
   menu:

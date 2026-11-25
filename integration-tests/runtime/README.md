@@ -77,6 +77,8 @@ The probe is a test-only plugin, not a production publication. It loads actual c
 - Sync primary-thread execution, async-to-sync continuation, delayed cancellation, repeating task completion, and storage-result handoff
 - Normal plugin disable, storage/task cleanup, server process exit, and localhost port release
 
+The probe also verifies typed PDC reads/writes on ItemMeta and TileState, item-template instance isolation and ItemStack serialization, Paper item-text provider discovery, feedback initialization, and boss-bar cleanup. The TileState marker is written in cycle one and checked before cycle-two updates using a per-run identifier. Server-side API checks do not establish what a client visually rendered or heard; player presentation remains a manual client check.
+
 Each cycle preserves stdout, stderr, the server log, and the probe JSON. The run writes JSON plus a Markdown report and a `checksums.json` sidecar covering the reports, environment, server logs, and cycle captures. Environment metadata includes the Git head, JVM string, Minecraft version check, and SHA-256 hashes for the server jar and installed plugin jars. Reports do not claim an upstream build identity the harness cannot independently attest.
 
 Console/RCON dispatch is not player command acceptance. Server-created inventories and direct callbacks are not client-originated GUI tests. Those scenarios stay `NOT VERIFIED` until executed with a real authorized client.

@@ -16,6 +16,11 @@ import com.trickshotmlg.devkit.bukkit.lifecycle.BukkitLifecycle;
 import com.trickshotmlg.devkit.bukkit.scheduler.BukkitTaskScheduler;
 import com.trickshotmlg.devkit.bukkit.scheduler.BukkitPlayerTaskScopes;
 import com.trickshotmlg.devkit.bukkit.events.BukkitEvents;
+import com.trickshotmlg.devkit.bukkit.data.BukkitData;
+import com.trickshotmlg.devkit.bukkit.data.DataKey;
+import com.trickshotmlg.devkit.bukkit.feedback.BukkitFeedback;
+import com.trickshotmlg.devkit.bukkit.feedback.FeedbackTimings;
+import com.trickshotmlg.devkit.bukkit.items.ItemTemplate;
 import com.trickshotmlg.devkit.cooldowns.CooldownManager;
 import com.trickshotmlg.devkit.cooldowns.TokenBucketRateLimiter;
 import com.trickshotmlg.devkit.commands.Arguments;
@@ -63,6 +68,12 @@ import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.server.RemoteServerCommandEvent;
+import org.bukkit.block.Block;
+import org.bukkit.block.TileState;
+import org.bukkit.Material;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.boss.BarColor;
+import org.bukkit.boss.BarStyle;
 import org.bukkit.permissions.PermissionAttachment;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -96,6 +107,7 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
     private BukkitEvents runtimeEvents;
     private CooldownManager<String> cooldowns;
     private TokenBucketRateLimiter<String> rateLimiter;
+    private BukkitFeedback feedback;
     private TaskScope scope;
     private BukkitLifecycle bukkitLifecycle;
     private LifecycleManager lifecycle;
@@ -127,6 +139,7 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
         verifyCommandRuntime();
         verifySchedulerRuntime();
         verifyUtilityRuntime();
+        verifyDataFeedbackAndItems();
         verifyStorageRuntime();
         writeReport();
     }
@@ -143,6 +156,9 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
             Class.forName("com.trickshotmlg.devkit.bukkit.scheduler.BukkitTaskScheduler", false, getClassLoader());
             Class.forName("com.trickshotmlg.devkit.bukkit.lifecycle.BukkitLifecycle", false, getClassLoader());
             Class.forName("com.trickshotmlg.devkit.bukkit.events.BukkitEvents", false, getClassLoader());
+            Class.forName("com.trickshotmlg.devkit.bukkit.data.BukkitData", false, getClassLoader());
+            Class.forName("com.trickshotmlg.devkit.bukkit.feedback.BukkitFeedback", false, getClassLoader());
+            Class.forName("com.trickshotmlg.devkit.bukkit.items.ItemTemplate", false, getClassLoader());
             Class.forName("com.trickshotmlg.devkit.cooldowns.CooldownManager", false, getClassLoader());
             check("common adapter classloading", true, "Commands, GUI, scheduler, lifecycle, and event utility classes loaded from the probe's server classpath.");
         } catch (LinkageError | ClassNotFoundException failure) {
@@ -888,6 +904,66 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
         }
     }
 
+    private void verifyDataFeedbackAndItems() {
+        try {
+            DataKey<Integer> uses = DataKey.integer(this, "acceptance/uses");
+            DataKey<String> identity = DataKey.string(this, "acceptance/identity");
+            ItemTemplate template = ItemTemplate.builder(Material.PAPER)
+                    .name(Component.text("Runtime acceptance token"))
+                    .lore(List.of(Component.text("Persistent metadata")))
+                    .customModelData(73)
+                    .unbreakable(true)
+                    .data(uses, 5)
+                    .data(identity, "runtime-probe")
+                    .build();
+            ItemStack first = template.create();
+            ItemStack second = template.create();
+            BukkitData.set(first, uses, 9);
+            ItemStack metadataEdited = ItemBuilder.from(first).lore("edited without losing tags").build();
+            ItemStack roundTrip = ItemStack.deserialize(metadataEdited.serialize());
+            boolean itemWorks = BukkitData.get(first, uses).orElse(-1) == 9
+                    && BukkitData.get(second, uses).orElse(-1) == 5
+                    && BukkitData.get(metadataEdited, identity).orElse("").equals("runtime-probe")
+                    && BukkitData.get(roundTrip, uses).orElse(-1) == 9
+                    && roundTrip.getItemMeta().hasCustomModelData()
+                    && roundTrip.getItemMeta().isUnbreakable()
+                    && ItemBuilder.supportsNativeAdventure() == Bukkit.getName().toLowerCase(Locale.ROOT).contains("paper")
+                    && BukkitFeedback.supportsNativeAdventure() == Bukkit.getName().toLowerCase(Locale.ROOT).contains("paper");
+            check("typed PDC item metadata and template isolation", itemWorks,
+                    "Typed tags survived ItemMeta writeback and ItemStack serialization; two template instances remained independent; common Spigot item text fallback is active.");
+
+            int cycle = Integer.getInteger("mdk.runtime.cycle", 0);
+            String runId = System.getProperty("mdk.runtime.acceptanceId", "missing-run-id");
+            Block block = Bukkit.getWorlds().get(0).getBlockAt(Bukkit.getWorlds().get(0).getSpawnLocation().getBlockX() + 100,
+                    Bukkit.getWorlds().get(0).getSpawnLocation().getBlockY(),
+                    Bukkit.getWorlds().get(0).getSpawnLocation().getBlockZ() + 100);
+            if (block.getType() != Material.BARREL) block.setType(Material.BARREL);
+            TileState tile = (TileState) block.getState();
+            boolean tileResult;
+            if (cycle == 2) {
+                tileResult = BukkitData.get(tile, DataKey.string(this, "acceptance/tile-run"))
+                        .filter(runId::equals).isPresent();
+            } else {
+                tileResult = BukkitData.setAndUpdate(tile, DataKey.string(this, "acceptance/tile-run"), runId);
+            }
+            check("TileState PDC commit and restart persistence", tileResult,
+                    cycle == 2 ? "The cycle-one acceptance identifier was read from the saved tile state."
+                            : "The test-world barrel accepted a PDC value and BlockState.update committed it.");
+
+            feedback = BukkitFeedback.create(this, localization);
+            BukkitFeedback.ManagedBossBar bar = feedback.bossBar(Component.text("Runtime feedback"), BarColor.GREEN, BarStyle.SOLID);
+            bar.progress(0.5);
+            bar.title(Component.text("Updated"));
+            bar.close();
+            check("feedback and boss bar lifecycle", feedback.ownedBossBarCount() == 0 && bar.isClosed()
+                            && FeedbackTimings.of(Duration.ofMillis(1), Duration.ofSeconds(1), Duration.ZERO).fadeInTicks() == 1,
+                    "Common feedback initialized, validated and updated an owned boss bar, and released it explicitly.");
+        } catch (Throwable failure) {
+            check("PDC, feedback, and item runtime", false, failure.toString());
+            getLogger().log(Level.SEVERE, "PDC/feedback/item probe failed", failure);
+        }
+    }
+
     private String statusLine() {
         long passed = checks.stream().filter(check -> check.status().equals("PASS")).count();
         long failed = checks.stream().filter(check -> check.status().equals("FAIL")).count();
@@ -924,6 +1000,11 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
         if (playerTaskScopes != null) playerTaskScopes.close();
         if (cooldowns != null) cooldowns.close();
         if (rateLimiter != null) rateLimiter.close();
+        if (feedback != null) {
+            feedback.close();
+            check("feedback plugin-disable cleanup", feedback.isClosed() && feedback.ownedBossBarCount() == 0,
+                    "Plugin shutdown closed feedback resources and removed owned boss bars.");
+        }
         if (bukkitLifecycle != null) {
             try {
                 bukkitLifecycle.close();

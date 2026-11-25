@@ -1,6 +1,6 @@
 # MinecraftDevKit Bukkit Integration Example
 
-This standalone plugin composes MinecraftDevKit's lifecycle, typed configuration, localization, permissions, Cloud commands, inventory GUI, and scheduler APIs. Application command definitions and permission catalogs are shared. Its Spigot artifact selects the legacy Bukkit Cloud backend; its Paper artifact selects Cloud's native Paper/Brigadier manager and optional native GUI extension.
+This standalone plugin composes MinecraftDevKit's lifecycle, typed configuration, localization, permissions, Cloud commands, inventory GUI, scheduler, event, cooldown, persistent-data, feedback, and item-template APIs. `/mdki voucher` gives a localized paper item with a typed persistent identifier; the GUI status menu also renders a viewer-localized tagged template. Join feedback is resolved using the joining player's locale. Application command definitions and permission catalogs are shared. Its Spigot artifact selects the legacy Bukkit Cloud backend; its Paper artifact selects Cloud's native Paper/Brigadier manager and optional native GUI extension.
 
 ## Platform and build
 
