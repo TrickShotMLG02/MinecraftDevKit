@@ -304,14 +304,13 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
                                     "Actual permission-protected Cloud handler executed for player UUID " + player.getUniqueId());
                             send(player, Component.text("Cloud protected handler executed."));
                             if (interactive != null && interactive.playerId().equals(player.getUniqueId())
-                                    && interactive.stage() == InteractiveSessionState.Stage.PERMISSION_GRANTED) {
+                                    && interactive.stage() == InteractiveSessionState.Stage.PERMISSIONS) {
                                 if (interactivePermission != null) interactivePermission.setPermission(INTERACTIVE_PERMISSION.node(), false);
                                 player.recalculatePermissions();
-                                interactive.observe(player.getUniqueId(), "permission.revoked", !player.hasPermission(INTERACTIVE_PERMISSION.node()),
-                                        "Cloud grant was revoked after handler execution; hasPermission=" + player.hasPermission(INTERACTIVE_PERMISSION.node()),
-                                        InteractiveSessionState.Stage.GUI_BUTTON);
+                                recordInteractive(player, "permission.revoked", !player.hasPermission(INTERACTIVE_PERMISSION.node()),
+                                        "Cloud grant was revoked after handler execution; hasPermission=" + player.hasPermission(INTERACTIVE_PERMISSION.node()));
                                 send(player, Component.text("Grant revoked after protected execution; now run /devkitaccept gui."));
-                                writeInteractiveReport(false);
+                                writeInteractiveReport();
                             }
                         }
                     }))).build();
@@ -337,22 +336,22 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
         if (!isInteractiveOwner(event.getPlayer()) || interactive == null) return;
         String commandLine = event.getMessage().trim().toLowerCase(Locale.ROOT);
         if (commandLine.equals("/mdkacceptcloud protected")
-                && interactive.stage() == InteractiveSessionState.Stage.PERMISSION_DENIED) {
+                && interactive.stage() == InteractiveSessionState.Stage.PERMISSIONS) {
             int executionsBefore = cloudProtectedExecutions;
             boolean deniedBeforeDispatch = !event.getPlayer().hasPermission(INTERACTIVE_PERMISSION.node());
             Player player = event.getPlayer();
             Bukkit.getScheduler().runTask(this, () -> {
                 if (interactive == null || !interactive.playerId().equals(player.getUniqueId())) return;
                 boolean passed = deniedBeforeDispatch && cloudProtectedExecutions == executionsBefore
-                        && interactive.stage() == InteractiveSessionState.Stage.PERMISSION_DENIED;
-                if (interactive.record(player.getUniqueId(), InteractiveSessionState.Stage.PERMISSION_DENIED,
+                        && interactive.stage() == InteractiveSessionState.Stage.PERMISSIONS;
+                if (interactive.record(player.getUniqueId(), InteractiveSessionState.Stage.PERMISSIONS,
                         "command.permission-denied", passed,
                         "Real player command entered; permission denied before dispatch=" + deniedBeforeDispatch
                                 + ", protected handler executions before/after=" + executionsBefore + "/" + cloudProtectedExecutions,
-                        InteractiveSessionState.Stage.PERMISSION_GRANTED)) {
+                        InteractiveSessionState.Stage.PERMISSIONS)) {
                     send(player, Component.text(passed ? "PASS: Cloud rejected the permission-protected command." : "FAIL: protected command was not denied."));
                     send(player, Component.text("Now run /devkitaccept grant, then retry /mdkacceptcloud protected."));
-                    writeInteractiveReport(false);
+                    writeInteractiveReport();
                 }
             });
         } else if (commandLine.equals("/mdkruntimeprobe nested nope")) {
@@ -383,6 +382,7 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
             case "help" -> sendInteractiveHelp(player);
             case "start" -> startInteractive(player);
             case "status" -> sendInteractiveStatus(player);
+            case "details" -> sendInteractiveDetails(player);
             case "retry" -> retryInteractive(player);
             case "grant" -> grantInteractivePermission(player);
             case "kit" -> giveInventoryProtectionItems(player);
@@ -391,16 +391,17 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
             case "cancelgui" -> openInteractiveCancelGui(player);
             case "finish" -> finishInteractive(player);
             case "cancel" -> cancelInteractive(player, "Player cancelled the interactive session.");
-            default -> send(player, Component.text("Usage: /devkitaccept <help|start|status|retry|grant|kit|gui|pages|cancelgui|finish|cancel>"));
+            default -> send(player, Component.text("Usage: /devkitaccept <help|start|status|details|retry|grant|kit|gui|pages|cancelgui|finish|cancel>"));
         }
         return true;
     }
 
     private void sendInteractiveHelp(Player player) {
-        send(player, Component.text("MDK interactive acceptance: /devkitaccept start, then follow each prompt."));
+        send(player, Component.text("MDK interactive acceptance: /devkitaccept start, then follow each prompt. Use /devkitaccept status/details for remaining checks."));
         send(player, Component.text("Keep online-mode enabled. Use one authorized authenticated client. /devkitaccept cancel ends the session."));
-        send(player, Component.text("GUI: test button, child/Back navigation, toggle twice, select Beta then Alpha radio, confirm, then /devkitaccept cancelgui and Cancel."));
-        send(player, Component.text("Pagination: run /devkitaccept pages; click Next then Previous. Protection: while a test GUI is open, test shift-left/right, number-key, double-click, offhand swap, and a drag crossing a GUI slot."));
+        send(player, Component.text("After permissions: /devkitaccept gui. Click emerald; open child then Back; toggle ON then OFF; choose Beta then Alpha."));
+        send(player, Component.text("Click confirmation book and Confirm once; /devkitaccept cancelgui then click Cancel. Use pagination book; Next then Previous."));
+        send(player, Component.text("Protection: /devkitaccept kit, reopen /devkitaccept gui, then perform each pending gesture shown by status/details."));
         send(player, Component.text("Run /devkitaccept kit before item-transfer checks. It adds only test items to free slots and an empty offhand; existing items are preserved."));
     }
 
@@ -412,28 +413,34 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
         }
         clearInteractivePermission();
         interactive = new InteractiveSessionState(System.getProperty("mdk.runtime.platform", "unknown"), player.getUniqueId());
+        interactiveGuiOpen = false;
+        confirmExecutions = 0;
+        cancelConfirmExecutions = 0;
+        toggleCallbackExecutions = 0;
+        cloudProtectedExecutions = 0;
+        nestedExecutions = 0;
         interactivePermission = player.addAttachment(this);
         interactivePermission.setPermission(INTERACTIVE_PERMISSION.node(), false);
         player.recalculatePermissions();
         send(player, Component.text("Session " + interactive.sessionId() + " started for UUID " + player.getUniqueId()));
         send(player, Component.text("Step 1: run /mdkruntimeprobe, /mdkruntimeprobe status, /mdkruntimeprobe nested 42, and /mdkruntimeprobe nested nope."));
-        writeInteractiveReport(false);
+        writeInteractiveReport();
     }
 
     private void onPlayerNestedCommand(Player player, int value) {
         if (interactive == null || !interactive.playerId().equals(player.getUniqueId())) return;
-        boolean passed = value == 42 && interactive.stage() == InteractiveSessionState.Stage.COMMAND;
-        if (interactive.record(player.getUniqueId(), InteractiveSessionState.Stage.COMMAND, "command.nested.player",
+        boolean passed = value == 42 && interactive.stage() == InteractiveSessionState.Stage.COMMANDS;
+        if (interactive.record(player.getUniqueId(), InteractiveSessionState.Stage.COMMANDS, "command.nested.player",
                 passed, "Cloud nested command executed for player UUID " + player.getUniqueId() + " with value=" + value,
-                InteractiveSessionState.Stage.PERMISSION_DENIED)) {
+                InteractiveSessionState.Stage.PERMISSIONS)) {
             send(player, Component.text(passed ? "PASS: player command reached the typed nested handler." : "FAIL: nested command value or session stage was incorrect."));
             send(player, Component.text("Step 2: run /mdkacceptcloud protected while permission is explicitly denied."));
-            writeInteractiveReport(false);
+            writeInteractiveReport();
         }
     }
 
     private void grantInteractivePermission(Player player) {
-        if (!ownsInteractive(player) || interactive.stage() != InteractiveSessionState.Stage.PERMISSION_GRANTED) {
+        if (!ownsInteractive(player) || interactive.stage() != InteractiveSessionState.Stage.PERMISSIONS) {
             send(player, Component.text("Complete the denied permission check first."));
             return;
         }
@@ -453,8 +460,11 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
     }
 
     private void openInteractiveGui(Player player) {
-        if (!ownsInteractive(player) || interactive.stage() != InteractiveSessionState.Stage.GUI_BUTTON) {
-            send(player, Component.text("Complete the command and permission steps first."));
+        if (!ownsInteractive(player) || (interactive.stage() != InteractiveSessionState.Stage.GUI
+                && interactive.stage() != InteractiveSessionState.Stage.INVENTORY_PROTECTION)) {
+            InteractiveSessionState.Requirement next = interactive == null ? null : interactive.nextRequirement();
+            send(player, Component.text(next == null ? "The GUI is unavailable for this session."
+                    : "Complete the current stage first. Next: " + next.instruction()));
             return;
         }
         GuiMenu child = GuiMenu.chest(3).title("MDK acceptance navigation")
@@ -483,7 +493,9 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
                 .button(13, GuiButton.of(ItemBuilder.of(Material.EMERALD).name("Button acceptance").build(), context -> {
                     recordInteractive(player, "gui.button", context.viewer().getUniqueId().equals(interactive.playerId()) && context.slot() == 13,
                             "Actual managed GuiButton callback received UUID=" + context.viewer().getUniqueId() + ", slot=" + context.slot() + ", click=" + context.clickType());
-                    send(player, Component.text("PASS: real inventory click reached the managed button callback."));
+                    send(player, Component.text(interactive.has("gui.button")
+                            ? "PASS: real inventory click reached the managed button callback."
+                            : "Button callback was observed but is not recorded yet; check /devkitaccept status."));
                 }))
                 .component(15, ToggleButton.builder().key("acceptance-toggle").initialValue(false)
                         .onItem(ItemBuilder.of(Material.LIME_DYE).name("Toggle ON").build())
@@ -495,11 +507,21 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
                             recordInteractive(player, invocation == 1 ? "gui.toggle.on" : "gui.toggle.off",
                                     enabled == (invocation == 1) && expectedName.equals(actualName),
                                     "Actual ToggleButton callback #" + invocation + " state=" + enabled + "; rendered item=" + actualName);
+                            if (invocation == 2) recordInteractive(player, "gui.toggle.count", true,
+                                    "Exactly two actual ToggleButton callbacks were observed.");
+                            else if (invocation > 2) recordInteractiveCurrent(player, "gui.toggle.count", false,
+                                    "Expected exactly two toggle callbacks, observed " + invocation + ".");
                             send(player, Component.text("Toggle state is now " + enabled));
                         }).build())
                 .button(17, GuiButton.of(ItemBuilder.of(Material.PAPER).name("Open confirmation").build(), context ->
                         context.open(ConfirmGui.builder().title("Confirm acceptance action")
-                                .onConfirm(click -> { confirmExecutions++; recordInteractive(player, "gui.confirm", true, "ConfirmGui callback was invoked by a client click; invocation=" + confirmExecutions); send(player, Component.text("Confirmation observed.")); })
+                                .onConfirm(click -> {
+                                    confirmExecutions++;
+                                    recordInteractive(player, "gui.confirm", true, "ConfirmGui callback was invoked by a client click; invocation=" + confirmExecutions);
+                                    recordInteractiveCurrent(player, "gui.confirm.once", confirmExecutions == 1,
+                                            "Expected one confirmation callback, observed " + confirmExecutions + ".");
+                                    send(player, Component.text("Confirmation observed."));
+                                })
                                 .onCancel(click -> { click.back(); }).build())))
                 .radioGroup(radio)
                 .build();
@@ -525,6 +547,12 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
 
     private void openInteractivePages(Player player) {
         if (!ownsInteractive(player)) return;
+        if (interactive.stage() != InteractiveSessionState.Stage.GUI) {
+            InteractiveSessionState.Requirement next = interactive.nextRequirement();
+            send(player, Component.text("Pagination is not in the current stage. "
+                    + (next == null ? "" : "Next: " + next.instruction())));
+            return;
+        }
         interactiveGuiOpen = true;
         guiManager.open(player, interactivePagedMenu());
         send(player, Component.text("Pagination opened. Click Next (bottom-right) and confirm Entry 46 begins the page; click Previous and confirm Entry 1 returns."));
@@ -532,9 +560,22 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
 
     private void openInteractiveCancelGui(Player player) {
         if (!ownsInteractive(player)) return;
+        if (interactive.stage() != InteractiveSessionState.Stage.GUI) {
+            InteractiveSessionState.Requirement next = interactive.nextRequirement();
+            send(player, Component.text("Cancellation GUI is not in the current stage. "
+                    + (next == null ? "" : "Next: " + next.instruction())));
+            return;
+        }
         GuiMenu menu = ConfirmGui.builder().title("Cancel confirmation test")
-                .onConfirm(context -> { cancelConfirmExecutions++; recordInteractive(player, "gui.cancel-dialog-not-confirmed", false, "Confirm was clicked instead of Cancel."); })
-                .onCancel(context -> { recordInteractive(player, "gui.cancel", cancelConfirmExecutions == 0, "Cancel callback received a client click; cancellation-dialog confirm executions=" + cancelConfirmExecutions); send(player, Component.text("Cancellation observed; confirm action did not run.")); context.close(); })
+                .onConfirm(context -> { cancelConfirmExecutions++; send(player, Component.text("FAIL: cancellation dialog Confirm was clicked; retry with Cancel.")); })
+                .onCancel(context -> {
+                    recordInteractive(player, "gui.cancel", cancelConfirmExecutions == 0,
+                            "Cancel callback received a client click; cancellation-dialog confirm executions=" + cancelConfirmExecutions);
+                    recordInteractive(player, "gui.cancel-confirm-not-run", cancelConfirmExecutions == 0,
+                            "Cancellation dialog confirm callback executions=" + cancelConfirmExecutions + ".");
+                    send(player, Component.text("Cancellation observed; confirm action did not run."));
+                    context.close();
+                })
                 .build();
         interactiveGuiOpen = true;
         guiManager.open(player, menu);
@@ -551,9 +592,12 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
                 String firstEntry = displayName(player.getOpenInventory().getTopInventory().getItem(0));
                 String expected = next ? "Entry 46" : "Entry 1";
                 boolean passed = expected.equals(firstEntry);
-                recordInteractive(player, next ? "gui.pagination.next" : "gui.pagination.previous", passed,
+                String scenario = next ? "gui.pagination.next" : "gui.pagination.previous";
+                recordInteractive(player, scenario, passed,
                         "After a real page-control click, expected first item=" + expected + ", observed=" + firstEntry);
-                send(player, Component.text(passed ? "PASS: " + (next ? "next" : "previous") + " page content verified." : "FAIL: page content did not match " + expected));
+                send(player, Component.text(passed && interactive.has(scenario)
+                        ? "PASS: " + (next ? "next" : "previous") + " page content verified."
+                        : "FAIL or not recorded: page content/session stage did not match; run /devkitaccept status."));
             });
         }
         boolean transferStyle = event.getClick().isShiftClick() || event.getClick().isKeyboardClick()
@@ -611,50 +655,54 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
 
     private void finishInteractive(Player player) {
         if (!ownsInteractive(player)) return;
-        String[] required = {"command.root.player", "command.status.player", "command.nested.player", "command.invalid-argument-rejected",
-                "command.permission-denied", "command.permission-allowed", "permission.revoked",
-                "gui.session-owner", "gui.button", "gui.navigation", "gui.toggle.on", "gui.toggle.off", "gui.radio.beta", "gui.radio.alpha", "gui.confirm", "gui.cancel",
-                "gui.pagination.next", "gui.pagination.previous",
-                "inventory.cancelled-click.shift_left", "inventory.cancelled-click.shift_right",
-                "inventory.cancelled-click.number_key", "inventory.cancelled-click.double_click",
-                "inventory.cancelled-click.swap_offhand", "inventory.protected-drag-cancelled"};
-        List<String> missing = java.util.Arrays.stream(required).filter(name -> !interactive.has(name)).toList();
-        if (!missing.isEmpty()) {
-            send(player, Component.text("Session is incomplete; missing: " + String.join(", ", missing)));
-            writeInteractiveReport(false);
-            return;
+        if (interactive.complete()) sendCompletion(player);
+        else {
+            send(player, Component.text("Session is not complete. Progress is shown below; correct failed checks and perform every remaining action."));
+            sendInteractiveStatus(player);
         }
-        interactive.observe(player.getUniqueId(), "gui.confirm.once", confirmExecutions == 1,
-                "ConfirmGui callback execution count=" + confirmExecutions, interactive.stage());
-        interactive.observe(player.getUniqueId(), "gui.toggle.count", toggleCallbackExecutions == 2,
-                "ToggleButton callback execution count=" + toggleCallbackExecutions + "; required exactly two actual clicks.", interactive.stage());
-        if (cancelConfirmExecutions != 0) interactive.observe(player.getUniqueId(), "gui.cancel-confirm-not-run", false,
-                "Cancellation menu confirm callback unexpectedly executed " + cancelConfirmExecutions + " time(s).", interactive.stage());
-        else interactive.observe(player.getUniqueId(), "gui.cancel-confirm-not-run", true,
-                "Cancellation menu confirm callback remained uncalled.", interactive.stage());
-        if (interactive.assertions().stream().anyMatch(assertion -> "FAIL".equals(assertion.status()))) {
-            send(player, Component.text("Session assertions contain a failure; see interactive-results.json."));
-            writeInteractiveReport(false);
-            return;
-        }
-        interactive.complete();
-        clearInteractivePermission();
-        writeInteractiveReport(true);
-        send(player, Component.text("Interactive session completed. Review plugins/MdkRuntimeProbe/interactive-results.json before disconnecting."));
     }
 
     private void sendInteractiveStatus(Player player) {
         if (!ownsInteractive(player)) { send(player, Component.text("No active session owned by you.")); return; }
-        send(player, Component.text("Session " + interactive.sessionId() + ", stage=" + interactive.stage() + ", assertions=" + interactive.assertions().size()));
+        send(player, Component.text("MinecraftDevKit Interactive Acceptance"));
+        send(player, Component.text("Session " + interactive.sessionId() + " | Stage: " + interactive.stage()
+                + " | Progress: " + interactive.completedCount() + "/" + interactive.totalCount()
+                + " | Failed: " + interactive.failedCount() + " | Complete: " + interactive.complete()));
+        if (interactive.complete()) {
+            send(player, Component.text("ALL REQUIRED TESTS COMPLETED | Passed: " + interactive.completedCount()
+                    + " | Failed: 0 | Remaining: 0"));
+            return;
+        }
+        List<InteractiveSessionState.Requirement> remaining = interactive.remaining();
+        String preview = remaining.stream().limit(4).map(InteractiveSessionState.Requirement::label).collect(java.util.stream.Collectors.joining("; "));
+        if (!preview.isEmpty()) send(player, Component.text("Remaining (" + remaining.size() + "): " + preview
+                + (remaining.size() > 4 ? "; use /devkitaccept details" : "")));
+        List<InteractiveSessionState.Requirement> failed = interactive.failed();
+        if (!failed.isEmpty()) send(player, Component.text("Failed: "
+                + failed.stream().limit(3).map(InteractiveSessionState.Requirement::label).collect(java.util.stream.Collectors.joining(", "))
+                + (failed.size() > 3 ? "; use details" : "")));
+        InteractiveSessionState.Requirement next = interactive.nextRequirement();
+        if (next != null) send(player, Component.text("Next: " + next.instruction()));
+    }
+
+    private void sendInteractiveDetails(Player player) {
+        if (!ownsInteractive(player)) return;
+        List<InteractiveSessionState.Requirement> remaining = interactive.remaining();
+        if (remaining.isEmpty()) { sendInteractiveStatus(player); return; }
+        send(player, Component.text("Remaining acceptance actions (" + remaining.size() + "):"));
+        for (InteractiveSessionState.Requirement item : remaining)
+            send(player, Component.text("- " + item.label() + ": " + item.instruction()));
+        List<InteractiveSessionState.Requirement> failed = interactive.failed();
+        if (!failed.isEmpty()) send(player, Component.text("Failed; use /devkitaccept retry and repeat: "
+                + failed.stream().map(InteractiveSessionState.Requirement::label).collect(java.util.stream.Collectors.joining(", "))));
     }
 
     private void retryInteractive(Player player) {
         if (!ownsInteractive(player)) return;
-        List<String> failed = interactive.assertions().stream().filter(assertion -> "FAIL".equals(assertion.status()))
-                .map(InteractiveSessionState.Assertion::scenario).toList();
-        send(player, Component.text(failed.isEmpty() ? "No failed observations. Repeat the prompted action if a step is missing."
-                : "Repeat the failed real action(s); a corrected observation replaces its failure: " + String.join(", ", failed)));
-        sendInteractiveHelp(player);
+        List<InteractiveSessionState.Requirement> failed = interactive.failed();
+        send(player, Component.text(failed.isEmpty() ? "No failed checks." : "Repeat failed real action(s): "
+                + failed.stream().map(InteractiveSessionState.Requirement::label).collect(java.util.stream.Collectors.joining(", "))));
+        sendInteractiveStatus(player);
     }
 
     private boolean ownsInteractive(Player player) {
@@ -673,7 +721,7 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
         clearInteractivePermission();
         if (guiManager != null && player.getOpenInventory().getTopInventory().getHolder() != null) player.closeInventory();
         interactiveGuiOpen = false;
-        writeInteractiveReport(false);
+        writeInteractiveReport();
         send(player, Component.text(reason));
     }
 
@@ -681,19 +729,50 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
         if (interactive == null || !interactive.playerId().equals(player.getUniqueId())) return;
         if (interactive.observe(player.getUniqueId(), name, passed, detail, interactive.stage())) {
             getLogger().info("[MDK-INTERACTIVE] " + (passed ? "PASS " : "FAIL ") + name + " session=" + interactive.sessionId());
-            writeInteractiveReport(false);
+            boolean complete = interactive.complete();
+            writeInteractiveReport();
+            if (complete) {
+                clearInteractivePermission();
+                interactiveGuiOpen = false;
+                sendCompletion(player);
+            } else {
+                InteractiveSessionState.Requirement next = interactive.nextRequirement();
+                send(player, Component.text((passed ? "PASS " : "FAIL ") + name + " | "
+                        + interactive.completedCount() + "/" + interactive.totalCount() + " complete"
+                        + (next == null ? "" : " | Next: " + next.label())));
+            }
+        } else if (interactive.requirement(name) != null && !interactive.canObserve(name)) {
+            InteractiveSessionState.Requirement next = interactive.nextRequirement();
+            send(player, Component.text("Not recorded: " + interactive.requirement(name).label() + " is outside stage "
+                    + interactive.stage() + (next == null ? "." : "; next: " + next.instruction())));
         }
     }
 
-    private void writeInteractiveReport(boolean complete) {
+    private void recordInteractiveCurrent(Player player, String name, boolean passed, String detail) {
+        if (interactive == null || !interactive.playerId().equals(player.getUniqueId())) return;
+        if (interactive.observeCurrent(player.getUniqueId(), name, passed, detail)) {
+            getLogger().info("[MDK-INTERACTIVE] " + (passed ? "PASS " : "FAIL ") + name + " session=" + interactive.sessionId());
+            writeInteractiveReport();
+            if (interactive.complete()) { clearInteractivePermission(); interactiveGuiOpen = false; sendCompletion(player); }
+        } else if (interactive.requirement(name) != null && !interactive.canObserve(name)) {
+            InteractiveSessionState.Requirement next = interactive.nextRequirement();
+            send(player, Component.text("Not recorded: " + interactive.requirement(name).label() + " is outside stage "
+                    + interactive.stage() + (next == null ? "." : "; next: " + next.instruction())));
+        }
+    }
+
+    private void sendCompletion(Player player) {
+        if (interactive == null || !interactive.playerId().equals(player.getUniqueId())
+                || !interactive.claimCompletionNotification()) return;
+        send(player, Component.text("MinecraftDevKit Interactive Acceptance"));
+        send(player, Component.text("ALL REQUIRED TESTS COMPLETED"));
+        send(player, Component.text("Passed: " + interactive.completedCount() + " | Failed: 0 | Remaining: 0"));
+        send(player, Component.text("Session " + interactive.sessionId() + " report recorded; the harness can now stop the server."));
+    }
+
+    private void writeInteractiveReport() {
         if (interactive == null) return;
-        String assertions = String.join(",", interactive.assertions().stream().map(assertion ->
-                "{\"scenario\":\"" + escape(assertion.scenario()) + "\",\"status\":\"" + assertion.status()
-                        + "\",\"detail\":\"" + escape(assertion.detail()) + "\",\"timestamp\":\"" + assertion.timestamp() + "\"}").toList());
-        String json = "{\"schemaVersion\":1,\"sessionId\":\"" + interactive.sessionId() + "\",\"platform\":\""
-                + escape(interactive.platform()) + "\",\"playerUuid\":\"" + interactive.playerId() + "\",\"complete\":" + complete
-                + ",\"stage\":\"" + interactive.stage() + "\",\"assertions\":[" + assertions + "]}";
-        try { Files.writeString(getDataFolder().toPath().resolve("interactive-results.json"), json); }
+        try { Files.writeString(getDataFolder().toPath().resolve("interactive-results.json"), interactive.toJson()); }
         catch (IOException failure) { getLogger().log(Level.SEVERE, "Could not write interactive acceptance report", failure); }
     }
 
@@ -712,7 +791,7 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
             interactive.cancel("Bound player disconnected before completing the interactive session.");
             clearInteractivePermission();
             interactiveGuiOpen = false;
-            writeInteractiveReport(false);
+            writeInteractiveReport();
         }
     }
 
@@ -779,7 +858,7 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
     @Override public void onDisable() {
         if (interactive != null && interactive.stage() != InteractiveSessionState.Stage.COMPLETE) {
             interactive.cancel("Server/plugin shutdown ended the interactive session before completion.");
-            writeInteractiveReport(false);
+            writeInteractiveReport();
         }
         clearInteractivePermission();
         if (bukkitLifecycle != null) {

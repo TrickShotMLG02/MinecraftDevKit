@@ -37,6 +37,12 @@ function Test-ArtifactHash([string] $Path, [string] $ExpectedHash) {
     return [bool]($actual -and $ExpectedHash -and $actual.Equals($ExpectedHash, [StringComparison]::OrdinalIgnoreCase))
 }
 
+function Test-InteractiveResultPassed([object] $Result, [string] $ExpectedPlatform) {
+    if (-not $Result -or $Result.status -ne "PASS" -or -not $Result.complete -or -not $Result.sessionId -or $Result.platform -ne $ExpectedPlatform -or -not $Result.progress) { return $false }
+    if ($Result.progress.completed -ne $Result.progress.total -or $Result.progress.failed -ne 0 -or $Result.progress.remaining -ne 0) { return $false }
+    return @($Result.requirements | Where-Object { $_.status -ne "PASS" }).Count -eq 0 -and $Result.requirements.Count -eq $Result.progress.total
+}
+
 function Assert-Java21([string] $Executable) {
     $command = Get-Command $Executable -ErrorAction SilentlyContinue
     if (-not (Test-Path -LiteralPath $Executable -PathType Leaf) -and -not $command) { throw "Java executable not found: $Executable" }
@@ -448,7 +454,7 @@ function Start-OneCycle([string] $Name, [int] $Cycle, [string] $ServerJar, [stri
             while ($joined -and $deadline.Elapsed.TotalSeconds -lt $InteractiveSessionTimeoutSeconds -and -not $process.HasExited) {
                 if (Test-Path -LiteralPath $interactivePath) {
                     try { $interactiveReport = Get-Content -LiteralPath $interactivePath -Raw | ConvertFrom-Json } catch { $interactiveReport = $null }
-                    if ($interactiveReport -and $interactiveReport.complete) { break }
+                    if ($interactiveReport -and $interactiveReport.status -in @("PASS", "FAIL", "NOT VERIFIED")) { break }
                 }
                 Start-Sleep -Milliseconds 500
             }
@@ -457,10 +463,13 @@ function Start-OneCycle([string] $Name, [int] $Cycle, [string] $ServerJar, [stri
                     Add-Check $cycleChecks "Interactive player: $($assertion.scenario)" $assertion.status $assertion.detail "plugins/MdkRuntimeProbe/interactive-results.json"
                 }
             }
-            if ($interactiveReport -and $interactiveReport.complete) {
-                Add-Check $cycleChecks "Interactive session completion" "PASS" "Player UUID $($interactiveReport.playerUuid) completed session $($interactiveReport.sessionId)." "plugins/MdkRuntimeProbe/interactive-results.json"
-            } elseif ($interactiveReport -and @($interactiveReport.assertions | Where-Object status -eq "FAIL").Count -gt 0) {
+            $validInteractivePass = Test-InteractiveResultPassed $interactiveReport $Name
+            if ($validInteractivePass) {
+                Add-Check $cycleChecks "Interactive session completion" "PASS" "Player UUID $($interactiveReport.playerUuid) completed all $($interactiveReport.progress.total) requirements in session $($interactiveReport.sessionId)." "plugins/MdkRuntimeProbe/interactive-results.json"
+            } elseif ($interactiveReport -and ($interactiveReport.status -eq "FAIL" -or @($interactiveReport.assertions | Where-Object status -eq "FAIL").Count -gt 0)) {
                 Add-Check $cycleChecks "Interactive session completion" "FAIL" "One or more observed player actions failed; see the structured assertions." "plugins/MdkRuntimeProbe/interactive-results.json"
+            } elseif ($interactiveReport -and $interactiveReport.status -eq "NOT VERIFIED") {
+                Add-Check $cycleChecks "Interactive session completion" "NOT VERIFIED" "The player cancelled the interactive session; cancellation is not acceptance." "plugins/MdkRuntimeProbe/interactive-results.json"
             } else {
                 Add-Check $cycleChecks "Interactive session completion" "NOT VERIFIED" "No complete authenticated-player session arrived before the configured session timeout or server exit." "plugins/MdkRuntimeProbe/interactive-results.json"
             }
