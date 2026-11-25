@@ -47,7 +47,9 @@ public final class ExamplePlugin extends JavaPlugin {
 }
 ```
 
-`run` schedules as soon as Bukkit permits (synchronous work runs on a later server tick); `nextTick` requests a one-tick delay. `later` and `repeat` use server ticks, not milliseconds. Twenty ticks is nominally one second at 20 TPS, and server lag increases wall time. Async callbacks must not touch Bukkit world, entity, inventory, or player state unless that specific API documents off-thread safety. `thenSync` performs the handoff without blocking and is cancelled with its result scope.
+`run` schedules as soon as Bukkit permits (synchronous work runs on a later server tick); `nextTick` requests a one-tick delay. Tick-based `later` and `repeat` remain available. Their `Duration` overloads round positive durations up to ticks at nominal 20 TPS; server lag increases wall time. Async callbacks must not touch Bukkit world, entity, inventory, or player state unless that specific API documents off-thread safety. `thenSync` performs the handoff without blocking and is cancelled with its result scope.
+
+`BukkitPlayerTaskScopes.create(plugin, ownerScope, true)` provides stable child scopes keyed by player UUID and closes each scope on `PlayerQuitEvent`. Pass `false` when work should outlive disconnect; callers may still use `closePlayer(uuid)` explicitly. The helper retains UUIDs and scopes, never `Player` instances, and should be closed with its lifecycle owner.
 
 The adapter registers a plugin-disable listener, closes its scheduler when that plugin disables, unregisters the listener on close, and releases its plugin reference. Explicit `onDisable` closure remains recommended. Calling the handle's `cancel()` keeps wrapper state consistent. If external code cancels tasks directly with `BukkitScheduler.cancelTasks(plugin)`, the wrapper cannot observe those external cancellations until the scheduler itself closes or a callback reaches the wrapper.
 

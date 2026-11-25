@@ -1,6 +1,6 @@
 # MinecraftDevKit Bukkit Scheduler Example
 
-Independent Java 21 Paper plugin showing immediate, delayed, repeating, scoped, and asynchronous tasks through the public `devkit-bukkit-scheduler` API. It uses Maven Local by default. JitPack mode must be selected explicitly and requires a published version; it never falls back to Maven Local.
+Independent Java 21 Bukkit-compatible plugin showing immediate, duration-delayed, repeating, scoped, and asynchronous tasks through the public `devkit-bukkit-scheduler` API. It uses Maven Local by default. JitPack mode must be selected explicitly and requires a published version; it never falls back to Maven Local.
 
 From the repository root, publish the modules locally and build the independent plugin:
 
@@ -15,13 +15,13 @@ Cloud registers `/mdkscheduler` (alias `/mdks`), so the root is intentionally no
 
 ## Commands
 
-- `/mdkscheduler demo <player>` sends a message through a next-tick synchronous task and schedules another after 40 ticks.
-- `/mdkscheduler repeat <player>` starts one scoped message every 20 ticks for the target player. Repeating it replaces that target's prior task.
+- `/mdkscheduler demo <player>` sends a message through a next-tick synchronous task and schedules another after two seconds (40 ticks at nominal TPS).
+- `/mdkscheduler repeat <player>` starts one scoped message every second for the target player. Repeating it replaces that target's prior task.
 - `/mdkscheduler cancel <player>` cancels the target's repeat.
 - `/mdkscheduler async <player>` computes a harmless checksum off-thread and sends the result through a synchronous continuation after rechecking the player's online state.
 - `/mdkscheduler status` reports active scoped work.
 
-Tasks use server ticks, not exact wall-clock durations. At nominal 20 TPS, 20 ticks is about one second; lag can make elapsed time longer. The async computation only uses local values. Bukkit player lookup and messaging happen in the scheduled synchronous continuation. The plugin closes its scopes and scheduler in `onDisable`, and the adapter also observes its owning plugin's disable event.
+Tasks use server ticks, not exact wall-clock deadlines. `Duration` convenience overloads round positive values up to ticks at nominal 20 TPS; lag can make elapsed time longer. The repeating command uses a UUID-keyed task scope that is cancelled on player quit. The async computation only uses local values. Bukkit player lookup and messaging happen in the scheduled synchronous continuation. The plugin closes its scopes and scheduler in `onDisable`, and the adapter also observes its owning plugin's disable event.
 
 ## Manual Paper check
 

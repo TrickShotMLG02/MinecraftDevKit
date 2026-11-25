@@ -2,12 +2,13 @@
 
 `devkit-scheduler` defines Java 17, platform-independent tick scheduling contracts and task lifecycle ownership. It contains no Bukkit, Paper, Minecraft, command, GUI, localization, or configuration dependency. Platform adapters implement `TaskBackend` and map `SYNC` and `ASYNC` schedules to their native execution facilities.
 
-The module intentionally offers server-tick schedules only. Ticks are not wall-clock time: 20 ticks is nominally one second at 20 TPS but can take longer under server load. There is no `Duration` API and no guarantee of real-time or fixed-rate wall-clock scheduling.
+The module schedules in server ticks. Ticks are not wall-clock time: 20 ticks is nominally one second at 20 TPS but can take longer under server load. `TaskRunner` also offers `Duration` convenience overloads; positive durations round up to the next tick at 20 TPS, zero remains zero for a delay, and invalid/overflow periods are rejected. These overloads do not promise real-time deadlines.
 
 ## Schedules and handles
 
 ```java
 TaskHandle delayed = scheduler.sync().later(TickDelay.of(20), this::refresh);
+TaskHandle byDuration = scheduler.sync().later(Duration.ofMillis(51), this::refresh); // two ticks
 
 TaskHandle repeating = scheduler.sync().repeat(
     TickDelay.ZERO,
@@ -20,6 +21,8 @@ TaskHandle repeating = scheduler.sync().repeat(
 
 repeating.cancel();
 ```
+
+Repeating schedules also accept `(Duration initialDelay, Duration period, ...)`; the period must be positive and is rounded up to at least one tick.
 
 `run` dispatches as soon as the backend permits. For Bukkit synchronous tasks this means a later server tick; `nextTick` explicitly requests a one-tick delay. Zero-delay repeating schedules start as soon as the backend permits. All delays and periods are validated and fit Bukkit's supported integer tick range.
 

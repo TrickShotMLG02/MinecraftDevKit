@@ -1,11 +1,10 @@
 package com.trickshotmlg.devkit.examples.scheduler;
 
 import com.trickshotmlg.devkit.bukkit.scheduler.BukkitTaskScheduler;
+import com.trickshotmlg.devkit.bukkit.scheduler.BukkitPlayerTaskScopes;
 import com.trickshotmlg.devkit.scheduler.AsyncTaskResult;
 import com.trickshotmlg.devkit.scheduler.TaskHandle;
 import com.trickshotmlg.devkit.scheduler.TaskScope;
-import com.trickshotmlg.devkit.scheduler.TickDelay;
-import com.trickshotmlg.devkit.scheduler.TickPeriod;
 import com.trickshotmlg.devkit.text.StaticTextProvider;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
@@ -24,11 +23,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class SchedulerExamplePlugin extends JavaPlugin implements Listener {
     private BukkitTaskScheduler scheduler;
     private TaskScope demoScope;
+    private BukkitPlayerTaskScopes playerScopes;
     private final Map<UUID, TaskHandle> repeating = new ConcurrentHashMap<>();
 
     @Override public void onEnable() {
         scheduler = BukkitTaskScheduler.create(this);
         demoScope = scheduler.scope();
+        playerScopes = BukkitPlayerTaskScopes.create(this, demoScope, true);
         getServer().getPluginManager().registerEvents(this, this);
         new com.trickshotmlg.devkit.bukkit.commands.BukkitCommandAdapter(
                 this, new StaticTextProvider(), java.util.Locale.ENGLISH)
@@ -38,7 +39,7 @@ public final class SchedulerExamplePlugin extends JavaPlugin implements Listener
     void demo(Player player) {
         UUID viewerId = player.getUniqueId();
         scheduler.sync().run(() -> sendIfOnline(viewerId, "Immediate sync task ran on the server thread."));
-        scheduler.sync().later(TickDelay.of(40), () -> sendIfOnline(viewerId,
+        scheduler.sync().later(java.time.Duration.ofSeconds(2), () -> sendIfOnline(viewerId,
                 "Delayed task ran after 40 server ticks (tick time varies with server load)."));
         player.sendMessage(Component.text("Scheduled a next-tick message and a 40-tick delayed message."));
     }
@@ -47,7 +48,8 @@ public final class SchedulerExamplePlugin extends JavaPlugin implements Listener
         UUID id = player.getUniqueId();
         stopRepeating(id);
         AtomicInteger count = new AtomicInteger();
-        TaskHandle handle = demoScope.sync().repeat(TickDelay.of(20), TickPeriod.of(20), context -> {
+        TaskHandle handle = playerScopes.forPlayer(id).sync().repeat(java.time.Duration.ofSeconds(1),
+                java.time.Duration.ofSeconds(1), context -> {
             Player online = Bukkit.getPlayer(id);
             if (online == null || !online.isOnline()) {
                 context.cancel();
@@ -100,6 +102,7 @@ public final class SchedulerExamplePlugin extends JavaPlugin implements Listener
 
     @Override public void onDisable() {
         repeating.clear();
+        if (playerScopes != null) playerScopes.close();
         if (demoScope != null) demoScope.close();
         if (scheduler != null) scheduler.close();
     }
