@@ -34,6 +34,14 @@ Provision missing official artifacts, reusing checksum-verified cache entries:
 ./integration-tests/runtime/run.ps1 -Platform all -Provision
 ```
 
+Run the native Paper plugin acceptance path explicitly (generated `paper-plugin.yml`, `PluginBootstrap`, Cloud's Paper command manager, and the shared runtime lifecycle):
+
+```powershell
+./integration-tests/runtime/run.ps1 -Platform paper -PaperPluginMode native -Provision
+```
+
+The default Paper mode remains the existing Bukkit-compatible `plugin.yml` artifact. Native mode is opt-in and Paper-only. Both modes produce separate timestamped reports and run two clean startup/shutdown cycles.
+
 Provisioning targets Minecraft 1.21.11 only. Spigot is built locally with official BuildTools (Git and Java 21 required); Paper is resolved from PaperMC's current v3 Downloads Service metadata. Both logs and provenance JSON are retained under `build/runtime-acceptance/provision`. If the verified cached Spigot build 4598 or Paper build 132 artifact exists, provisioning reuses it without network access or rebuilding. An invalid cache is not silently accepted. `-Provision` checks Java 21. Manual jar/EULA parameters and existing `MDK_*` environment variables continue to work without provisioning.
 
 Or pass paths directly:

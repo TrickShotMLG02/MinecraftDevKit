@@ -1,6 +1,8 @@
 param(
     [ValidateSet("spigot", "paper", "all")]
     [string] $Platform = "all",
+    [ValidateSet("bukkit", "native")]
+    [string] $PaperPluginMode = "bukkit",
     [string] $SpigotServerJar = $env:MDK_SPIGOT_SERVER_JAR,
     [string] $PaperServerJar = $env:MDK_PAPER_SERVER_JAR,
     [string] $SpigotEulaFile = $env:MDK_SPIGOT_EULA_FILE,
@@ -22,6 +24,9 @@ $gradle = Join-Path $repoRoot "gradlew.bat"
 $runId = [DateTime]::UtcNow.ToString("yyyyMMddTHHmmssZ")
 $baseResults = Join-Path $repoRoot "build/runtime-acceptance"
 $platforms = if ($Platform -eq "all") { @("spigot", "paper") } else { @($Platform) }
+if ($PaperPluginMode -eq "native" -and $Platform -ne "paper") {
+    throw "-PaperPluginMode native requires -Platform paper; native Paper descriptors cannot be tested on Spigot."
+}
 $overallIncomplete = $false
 $provisionRoot = Join-Path $baseResults "provision"
 $knownSpigotSha256 = "da8b3f6e150d2da80e8a25a230c0344494a36001aa6ed2e8e527dfae3c58db5f"
@@ -202,14 +207,15 @@ function Invoke-Gradle([string] $WorkingDirectory, [string[]] $Arguments) {
     finally { Pop-Location }
 }
 
-function Build-PlatformArtifacts([string] $Name) {
+function Build-PlatformArtifacts([string] $Name, [bool] $NativePaper) {
     Invoke-Gradle $repoRoot @("publishToMavenLocal")
-    Invoke-Gradle (Join-Path $repoRoot "examples/bukkit-integration-example") @("shadowJar", "-PmdkPlatform=$Name")
+    $integrationMode = if ($NativePaper) { "paper-native" } else { $Name }
+    Invoke-Gradle (Join-Path $repoRoot "examples/bukkit-integration-example") @("shadowJar", "-PmdkPlatform=$integrationMode")
     Invoke-Gradle (Join-Path $repoRoot "examples/bukkit-storage-example") @("test", "shadowJar", "-PmdkPlatform=$Name")
     Invoke-Gradle (Join-Path $repoRoot "integration-tests/runtime/probe") @("test", "shadowJar", "-PmdkPlatform=$Name")
 }
 
-function Test-PluginArtifact([string] $Name, [string] $Path, [string] $Platform, [string] $RequiredClass, [bool] $PaperExtensionExpected, [bool] $StoragePlugin, $Checks) {
+function Test-PluginArtifact([string] $Name, [string] $Path, [string] $Platform, [string] $RequiredClass, [bool] $PaperExtensionExpected, [bool] $StoragePlugin, $Checks, [bool] $NativePaper = $false) {
     try {
         Add-Type -AssemblyName System.IO.Compression.FileSystem
         $archive = [IO.Compression.ZipFile]::OpenRead($Path)
@@ -219,7 +225,20 @@ function Test-PluginArtifact([string] $Name, [string] $Path, [string] $Platform,
             $duplicates = @($paths | Group-Object | Where-Object Count -gt 1)
             Add-Check $Checks "$Name has no duplicate archive paths" $(if ($duplicates.Count -eq 0) { "PASS" } else { "FAIL" }) "duplicatePathCount=$($duplicates.Count)" $Path
             $pluginDescriptors = @($paths | Where-Object { $_ -eq "plugin.yml" }).Count
-            Add-Check $Checks "$Name contains one plugin.yml" $(if ($pluginDescriptors -eq 1) { "PASS" } else { "FAIL" }) "pluginYmlCount=$pluginDescriptors" $Path
+            $paperDescriptors = @($paths | Where-Object { $_ -eq "paper-plugin.yml" }).Count
+            if ($NativePaper -and $Name -eq "Integration example") {
+                $paperDescriptorText = ""
+                if ($paperDescriptors -eq 1) {
+                    $reader = [IO.StreamReader]::new(($archive.Entries | Where-Object FullName -eq "paper-plugin.yml")[0].Open())
+                    try { $paperDescriptorText = $reader.ReadToEnd() } finally { $reader.Dispose() }
+                }
+                $nativeValid = $paperDescriptors -eq 1 -and $pluginDescriptors -eq 0 -and
+                    $paperDescriptorText -match '(?m)^main: com\.trickshotmlg\.devkit\.examples\.integration\.IntegrationExamplePlugin$' -and
+                    $paperDescriptorText -match '(?m)^bootstrapper: com\.trickshotmlg\.devkit\.examples\.integration\.IntegrationExampleBootstrap$'
+                Add-Check $Checks "$Name contains the native Paper descriptor only" $(if ($nativeValid) { "PASS" } else { "FAIL" }) "paperPluginYmlCount=$paperDescriptors; pluginYmlCount=$pluginDescriptors; main/bootstrapper validated=$nativeValid" $Path
+            } else {
+                Add-Check $Checks "$Name contains one plugin.yml" $(if ($pluginDescriptors -eq 1 -and $paperDescriptors -eq 0) { "PASS" } else { "FAIL" }) "pluginYmlCount=$pluginDescriptors; paperPluginYmlCount=$paperDescriptors" $Path
+            }
             $serverClasses = @($paths | Where-Object { $_ -match '^(org/bukkit|org/spigotmc|io/papermc/paper)/' }).Count
             Add-Check $Checks "$Name excludes server API classes" $(if ($serverClasses -eq 0) { "PASS" } else { "FAIL" }) "serverApiClassCount=$serverClasses" $Path
             $hasRequiredClass = $paths -contains $RequiredClass
@@ -408,6 +427,10 @@ function Start-OneCycle([string] $Name, [int] $Cycle, [string] $ServerJar, [stri
         $log = Get-ServerLog $ServerDirectory
         Add-Check $cycleChecks "Server version" ($(if ($log -match '1\.21\.11') { "PASS" } else { "FAIL" })) "Startup log must identify Minecraft $ExpectedMinecraft." "logs/latest.log"
         Add-Check $cycleChecks "Example and probe plugins enabled" ($(if ($log -match 'MinecraftDevKit integration example enabled with services' -and $log -match 'Storage example ready; startup order=' -and $log -match '\[MDK-RUNTIME\] PASS dependent examples enabled') { "PASS" } else { "FAIL" })) "The two examples and test probe completed onEnable." "logs/latest.log"
+        if ($Name -eq "paper" -and $PaperPluginMode -eq "native") {
+            Add-Check $cycleChecks "Paper native descriptor bootstrapper invoked" ($(if ($log -match '\[MDK-PAPER-NATIVE\] bootstrap invoked') { "PASS" } else { "FAIL" })) "Paper logged the configured PluginBootstrap entry point before runtime enable." "logs/latest.log"
+            Add-Check $cycleChecks "Paper bootstrap lifecycle callback invoked" ($(if ($log -match '\[MDK-PAPER-NATIVE\] datapack discovery callback invoked') { "PASS" } else { "FAIL" })) "Paper invoked the bootstrap-safe datapack discovery registration." "logs/latest.log"
+        }
         Add-Check $cycleChecks "Runtime permission catalog registered" ($(if ($log -match 'Runtime permissions registered: PermissionRegistrationDiagnostics') { "PASS" } else { "FAIL" })) "Integration plugin registered or reused every catalog permission through Bukkit's permission manager." "logs/latest.log"
         Add-Check $cycleChecks "Runtime-only Bukkit permission added" ($(if ($log -match 'Runtime-only permission registration: PermissionRegistrationDiagnostics\[registered=1, reused=0') { "PASS" } else { "FAIL" })) "A permission absent from plugin.yml was added by the runtime adapter and is owned for plugin-disable cleanup." "logs/latest.log"
         if ($Name -eq "paper") {
@@ -570,7 +593,8 @@ function Run-Platform([string] $Name) {
             $environment.serverJarName = [IO.Path]::GetFileName($artifactInfo.jar)
             $environment.eulaMode = "eula=true configured in this disposable harness-owned server directory under explicit user authorization"
         }
-        if (-not $SkipBuild) { Build-PlatformArtifacts $Name }
+        $nativePaper = $Name -eq "paper" -and $PaperPluginMode -eq "native"
+        if (-not $SkipBuild) { Build-PlatformArtifacts $Name $nativePaper }
         $integrationJar = Join-Path $repoRoot "examples/bukkit-integration-example/build/libs/minecraftdevkit-bukkit-integration-example-0.1.0-SNAPSHOT.jar"
         $storageJar = Join-Path $repoRoot "examples/bukkit-storage-example/build/libs/bukkit-storage-example-0.1.0-SNAPSHOT.jar"
         $probeJar = Join-Path $repoRoot "integration-tests/runtime/probe/build/libs/minecraftdevkit-runtime-probe-0.1.0-SNAPSHOT.jar"
@@ -581,8 +605,9 @@ function Run-Platform([string] $Name) {
         $environment.storagePluginSha256 = Get-Sha256 $storageJar
         $environment.probePluginSha256 = Get-Sha256 $probeJar
         $environment.interactiveMode = [bool]$Interactive
+        $environment.paperPluginMode = if ($Name -eq "paper") { $PaperPluginMode } else { "not-applicable" }
         $paperExpected = $Name -eq "paper"
-        Test-PluginArtifact "Integration example" $integrationJar $Name "com/trickshotmlg/devkit/examples/integration/IntegrationExamplePlugin.class" $paperExpected $false $checks
+        Test-PluginArtifact "Integration example" $integrationJar $Name "com/trickshotmlg/devkit/examples/integration/IntegrationExamplePlugin.class" $paperExpected $false $checks $nativePaper
         Test-PluginArtifact "Storage example" $storageJar $Name "com/trickshotmlg/devkit/examples/storage/StorageExamplePlugin.class" $false $true $checks
         Test-PluginArtifact "Runtime probe" $probeJar $Name "com/trickshotmlg/devkit/runtimeprobe/RuntimeProbePlugin.class" $paperExpected $false $checks
         $failureStatus = "NOT VERIFIED"
@@ -696,7 +721,7 @@ $matrixRows = @(
     @{ label="Scheduler and async handoff"; pattern="sync task primary-thread ownership|async-to-sync scheduler continuation|async storage to server-thread handoff" },
     @{ label="Flyway discovery and SQLite persistence"; pattern="SQLite JDBC and restart-persistent Flyway migration|SQLite storage database created" },
     @{ label="Clean shutdown and port release"; pattern="Cycle [12] clean process shutdown|Cycle [12] localhost ports released" },
-    @{ label="Packaged artifact integrity"; pattern="duplicate archive paths|one plugin.yml|excludes server API classes|required application class" },
+    @{ label="Packaged artifact integrity"; pattern="duplicate archive paths|one plugin.yml|native Paper descriptor only|excludes server API classes|required application class" },
     @{ label="Platform GUI provider and Adventure packaging"; pattern="isolates the optional Paper GUI provider|expected Adventure runtime packaging" },
     @{ label="Real-player GUI interactions"; pattern="Client-originated GUI click/drag/navigation" },
     @{ label="Player command permissions"; pattern="Actual player command and permission behavior" }

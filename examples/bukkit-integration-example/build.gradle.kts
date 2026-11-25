@@ -1,3 +1,5 @@
+import com.trickshotmlg.devkit.gradle.paper.PluginDescriptorPlatform
+
 plugins {
     java
     id("com.trickshotmlg.devkit.bukkit-permissions") version "0.1.0-SNAPSHOT"
@@ -17,16 +19,21 @@ val mdkVersion = when (mode) {
 }
 val mdkGroup = if (mode == "mavenlocal") "com.trickshotmlg.devkit" else "com.github.TrickShotMLG02.MinecraftDevKit"
 val serverPlatform = providers.gradleProperty("mdkPlatform").orElse("paper").get().lowercase()
-if (serverPlatform !in setOf("paper", "spigot")) {
-    throw GradleException("Unsupported -PmdkPlatform='$serverPlatform'; use paper or spigot")
+if (serverPlatform !in setOf("paper", "spigot", "paper-native")) {
+    throw GradleException("Unsupported -PmdkPlatform='$serverPlatform'; use paper, paper-native, or spigot")
 }
-sourceSets.main { java.srcDir("src/$serverPlatform/java") }
+val paperTarget = serverPlatform != "spigot"
+sourceSets.main {
+    java.srcDir("src/${if (paperTarget) "paper" else "spigot"}/java")
+    if (serverPlatform == "paper-native") java.srcDir("src/paper-native/java")
+}
 
 dependencies {
-    if (serverPlatform == "paper") {
+    if (paperTarget) {
         compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
         implementation("$mdkGroup:devkit-paper-gui:$mdkVersion")
         implementation("$mdkGroup:devkit-paper-commands:$mdkVersion")
+        if (serverPlatform == "paper-native") implementation("$mdkGroup:devkit-paper-lifecycle:$mdkVersion")
     } else {
         compileOnly("org.spigotmc:spigot-api:1.21.11-R0.1-SNAPSHOT")
     }
@@ -44,6 +51,17 @@ dependencies {
 }
 
 minecraftDevKit {
+    if (serverPlatform == "paper-native") {
+        platform.set(PluginDescriptorPlatform.PAPER_NATIVE)
+        paperPlugin {
+            name.set("MinecraftDevKitIntegrationExample")
+            mainClass.set("com.trickshotmlg.devkit.examples.integration.IntegrationExamplePlugin")
+            apiVersion.set("1.21.11")
+            description.set("MinecraftDevKit native Paper integration and bootstrap example.")
+            authors.set(listOf("TrickShotMLG02"))
+            bootstrapper.set("com.trickshotmlg.devkit.examples.integration.IntegrationExampleBootstrap")
+        }
+    }
     bukkitPermissions {
         catalogClass.set("com.trickshotmlg.devkit.examples.integration.IntegrationPermissions")
         catalogField.set("CATALOG")
@@ -79,7 +97,7 @@ tasks.shadowJar {
     archiveClassifier.set("")
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
     mergeServiceFiles()
-    if (serverPlatform == "paper") {
+    if (paperTarget) {
         dependencies {
             exclude(dependency("net.kyori:adventure-api:.*"))
             exclude(dependency("net.kyori:adventure-key:.*"))

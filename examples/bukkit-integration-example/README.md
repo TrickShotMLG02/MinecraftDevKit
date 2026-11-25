@@ -18,13 +18,21 @@ The default dependency mode is Maven Local. From the repository root, publish th
 ../../gradlew.bat -PmdkRepository=jitpack -PmdkVersion=<published-version> build
 ```
 
-The default `mdkPlatform` is `paper`. To compile the same plugin sources against Spigot and package the required Adventure runtime:
+The default `mdkPlatform` is `paper` (a Bukkit-compatible plugin hosted by Paper with Cloud's native Paper command manager). To compile the same application sources against Spigot and package the required Adventure runtime:
 
 ```powershell
 ../../gradlew.bat -PmdkPlatform=spigot clean build
 ```
 
 The Shadow JAR is `build/libs/minecraftdevkit-bukkit-integration-example-0.1.0-SNAPSHOT.jar`. Both modes bundle MinecraftDevKit and required runtime libraries and relocate Cloud and SnakeYAML. Paper mode includes `devkit-paper-gui` and `devkit-paper-commands`, and leaves Paper/Adventure API classes to the server. Spigot mode compiles against Spigot API, includes neither Paper extension, and bundles Adventure API because Spigot does not provide it. Both modes produce the same filename, so build one mode at a time and copy the intended artifact. The permissions Gradle plugin generates plugin permission declarations from `IntegrationPermissions`; Cloud registers `/mdkintegration` at runtime, so the checked-in `plugin.yml` has no duplicate command root.
+
+To build the separate **native Paper plugin** variant:
+
+```powershell
+../../gradlew.bat -PmdkPlatform=paper-native clean build
+```
+
+This variant uses the same `IntegrationExamplePlugin` runtime entry point and shared application services, adds `IntegrationExampleBootstrap`, and generates `paper-plugin.yml` instead of `plugin.yml`. Its bootstrapper registers only Paper's datapack-discovery callback; normal services, Bukkit permissions, and Cloud native commands still initialize from `JavaPlugin#onEnable`. It is not a Spigot artifact. It does not declare Cloud commands in metadata; the Paper command manager owns their lifecycle registration.
 
 ## Framework roles
 

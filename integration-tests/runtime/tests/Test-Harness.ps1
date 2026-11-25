@@ -64,6 +64,22 @@ try {
     Assert (-not (Test-InteractiveResultPassed $inconsistentSession 'paper')) 'harness rejects inconsistent completion counts'
     Assert (-not (Test-InteractiveResultPassed $completeSession 'spigot')) 'harness rejects a terminal result from another platform'
 
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    Add-Type -AssemblyName System.IO.Compression
+    $nativeJar = Join-Path $temp 'native-example.jar'
+    $nativeArchive = [IO.Compression.ZipFile]::Open($nativeJar, [IO.Compression.ZipArchiveMode]::Create)
+    try {
+        $descriptor = $nativeArchive.CreateEntry('paper-plugin.yml')
+        $writer = [IO.StreamWriter]::new($descriptor.Open())
+        try { $writer.Write("name: MinecraftDevKitIntegrationExample`nmain: com.trickshotmlg.devkit.examples.integration.IntegrationExamplePlugin`nbootstrapper: com.trickshotmlg.devkit.examples.integration.IntegrationExampleBootstrap`n") } finally { $writer.Dispose() }
+        $mainClass = $nativeArchive.CreateEntry('com/trickshotmlg/devkit/examples/integration/IntegrationExamplePlugin.class')
+        $mainClass.Open().Dispose()
+    } finally { $nativeArchive.Dispose() }
+    $nativeChecks = [Collections.Generic.List[object]]::new()
+    Test-PluginArtifact 'Integration example' $nativeJar 'paper' 'com/trickshotmlg/devkit/examples/integration/IntegrationExamplePlugin.class' $false $false $nativeChecks $true
+    $descriptorCheck = @($nativeChecks | Where-Object name -eq 'Integration example contains the native Paper descriptor only')
+    Assert ($descriptorCheck.Count -eq 1 -and $descriptorCheck[0].status -eq 'PASS') 'native Paper artifact check requires paper-plugin.yml, main, bootstrapper, and excludes plugin.yml'
+
     $java = Join-Path $PSHOME 'powershell.exe'
     $exitProcess = Start-Process -FilePath $java -ArgumentList '-NoProfile -Command exit 17' -PassThru -WindowStyle Hidden
     $exitProcess.WaitForExit(10000) | Out-Null
