@@ -29,6 +29,7 @@ Shared modules contain ordinary Java APIs and must not depend on Bukkit, Paper, 
 | `devkit-config` | Platform-independent typed keys, codecs, schemas, validation, snapshots, updates, and listeners | Implemented; Java 17 |
 | `devkit-config-yaml` | Safe YAML loading, defaults, unknown-field preservation, atomic save/reload, watching, and migrations | Implemented; Java 17 |
 | `devkit-scheduler` | Platform-independent tick schedules, task handles, cancellation, nested scopes, and async result handoff contracts | Implemented; Java 17 |
+| `devkit-cooldowns` | Platform-independent monotonic cooldowns and per-key token-bucket rate limiting | Implemented; Java 17 |
 | `devkit-lifecycle` | Platform-independent typed service keys, dependency ordering, lifecycle state, rollback, resource ownership, diagnostics, and reload hooks | Implemented; Java 17 |
 | `devkit-storage` | Explicit-SQL JDBC storage with HikariCP, SQLite defaults, prepared parameters, typed row mapping, transactions, and bounded async work | Implemented; Java 17 |
 | `devkit-storage-migrations` | Optional Flyway versioned SQL migration integration for SQLite/MySQL/MariaDB | Implemented; Java 17 |
@@ -42,11 +43,14 @@ Shared modules contain ordinary Java APIs and must not depend on Bukkit, Paper, 
 | `devkit-paper-gui` | Native Adventure GUI metadata and component inventory titles | Optional Paper 1.21.11 extension; Java 21 |
 | `devkit-paper-lifecycle` | Bootstrap-safe Paper datapack-discovery lifecycle hook; shared runtime services remain on BukkitLifecycle | Optional Paper API 1.21.11 extension; Java 21 |
 | `devkit-bukkit-scheduler` | Plugin-owned native Bukkit task scheduling, sync/async dispatch, failure reporting, disable cleanup | Compiled against Spigot API 1.21.11; Java 21; not Folia compatible |
+| `devkit-bukkit-events` | Typed Bukkit event subscriptions with individual handles and plugin/lifecycle cleanup | Compiled against Spigot API 1.21.11; Java 21 |
 | `devkit-bukkit-lifecycle` | Synchronous JavaPlugin lifecycle bridge with thread checks, plugin logging, disable cleanup | Compiled against Spigot API 1.21.11; Java 21; not Folia compatible |
 | `devkit-bukkit-metadata` | Bukkit-compatible build-time metadata exporters, including permission YAML | Permission catalog exporter implemented; Java 17; does not require a server or Bukkit API |
 | `devkit-gradle-plugin` | Gradle plugins for Bukkit permission metadata and localization scanning | Implemented; Java 17; Maven Local and JitPack module publication configured; public JitPack build not verified |
 
 See the [`devkit-permissions` guide](devkit-permissions/README.md), [`devkit-bukkit-permissions` guide](devkit-bukkit-permissions/README.md), [`devkit-commands` guide](devkit-commands/README.md), [`devkit-text` guide](devkit-text/README.md), [`devkit-localization` guide](devkit-localization/README.md), [`devkit-localization-yaml` guide](devkit-localization-yaml/README.md), [`devkit-config` guide](devkit-config/README.md), [`devkit-config-yaml` guide](devkit-config-yaml/README.md), [`devkit-scheduler` guide](devkit-scheduler/README.md), [`devkit-lifecycle` guide](devkit-lifecycle/README.md), [`devkit-bukkit-commands` guide](devkit-bukkit-commands/README.md), [`devkit-paper-commands` guide](devkit-paper-commands/README.md), [`devkit-paper-lifecycle` guide](devkit-paper-lifecycle/README.md), [`devkit-bukkit-gui` guide](devkit-bukkit-gui/README.md), [`devkit-paper-gui` guide](devkit-paper-gui/README.md), [`devkit-bukkit-scheduler` guide](devkit-bukkit-scheduler/README.md), [`devkit-bukkit-lifecycle` guide](devkit-bukkit-lifecycle/README.md), and [`devkit-gradle-plugin` guide](devkit-gradle-plugin/README.md). Configuration comments and formatting are normalized only when explicit full-document save is invoked; unknown fields are retained. Shared configuration, command, text, localization, scheduler, and lifecycle modules contain no Bukkit API dependency.
+
+Cooldown and event integrations are documented in the [`devkit-cooldowns` guide](devkit-cooldowns/README.md) and [`devkit-bukkit-events` guide](devkit-bukkit-events/README.md). The shared cooldown module uses monotonic process-local time; event callbacks run in Bukkit's dispatch context.
 
 The JDBC storage modules are documented in the [`devkit-storage` guide](devkit-storage/README.md) and optional [`devkit-storage-migrations` guide](devkit-storage-migrations/README.md). SQLite JDBC is included by the storage module; applications add the MySQL or MariaDB JDBC driver they intend to use. Storage callbacks are asynchronous only when submitted through `Storage.async()` and must use an explicit scheduler handoff before touching Bukkit state.
 
@@ -152,7 +156,7 @@ JitPack builds multi-module artifacts using `com.github.USER.REPO:MODULE:TAG`. T
 
 ## Building
 
-The project uses JDK 21 to run Gradle and build Bukkit/Paper adapters, and JDK 17 to compile shared libraries, metadata exporter, and Gradle plugin. Ensure both toolchains are available to Gradle. Shared libraries including `devkit-scheduler`, `devkit-lifecycle`, `devkit-bukkit-metadata`, and `devkit-gradle-plugin` compile to Java 17 bytecode; Bukkit runtime adapters, including `devkit-bukkit-permissions`, `devkit-paper-commands`, `devkit-bukkit-scheduler`, `devkit-bukkit-lifecycle`, and optional `devkit-paper-gui`, target Java 21.
+The project uses JDK 21 to run Gradle and build Bukkit/Paper adapters, and JDK 17 to compile shared libraries, metadata exporter, and Gradle plugin. Ensure both toolchains are available to Gradle. Shared libraries including `devkit-scheduler`, `devkit-cooldowns`, `devkit-lifecycle`, `devkit-bukkit-metadata`, and `devkit-gradle-plugin` compile to Java 17 bytecode; Bukkit runtime adapters, including `devkit-bukkit-permissions`, `devkit-paper-commands`, `devkit-bukkit-events`, `devkit-bukkit-scheduler`, `devkit-bukkit-lifecycle`, and optional `devkit-paper-gui`, target Java 21.
 
 From the repository root, run the appropriate wrapper command:
 
