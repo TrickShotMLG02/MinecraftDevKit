@@ -1,0 +1,6 @@
+name: MdkRuntimeProbe
+version: 0.1.0-SNAPSHOT
+main: com.trickshotmlg.devkit.runtimeprobe.RuntimeProbePlugin
+api-version: '1.21'
+depend: [MinecraftDevKitIntegrationExample, MinecraftDevKitStorageExample]
+description: Test-only runtime acceptance probe for MinecraftDevKit
