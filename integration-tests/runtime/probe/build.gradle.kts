@@ -31,7 +31,14 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
-tasks.test { useJUnitPlatform() }
+tasks.test {
+    useJUnitPlatform()
+    inputs.property("mdkPlatform", platform)
+    dependsOn(tasks.shadowJar)
+    doFirst {
+        systemProperty("mdk.plugin.jar", tasks.shadowJar.get().archiveFile.get().asFile.absolutePath)
+    }
+}
 tasks.jar { enabled = false }
 tasks.shadowJar {
     archiveClassifier.set("")

@@ -46,7 +46,14 @@ minecraftDevKit {
     }
 }
 
-tasks.test { useJUnitPlatform() }
+tasks.test {
+    useJUnitPlatform()
+    inputs.property("mdkPlatform", serverPlatform)
+    dependsOn(tasks.shadowJar)
+    doFirst {
+        systemProperty("mdk.plugin.jar", tasks.shadowJar.get().archiveFile.get().asFile.absolutePath)
+    }
+}
 tasks.jar { enabled = false }
 tasks.shadowJar {
     archiveClassifier.set("")
