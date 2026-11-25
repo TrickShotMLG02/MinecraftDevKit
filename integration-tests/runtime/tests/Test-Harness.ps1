@@ -20,14 +20,27 @@ try {
     $report = Get-Content (Join-Path $reportDir 'results.json') -Raw | ConvertFrom-Json
     Assert ($report.totals.notVerified -eq 1 -and $report.checks[0].status -eq 'NOT VERIFIED') 'structured prerequisite report records NOT VERIFIED'
 
+    $payload = Join-Path $temp 'payload.bin'; [IO.File]::WriteAllBytes($payload, [byte[]](1..255) + [byte[]](1..255) + [byte[]](1..255) + [byte[]](1..255) + [byte[]](1..255))
+    # Keep provisioning tests hermetic: use tiny local fixture bytes and point the existing
+    # cache lookup functions at a temporary directory. These tests must never invoke BuildTools
+    # or the Paper downloads API.
+    $fixtureProvision = Join-Path $temp 'provision fixtures'
+    $fixtureSpigotDir = Join-Path $fixtureProvision 'spigot'
+    $fixturePaperDir = Join-Path $fixtureProvision 'paper'
+    New-Item -ItemType Directory -Path $fixtureSpigotDir, $fixturePaperDir -Force | Out-Null
+    Copy-Item -LiteralPath $payload -Destination (Join-Path $fixtureSpigotDir 'spigot-1.21.11.jar')
+    Copy-Item -LiteralPath $payload -Destination (Join-Path $fixturePaperDir 'paper.jar')
+    $fixtureHash = (Get-FileHash $payload -Algorithm SHA256).Hash.ToLowerInvariant()
+    $provisionRoot = $fixtureProvision
+    $knownSpigotSha256 = $fixtureHash
+    $knownPaperSha256 = $fixtureHash
     $spigot = Get-OrProvisionSpigot
     $paper = Get-OrProvisionPaper
-    Assert ((Get-Sha256 $spigot.jar) -eq $knownSpigotSha256) 'valid cached official Spigot artifact reused'
-    Assert ((Get-Sha256 $paper.jar) -eq $knownPaperSha256) 'valid cached official Paper artifact reused'
-    Assert (Test-ArtifactHash $paper.jar $knownPaperSha256) 'official cache checksum predicate accepts matching bytes'
+    Assert ((Get-Sha256 $spigot.jar) -eq $knownSpigotSha256 -and $spigot.source -match 'cached') 'valid cached Spigot fixture reused without invoking BuildTools'
+    Assert ((Get-Sha256 $paper.jar) -eq $knownPaperSha256 -and $paper.source -match 'cached') 'valid cached Paper fixture reused without network access'
+    Assert (Test-ArtifactHash $paper.jar $knownPaperSha256) 'cache checksum predicate accepts matching fixture bytes'
     Assert (-not (Test-ArtifactHash $paper.jar ('0' * 64))) 'corrupted or wrong-version cache hash is rejected'
 
-    $payload = Join-Path $temp 'payload.bin'; [IO.File]::WriteAllBytes($payload, [byte[]](1..255) + [byte[]](1..255) + [byte[]](1..255) + [byte[]](1..255) + [byte[]](1..255))
     function Invoke-WebRequest { param($Uri, $OutFile, [switch] $UseBasicParsing, $TimeoutSec); Copy-Item -LiteralPath $script:testPayload -Destination $OutFile -Force }
     $script:testPayload = $payload
     $expected = (Get-FileHash $payload -Algorithm SHA256).Hash.ToLowerInvariant()
