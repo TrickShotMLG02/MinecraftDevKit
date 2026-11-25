@@ -244,6 +244,11 @@ function Start-OneCycle([string] $Name, [int] $Cycle, [string] $ServerJar, [stri
     $stdoutPath = Join-Path $ServerDirectory "stdout.log"
     $stderrPath = Join-Path $ServerDirectory "stderr.log"
     $cycleChecks = [System.Collections.Generic.List[object]]::new()
+    # Readiness markers must belong to this process, not the previous restart cycle.
+    foreach ($stale in @((Join-Path $ServerDirectory "logs/latest.log"),
+            (Join-Path $PluginDirectory "MdkRuntimeProbe/runtime-results.json"))) {
+        if (Test-Path -LiteralPath $stale -PathType Leaf) { Remove-Item -LiteralPath $stale -Force }
+    }
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
     $startInfo.FileName = $JavaExecutable
     $startInfo.WorkingDirectory = $ServerDirectory
@@ -254,17 +259,9 @@ function Start-OneCycle([string] $Name, [int] $Cycle, [string] $ServerJar, [stri
     $startInfo.RedirectStandardError = $true
     $process = [System.Diagnostics.Process]::new()
     $process.StartInfo = $startInfo
-    $outWriter = [System.IO.StreamWriter]::new($stdoutPath, $false, [System.Text.Encoding]::UTF8)
-    $errWriter = [System.IO.StreamWriter]::new($stderrPath, $false, [System.Text.Encoding]::UTF8)
-    $outLock = [object]::new()
-    $errLock = [object]::new()
-    $outHandler = [System.Diagnostics.DataReceivedEventHandler]{ param($sender, $event) if ($null -ne $event.Data) { [System.Threading.Monitor]::Enter($outLock); try { $outWriter.WriteLine($event.Data); $outWriter.Flush() } finally { [System.Threading.Monitor]::Exit($outLock) } } }.GetNewClosure()
-    $errHandler = [System.Diagnostics.DataReceivedEventHandler]{ param($sender, $event) if ($null -ne $event.Data) { [System.Threading.Monitor]::Enter($errLock); try { $errWriter.WriteLine($event.Data); $errWriter.Flush() } finally { [System.Threading.Monitor]::Exit($errLock) } } }.GetNewClosure()
-    $process.add_OutputDataReceived($outHandler)
-    $process.add_ErrorDataReceived($errHandler)
     if (-not $process.Start()) { throw "Could not start Java server process." }
-    $process.BeginOutputReadLine()
-    $process.BeginErrorReadLine()
+    $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+    $stderrTask = $process.StandardError.ReadToEndAsync()
     try {
         Wait-ForServer $process $ServerDirectory $StartupTimeoutSeconds
         $log = Get-ServerLog $ServerDirectory
@@ -323,6 +320,8 @@ function Start-OneCycle([string] $Name, [int] $Cycle, [string] $ServerJar, [stri
     finally {
         $shutdown = Stop-Server $process $RconPort $RconPassword $ShutdownTimeoutSeconds
         if ($process.HasExited) { $process.WaitForExit() }
+        [IO.File]::WriteAllText($stdoutPath, $stdoutTask.Result)
+        [IO.File]::WriteAllText($stderrPath, $stderrTask.Result)
         $probePath = Join-Path $PluginDirectory "MdkRuntimeProbe/runtime-results.json"
         $reportCopy = Join-Path $ResultsDirectory "cycle-$Cycle-probe-results.json"
         $shutdownChecks = @("lifecycle shutdown and owned resource cleanup", "TaskScope shutdown", "Bukkit scheduler shutdown",
@@ -350,8 +349,6 @@ function Start-OneCycle([string] $Name, [int] $Cycle, [string] $ServerJar, [stri
                 Copy-Item -LiteralPath $capture.source -Destination (Join-Path $ResultsDirectory "cycle-$Cycle-$($capture.suffix)") -Force
             }
         }
-        $outWriter.Dispose()
-        $errWriter.Dispose()
         $process.Dispose()
         $script:lastShutdown = $shutdown
     }
