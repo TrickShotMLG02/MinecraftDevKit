@@ -13,10 +13,12 @@ import java.util.Locale;
 import java.util.Objects;
 
 /** Bridges Bukkit senders to the platform-neutral command contract. */
-final class BukkitCommandSenderAdapter {
+public final class BukkitCommandSenderAdapter {
     private final Locale defaultLocale;
-    BukkitCommandSenderAdapter(Locale defaultLocale) { this.defaultLocale = Objects.requireNonNull(defaultLocale, "defaultLocale"); }
-    CommandSender adapt(org.bukkit.command.CommandSender sender) {
+    /** Creates an adapter for console senders and players with unsupported locale tags. */
+    public BukkitCommandSenderAdapter(Locale defaultLocale) { this.defaultLocale = Objects.requireNonNull(defaultLocale, "defaultLocale"); }
+    /** Converts a Bukkit sender into the shared command contract while preserving its native bridge. */
+    public BukkitCommandSender adapt(org.bukkit.command.CommandSender sender) {
         Objects.requireNonNull(sender, "sender");
         return new BukkitCommandSender() {
             @Override public org.bukkit.command.CommandSender bukkitSender() { return sender; }
