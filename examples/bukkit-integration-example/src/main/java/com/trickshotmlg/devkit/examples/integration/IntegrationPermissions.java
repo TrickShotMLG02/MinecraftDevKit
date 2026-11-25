@@ -14,5 +14,11 @@ public final class IntegrationPermissions {
     public static final com.trickshotmlg.devkit.permissions.Permission ADMIN = NS.permission("integration.admin",
             options -> options.defaultAccess(DefaultAccess.OP));
     public static final PermissionCatalog CATALOG = NS.build();
+
+    private static final PermissionNamespace RUNTIME_NS = PermissionNamespace.create("mdk_runtime");
+    public static final com.trickshotmlg.devkit.permissions.Permission RUNTIME_AUDIT =
+            RUNTIME_NS.permission("audit", options -> options.description("Runtime-only acceptance permission."));
+    /** Demonstrates registration of a permission not generated into plugin.yml. */
+    public static final PermissionCatalog RUNTIME_CATALOG = RUNTIME_NS.build();
     private IntegrationPermissions() { }
 }

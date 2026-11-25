@@ -5,6 +5,8 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+import com.trickshotmlg.devkit.bukkit.permissions.BukkitPermissionRegistration;
+import com.trickshotmlg.devkit.bukkit.permissions.BukkitPermissions;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -12,6 +14,7 @@ import java.util.Map;
 /** Minimal server-side harness for inspecting Bukkit's effective permission checks. */
 public final class FriendNetPlugin extends JavaPlugin implements CommandExecutor {
     private static final Map<String, String> DEMO_CHECKS = new LinkedHashMap<>();
+    private BukkitPermissionRegistration permissionRegistration;
 
     static {
         DEMO_CHECKS.put("default group node", FriendPermissions.DEFAULT.node());
@@ -30,12 +33,18 @@ public final class FriendNetPlugin extends JavaPlugin implements CommandExecutor
 
     @Override
     public void onEnable() {
+        permissionRegistration = BukkitPermissions.register(this, FriendPermissions.CATALOG);
         if (getCommand("mdkperms") == null) {
             throw new IllegalStateException("The mdkperms command is missing from plugin.yml");
         }
         getCommand("mdkperms").setExecutor(this);
         getLogger().info("Loaded " + FriendPermissions.CATALOG.permissions().size()
                 + " permission nodes and " + FriendPermissions.CATALOG.groups().size() + " groups.");
+    }
+
+    @Override public void onDisable() {
+        if (permissionRegistration != null) permissionRegistration.close();
+        permissionRegistration = null;
     }
 
     @Override

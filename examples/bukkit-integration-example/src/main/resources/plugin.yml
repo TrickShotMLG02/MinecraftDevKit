@@ -2,4 +2,4 @@ name: MinecraftDevKitIntegrationExample
 version: 0.1.0-SNAPSHOT
 main: com.trickshotmlg.devkit.examples.integration.IntegrationExamplePlugin
 api-version: '1.21'
-description: Demonstrates MinecraftDevKit frameworks working together in a Paper plugin.
+description: Demonstrates MinecraftDevKit frameworks working together on Spigot and Paper.

@@ -4,6 +4,8 @@ import com.trickshotmlg.devkit.bukkit.commands.BukkitCommandSender;
 import com.trickshotmlg.devkit.commands.CommandContext;
 import com.trickshotmlg.devkit.commands.CommandDefinition;
 import com.trickshotmlg.devkit.commands.CommandRegistry;
+import com.trickshotmlg.devkit.commands.Arguments;
+import com.trickshotmlg.devkit.commands.Argument;
 import com.trickshotmlg.devkit.lifecycle.LifecycleManager;
 import com.trickshotmlg.devkit.localization.LocalizationService;
 import com.trickshotmlg.devkit.text.TextRef;
@@ -19,6 +21,7 @@ import java.util.logging.Level;
 
 /** Cloud command tree for the complete integration example. */
 final class IntegrationCommands {
+    private static final Argument<Integer> NATIVE_VALUE = Arguments.integer("value", 0, 100);
     private final JavaPlugin plugin;
     private final LifecycleManager lifecycle;
     private final LocalizationService text;
@@ -48,6 +51,9 @@ final class IntegrationCommands {
                         .description("Demonstrate delayed and asynchronous scheduler tasks")
                         .subcommand("delayed", delayed -> delayed.execute(this::delayed))
                         .subcommand("async", async -> async.execute(this::async)))
+                .subcommand("typed", typed -> typed.required(NATIVE_VALUE)
+                        .execute(context -> context.sender().sendMessage(Component.text(
+                                "MDK_TYPED_" + context.get(NATIVE_VALUE)))))
         ).build();
     }
 

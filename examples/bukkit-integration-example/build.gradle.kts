@@ -20,11 +20,13 @@ val serverPlatform = providers.gradleProperty("mdkPlatform").orElse("paper").get
 if (serverPlatform !in setOf("paper", "spigot")) {
     throw GradleException("Unsupported -PmdkPlatform='$serverPlatform'; use paper or spigot")
 }
+sourceSets.main { java.srcDir("src/$serverPlatform/java") }
 
 dependencies {
     if (serverPlatform == "paper") {
         compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
         implementation("$mdkGroup:devkit-paper-gui:$mdkVersion")
+        implementation("$mdkGroup:devkit-paper-commands:$mdkVersion")
     } else {
         compileOnly("org.spigotmc:spigot-api:1.21.11-R0.1-SNAPSHOT")
     }
@@ -32,6 +34,7 @@ dependencies {
     implementation("$mdkGroup:devkit-bukkit-scheduler:$mdkVersion")
     implementation("$mdkGroup:devkit-bukkit-gui:$mdkVersion")
     implementation("$mdkGroup:devkit-bukkit-commands:$mdkVersion")
+    implementation("$mdkGroup:devkit-bukkit-permissions:$mdkVersion")
     implementation("net.kyori:adventure-text-serializer-legacy:4.26.1")
     implementation("$mdkGroup:devkit-localization-yaml:$mdkVersion")
     implementation("$mdkGroup:devkit-config-yaml:$mdkVersion")

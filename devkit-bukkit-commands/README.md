@@ -1,6 +1,6 @@
 # devkit-bukkit-commands
 
-This Java 21 adapter connects platform-independent `devkit-commands` definitions to Incendo Cloud v2's Bukkit integration. It delegates parsing, dispatch, suggestions, and native permission checks to Cloud and Bukkit. Cloud's Paper extension retains Bukkit/Spigot support through `LegacyPaperCommandManager`, with Paper features enabled only when Cloud detects the capability. It does not implement a second command parser or player permission store.
+This Java 21 adapter connects platform-independent `devkit-commands` definitions to Incendo Cloud v2's legacy Bukkit integration. It delegates parsing, dispatch, suggestions, and native permission checks to Cloud and Bukkit. `LegacyPaperCommandManager` remains supported for Spigot and Paper consumers that want the legacy Bukkit registration path. Paper consumers that explicitly select native lifecycle/Brigadier registration can use the optional [`devkit-paper-commands`](../devkit-paper-commands/README.md) adapter with the same command definitions.
 
 ## Dependencies
 
@@ -16,7 +16,7 @@ dependencies {
 }
 ```
 
-The adapter publishes `devkit-commands` and `org.incendo:cloud-paper:2.0.0` as API dependencies. It compiles against Spigot API 1.21.11 and Cloud's legacy manager, but this is not live Spigot runtime verification. Keep the server API `compileOnly`; do not shade Bukkit/Spigot/Paper classes into the plugin. Spigot does not supply Adventure API classes, so package compatible Adventure runtime libraries for Spigot; Paper supplies them. Cloud is MIT-licensed. If you shade Cloud into your plugin, preserve its license notice and relocate it when multiple plugins may bundle their own Cloud version.
+The adapter publishes `devkit-commands` and `org.incendo:cloud-paper:2.0.0` as API dependencies. It compiles against Spigot API 1.21.11. Keep the server API `compileOnly`; do not shade Bukkit/Spigot/Paper classes into the plugin. Spigot does not supply Adventure API classes, so package compatible Adventure runtime libraries for Spigot; Paper supplies them. Cloud is MIT-licensed. If you shade Cloud into your plugin, preserve its license notice and relocate it when multiple plugins may bundle their own Cloud version.
 
 ## Register commands
 
@@ -48,10 +48,10 @@ The adapter maps `Player` to `PLAYER`, console senders to `CONSOLE`, and other B
 
 This adapter uses `LegacyPaperCommandManager` and registers commands from `onEnable()`. Cloud owns the native registration for the plugin lifecycle. Do not duplicate these command roots in `plugin.yml`; continue to use the permission metadata generator for permission declarations only. The adapter enables Cloud's native Brigadier integration when the server advertises that capability. On older Bukkit/Spigot servers without Brigadier, Cloud's legacy command and tab-completion behavior is used.
 
-Modern Paper's bootstrap-time `PaperCommandManager` registration is not wrapped yet. The legacy manager remains the supported JavaPlugin workflow and can also run on Paper. The default `ExecutionCoordinator.simpleCoordinator()` keeps handlers on the calling thread. Do not move Bukkit API calls into worker-thread command handlers or custom suggestion providers; asynchronous application work must return to the server thread before touching Bukkit state. Cloud's Brigadier suggestions are preferred when available; the adapter does not enable asynchronous legacy completions.
+The default `ExecutionCoordinator.simpleCoordinator()` keeps handlers on the calling thread. Do not move Bukkit API calls into worker-thread command handlers or custom suggestion providers; asynchronous application work must return to the server thread before touching Bukkit state. Cloud's Brigadier suggestions are preferred when available; the adapter does not enable asynchronous legacy completions.
 
 The adapter installs the shared localized error handler and generated help renderer once per manager. Usage/help visibility uses the same inherited permission and sender requirements as command execution. Unhandled execution errors are logged through the shared JDK logger and players receive a safe translated error message.
 
 ## Compatibility
 
-The module is compiled against Paper API 1.21.11 and Cloud Paper 2.0.0/Core 2.1.0. It contains no server API classes in its artifact. `paper-plugin.yml`, Paper bootstrap registration, Velocity, Fabric, Forge, and NeoForge command integration are outside this module's current scope.
+The module is compiled against Spigot API 1.21.11 and Cloud Paper 2.0.0. It contains no server API classes in its artifact. Paper bootstrap registration, Velocity, Fabric, Forge, and NeoForge command integration are outside this module's current scope.

@@ -1,6 +1,6 @@
 # MinecraftDevKit Bukkit Integration Example
 
-This standalone plugin composes MinecraftDevKit's lifecycle, typed configuration, localization, permissions, Cloud commands, inventory GUI, and scheduler APIs. The same application sources target Spigot or Paper; Paper adds an optional GUI extension for native Adventure metadata.
+This standalone plugin composes MinecraftDevKit's lifecycle, typed configuration, localization, permissions, Cloud commands, inventory GUI, and scheduler APIs. Application command definitions and permission catalogs are shared. Its Spigot artifact selects the legacy Bukkit Cloud backend; its Paper artifact selects Cloud's native Paper/Brigadier manager and optional native GUI extension.
 
 ## Platform and build
 
@@ -24,7 +24,7 @@ The default `mdkPlatform` is `paper`. To compile the same plugin sources against
 ../../gradlew.bat -PmdkPlatform=spigot clean build
 ```
 
-The Shadow JAR is `build/libs/minecraftdevkit-bukkit-integration-example-0.1.0-SNAPSHOT.jar`. Both modes bundle MinecraftDevKit and required runtime libraries and relocate Cloud and SnakeYAML. Paper mode includes `devkit-paper-gui` and leaves Paper/Adventure API classes to the server. Spigot mode compiles against Spigot API and bundles Adventure API because Spigot does not provide it. Both modes produce the same filename, so build one mode at a time and copy the intended artifact. The permissions Gradle plugin generates plugin permission declarations from `IntegrationPermissions`; Cloud registers `/mdkintegration` at runtime, so the checked-in `plugin.yml` has no duplicate command root.
+The Shadow JAR is `build/libs/minecraftdevkit-bukkit-integration-example-0.1.0-SNAPSHOT.jar`. Both modes bundle MinecraftDevKit and required runtime libraries and relocate Cloud and SnakeYAML. Paper mode includes `devkit-paper-gui` and `devkit-paper-commands`, and leaves Paper/Adventure API classes to the server. Spigot mode compiles against Spigot API, includes neither Paper extension, and bundles Adventure API because Spigot does not provide it. Both modes produce the same filename, so build one mode at a time and copy the intended artifact. The permissions Gradle plugin generates plugin permission declarations from `IntegrationPermissions`; Cloud registers `/mdkintegration` at runtime, so the checked-in `plugin.yml` has no duplicate command root.
 
 ## Framework roles
 
@@ -53,7 +53,7 @@ flowchart TD
   Scheduler --> Features
 ```
 
-Services start in stable registration order when dependencies permit. Shutdown reverses the dependency order: feature listeners and their task scope close first, then menus, scheduler, localization, and configuration. `BukkitLifecycle` delegates synchronous startup and shutdown to the platform's traditional Bukkit primary thread. The Cloud adapter uses its legacy Bukkit command manager; Paper enhancements activate only when Cloud detects them. This build establishes Spigot/Paper API compile compatibility, not live runtime verification.
+Services start in stable registration order when dependencies permit. Shutdown reverses the dependency order: feature listeners and their task scope close first, then menus, scheduler, localization, and configuration. `BukkitLifecycle` delegates synchronous startup and shutdown to the platform's traditional Bukkit primary thread. The build variant intentionally selects exactly one Cloud backend: legacy Bukkit registration on Spigot and Paper's native lifecycle/Brigadier manager on Paper. Paper's lifecycle owns native command re-registration and removes it with the plugin; the common adapter remains usable on Spigot.
 
 ## Commands and permissions
 
@@ -67,7 +67,9 @@ Services start in stable registration order when dependencies permit. Shutdown r
 | `/mdkintegration demo delayed` | Schedule a 40-tick message | `mdk.integration.use` |
 | `/mdkintegration demo async` | Calculate off-thread, then message on the server thread | `mdk.integration.use` |
 
-`mdk.integration.use` defaults to allowed. Settings and admin nodes default to operators through the typed catalog and generated metadata. GUI buttons also re-check the Bukkit permission during click dispatch; hiding a button is not the authorization boundary.
+`mdk.integration.use` defaults to allowed. Settings and admin nodes default to operators through the typed catalog and generated metadata. At startup the example registers and validates the same catalog through `BukkitPermissions`; matching plugin.yml registrations are reused. It also registers a separate permission absent from generated metadata, demonstrating runtime ownership and cleanup. Conflicting global registrations stop startup explicitly. GUI buttons also re-check the Bukkit permission during click dispatch; hiding a button is not the authorization boundary.
+
+The example build selects one command adapter without changing `IntegrationCommands`: `-PmdkPlatform=spigot` compiles the small Spigot registration bridge and uses `BukkitCommandAdapter`; `-PmdkPlatform=paper` compiles the Paper bridge and uses `PaperCommandAdapter`. Both register the same `CommandDefinition`. The Paper adapter builds `PaperCommandManager` from `onEnable`, and Paper owns command lifecycle re-registration. Do not declare Cloud roots in plugin.yml or register a root with both adapters.
 
 ## Configuration and persistence
 

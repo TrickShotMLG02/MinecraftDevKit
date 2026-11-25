@@ -22,8 +22,9 @@ val mdkGroup = if (mdkRepository == "mavenlocal") "com.trickshotmlg.devkit"
     else "com.github.TrickShotMLG02.MinecraftDevKit"
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:1.21.8-R0.1-SNAPSHOT")
+    compileOnly("org.spigotmc:spigot-api:1.21.11-R0.1-SNAPSHOT")
     implementation("$mdkGroup:devkit-permissions:$mdkVersion")
+    implementation("$mdkGroup:devkit-bukkit-permissions:$mdkVersion")
 }
 
 minecraftDevKit {
@@ -51,7 +52,7 @@ tasks.shadowJar {
 }
 
 // Local Paper test server tasks are opt-in and do not affect the normal library/plugin build.
-val paperMinecraftVersion = providers.gradleProperty("paperMinecraftVersion").orElse("1.21.8")
+val paperMinecraftVersion = providers.gradleProperty("paperMinecraftVersion").orElse("1.21.11")
 val paperServerDirectory = layout.buildDirectory.dir(paperMinecraftVersion.map { "devserver/paper-$it" })
 val paperServerJar = paperServerDirectory.map { it.file("paper.jar") }
 val paperPluginJar = tasks.shadowJar.flatMap { it.archiveFile }

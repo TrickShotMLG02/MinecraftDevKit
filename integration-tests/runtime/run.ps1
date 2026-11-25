@@ -238,6 +238,12 @@ function Test-PluginArtifact([string] $Name, [string] $Path, [string] $Platform,
             $providerValid = if ($PaperExtensionExpected) { $providerEntries.Count -eq 1 -and $providerText -eq "com.trickshotmlg.devkit.paper.gui.PaperGuiPlatformExtension" -and $paperClassPresent } else { $providerEntries.Count -eq 0 -and -not $paperClassPresent }
             Add-Check $Checks "$Name isolates the optional Paper GUI provider" $(if ($providerValid) { "PASS" } else { "FAIL" }) "expected=$PaperExtensionExpected; serviceFiles=$($providerEntries.Count); provider=$providerText; extensionClass=$paperClassPresent" $Path
 
+            if ($Name -eq "Integration example") {
+                $nativeCommandsClass = $paths -contains "com/trickshotmlg/devkit/paper/commands/PaperCommandAdapter.class"
+                $nativeCommandsValid = if ($Platform -eq "paper") { $nativeCommandsClass } else { -not $nativeCommandsClass }
+                Add-Check $Checks "$Name selects only the requested command backend" $(if ($nativeCommandsValid) { "PASS" } else { "FAIL" }) "platform=$Platform; nativePaperAdapterBundled=$nativeCommandsClass" $Path
+            }
+
             $adventureApi = $paths -contains "net/kyori/adventure/text/Component.class"
             $adventureValid = if ($Platform -eq "spigot") { $adventureApi } else { -not $adventureApi }
             Add-Check $Checks "$Name uses the expected Adventure runtime packaging" $(if ($adventureValid) { "PASS" } else { "FAIL" }) "platform=$Platform; bundledAdventureApi=$adventureApi" $Path
@@ -402,6 +408,13 @@ function Start-OneCycle([string] $Name, [int] $Cycle, [string] $ServerJar, [stri
         $log = Get-ServerLog $ServerDirectory
         Add-Check $cycleChecks "Server version" ($(if ($log -match '1\.21\.11') { "PASS" } else { "FAIL" })) "Startup log must identify Minecraft $ExpectedMinecraft." "logs/latest.log"
         Add-Check $cycleChecks "Example and probe plugins enabled" ($(if ($log -match 'MinecraftDevKit integration example enabled with services' -and $log -match 'Storage example ready; startup order=' -and $log -match '\[MDK-RUNTIME\] PASS dependent examples enabled') { "PASS" } else { "FAIL" })) "The two examples and test probe completed onEnable." "logs/latest.log"
+        Add-Check $cycleChecks "Runtime permission catalog registered" ($(if ($log -match 'Runtime permissions registered: PermissionRegistrationDiagnostics') { "PASS" } else { "FAIL" })) "Integration plugin registered or reused every catalog permission through Bukkit's permission manager." "logs/latest.log"
+        Add-Check $cycleChecks "Runtime-only Bukkit permission added" ($(if ($log -match 'Runtime-only permission registration: PermissionRegistrationDiagnostics\[registered=1, reused=0') { "PASS" } else { "FAIL" })) "A permission absent from plugin.yml was added by the runtime adapter and is owned for plugin-disable cleanup." "logs/latest.log"
+        if ($Name -eq "paper") {
+            Add-Check $cycleChecks "Native Paper Cloud command backend initialized" ($(if ($log -match 'Initialized Cloud native Paper command registration') { "PASS" } else { "FAIL" })) "The integration example selected Cloud PaperCommandManager through Paper lifecycle registration." "logs/latest.log"
+        } else {
+            Add-Check $cycleChecks "Paper command classes absent at runtime" ($(if ($log -notmatch 'NoClassDefFoundError.*devkit\.paper\.commands|ClassNotFoundException.*devkit\.paper\.commands') { "PASS" } else { "FAIL" })) "Spigot artifact omits the optional native Paper command module." "logs/latest.log"
+        }
         $linkage = $log -match 'ClassNotFoundException|NoClassDefFoundError|NoSuchMethodError|AbstractMethodError|IncompatibleClassChangeError|ServiceConfigurationError'
         Add-Check $cycleChecks "No platform linkage errors" ($(if (-not $linkage) { "PASS" } else { "FAIL" })) "Scanned server and plugin startup logs for linkage/provider failures." "logs/latest.log"
 
@@ -427,6 +440,7 @@ function Start-OneCycle([string] $Name, [int] $Cycle, [string] $ServerJar, [stri
         foreach ($entry in @(
             @{ command = "mdkintegration status"; expected = "Lifecycle: RUNNING"; name = "Integration status command" },
             @{ command = "mdkintegration reload"; expected = "Reload completed"; name = "Integration reload command" },
+            @{ command = "mdkintegration typed 42"; expected = "MDK_TYPED_42"; name = "Integration typed integer command" },
             @{ command = "mdkstorage status"; expected = "Storage open=true, backend=sqlite, lifecycle=RUNNING"; name = "Storage status command" },
             @{ command = "mdkruntimeprobe nested 42"; expected = "MDK_RUNTIME_NESTED_42"; name = "Cloud nested typed argument" },
             @{ command = "mdkruntimeprobe status"; expected = "MDK_RUNTIME_PROBE"; name = "Probe command registration" }

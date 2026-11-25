@@ -34,7 +34,7 @@ It is intentionally outside the root multi-project build. It demonstrates tradit
 
 - JDK 21 (Gradle toolchain and the Paper API target).
 - Either the current MinecraftDevKit modules published to Maven Local, or a published JitPack tag. Remote mode cannot resolve until that tag exists and JitPack reports a successful build.
-- A Paper 1.21.8 test server for the documented API target.
+- A Spigot or Paper 1.21.11 test server for the documented API target.
 
 Build the standalone example in the selected repository mode using the commands above. JitPack mode does not fall back to Maven Local.
 
@@ -53,8 +53,9 @@ The deployable shaded plugin is `build/libs/minecraftdevkit-bukkit-permissions-e
 ## How it works
 
 - `FriendPermissions` declares individual permissions, child names, nested sections, and the `DEFAULT`, `DEFAULT_EXTENDED`, `MODERATOR`, and `ADMIN` groups. Its public static `CATALOG` field is the Gradle plugin input.
+- `BukkitPermissions.register(this, FriendPermissions.CATALOG)` installs the catalog into Bukkit's runtime permission manager on the primary thread. The returned registration is closed during plugin disable. Matching plugin.yml metadata is reused; conflicting global metadata stops registration rather than overwriting another plugin's definition.
 - The `com.trickshotmlg.devkit.bukkit-permissions` plugin loads that compiled field in an isolated worker and merges exported metadata into `src/main/resources/plugin.yml`.
-- The Paper API is `compileOnly`; it is not bundled.
+- The Spigot API is `compileOnly`; it is not bundled.
 - `devkit-permissions` is an implementation dependency and its runtime dependency graph is included in the Shadow JAR. Its classes are relocated into this example's private package to avoid collisions with other plugins. The Paper API remains server-provided. SnakeYAML packages are relocated when present to reduce collisions with server/plugin classpaths.
 - The ordinary `jar` task is disabled so `build` produces one deployable shaded JAR rather than a thin JAR alongside it.
 
@@ -62,11 +63,11 @@ The generator writes to `build/generated/minecraftdevkit/resources/plugin.yml`; 
 
 Catalog static initialization runs during the build. Keep it lightweight and independent of Bukkit runtime state.
 
-## Testing on Paper
+## Runtime registration
 
-The repository includes a Paper server provisioner and IntelliJ run/debug profiles. See [`tools/devservers/README.md`](../../tools/devservers/README.md) for setup. From this example directory, run `.\gradlew.bat provisionPaperServer`, review and accept the Minecraft EULA manually, then use `.\gradlew.bat runPaperServer`. The run task builds and deploys the plugin automatically.
+The repository includes an optional Paper server provisioner and IntelliJ run/debug profiles. See [`tools/devservers/README.md`](../../tools/devservers/README.md) for setup. Runtime registration must execute on Bukkit's primary server thread. `BukkitPermissionRegistration` is also closed on plugin disable and removes only the exact permission objects it registered.
 
-1. Start Paper 1.21.8. Confirm that the startup log reports the catalog node and group counts.
+1. Start Spigot or Paper 1.21.11. Confirm that the startup log reports the catalog node and group counts.
 2. Join as a normal non-operator and run `/mdkperms`. The player should have the `mdkperms.default` node and its basic children, but not the extended or staff permissions.
 3. Grant operator status in the server console (or test as an operator) and run `/mdkperms` again. Bukkit's `op` default should grant `mdkperms.admin`, whose positive child declarations cover every catalog permission except `mdkperms.proxy.handshake`.
 4. Use LuckPerms for explicit group-node assignments, for example:
