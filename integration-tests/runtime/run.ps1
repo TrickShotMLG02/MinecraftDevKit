@@ -443,7 +443,7 @@ function Start-OneCycle([string] $Name, [int] $Cycle, [string] $ServerJar, [stri
 
         $probePath = Join-Path $PluginDirectory "MdkRuntimeProbe/runtime-results.json"
         $probeWait = [Diagnostics.Stopwatch]::StartNew()
-        $requiredProbeChecks = @("sync task primary-thread ownership", "async-to-sync scheduler continuation", "repeating task lifecycle", "async storage to server-thread handoff")
+        $requiredProbeChecks = @("sync task primary-thread ownership", "async-to-sync scheduler continuation", "repeating task lifecycle", "async storage to server-thread handoff", "UUID-owned task scope cleanup", "cooldown acquisition and reset", "token bucket rate limiting", "typed event subscription registration", "Duration delayed scheduler overload")
         $probeReport = $null
         while ($probeWait.Elapsed.TotalSeconds -lt 45) {
             if (Test-Path -LiteralPath $probePath) {
@@ -466,6 +466,7 @@ function Start-OneCycle([string] $Name, [int] $Cycle, [string] $ServerJar, [stri
             @{ command = "mdkintegration typed 42"; expected = "MDK_TYPED_42"; name = "Integration typed integer command" },
             @{ command = "mdkstorage status"; expected = "Storage open=true, backend=sqlite, lifecycle=RUNNING"; name = "Storage status command" },
             @{ command = "mdkruntimeprobe nested 42"; expected = "MDK_RUNTIME_NESTED_42"; name = "Cloud nested typed argument" },
+            @{ command = "mdkruntimeprobe eventprobe"; expected = "MDK_EVENT_PROBE"; name = "Bukkit event dispatch RCON command" },
             @{ command = "mdkruntimeprobe status"; expected = "MDK_RUNTIME_PROBE"; name = "Probe command registration" }
         )) {
             try {
@@ -473,6 +474,22 @@ function Start-OneCycle([string] $Name, [int] $Cycle, [string] $ServerJar, [stri
                 $passed = $response.Contains($entry.expected)
                 Add-Check $cycleChecks $entry.name ($(if ($passed) { "PASS" } else { "FAIL" })) $response "Local RCON command response"
             } catch { Add-Check $cycleChecks $entry.name "FAIL" $_.Exception.Message "Local RCON command" }
+        }
+
+        $eventCheck = $null
+        $eventWait = [Diagnostics.Stopwatch]::StartNew()
+        while ($eventWait.Elapsed.TotalSeconds -lt 10) {
+            try {
+                $latestProbe = Get-Content -LiteralPath $probePath -Raw | ConvertFrom-Json
+                $eventCheck = @($latestProbe.checks | Where-Object { $_.name -eq "typed Bukkit event dispatch" } | Select-Object -Last 1)
+                if ($eventCheck.Count -gt 0) { $eventCheck = $eventCheck[0]; break }
+            } catch { }
+            Start-Sleep -Milliseconds 100
+        }
+        if ($eventCheck) {
+            Add-Check $cycleChecks "Probe: typed Bukkit event dispatch" $eventCheck.status $eventCheck.detail "plugins/MdkRuntimeProbe/runtime-results.json"
+        } else {
+            Add-Check $cycleChecks "Probe: typed Bukkit event dispatch" "FAIL" "An actual RCON command did not produce the expected RemoteServerCommandEvent assertion." "plugins/MdkRuntimeProbe/runtime-results.json"
         }
 
         if ($WaitInteractive) {

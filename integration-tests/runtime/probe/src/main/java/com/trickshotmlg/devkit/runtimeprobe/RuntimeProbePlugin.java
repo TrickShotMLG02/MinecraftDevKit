@@ -14,6 +14,10 @@ import com.trickshotmlg.devkit.bukkit.gui.PagedGui;
 import com.trickshotmlg.devkit.bukkit.gui.RadioGroup;
 import com.trickshotmlg.devkit.bukkit.lifecycle.BukkitLifecycle;
 import com.trickshotmlg.devkit.bukkit.scheduler.BukkitTaskScheduler;
+import com.trickshotmlg.devkit.bukkit.scheduler.BukkitPlayerTaskScopes;
+import com.trickshotmlg.devkit.bukkit.events.BukkitEvents;
+import com.trickshotmlg.devkit.cooldowns.CooldownManager;
+import com.trickshotmlg.devkit.cooldowns.TokenBucketRateLimiter;
 import com.trickshotmlg.devkit.commands.Arguments;
 import com.trickshotmlg.devkit.commands.Argument;
 import com.trickshotmlg.devkit.commands.CommandRegistry;
@@ -58,6 +62,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
+import org.bukkit.event.server.RemoteServerCommandEvent;
 import org.bukkit.permissions.PermissionAttachment;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -71,6 +76,8 @@ import java.util.Map;
 import java.util.ServiceLoader;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.time.Duration;
+import java.util.UUID;
 import java.util.logging.Level;
 
 /** Test-only probe. It runs real MinecraftDevKit APIs inside the selected server process. */
@@ -85,6 +92,10 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
     private final CopyOnWriteArrayList<RuntimeCheck> checks = new CopyOnWriteArrayList<>();
     private GuiManager guiManager;
     private BukkitTaskScheduler scheduler;
+    private BukkitPlayerTaskScopes playerTaskScopes;
+    private BukkitEvents runtimeEvents;
+    private CooldownManager<String> cooldowns;
+    private TokenBucketRateLimiter<String> rateLimiter;
     private TaskScope scope;
     private BukkitLifecycle bukkitLifecycle;
     private LifecycleManager lifecycle;
@@ -115,6 +126,7 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
         verifyConfigurationAndLocalization();
         verifyCommandRuntime();
         verifySchedulerRuntime();
+        verifyUtilityRuntime();
         verifyStorageRuntime();
         writeReport();
     }
@@ -130,7 +142,9 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
             Class.forName("com.trickshotmlg.devkit.bukkit.gui.GuiManager", false, getClassLoader());
             Class.forName("com.trickshotmlg.devkit.bukkit.scheduler.BukkitTaskScheduler", false, getClassLoader());
             Class.forName("com.trickshotmlg.devkit.bukkit.lifecycle.BukkitLifecycle", false, getClassLoader());
-            check("common adapter classloading", true, "Commands, GUI, scheduler, and lifecycle classes loaded from the probe's server classpath.");
+            Class.forName("com.trickshotmlg.devkit.bukkit.events.BukkitEvents", false, getClassLoader());
+            Class.forName("com.trickshotmlg.devkit.cooldowns.CooldownManager", false, getClassLoader());
+            check("common adapter classloading", true, "Commands, GUI, scheduler, lifecycle, and event utility classes loaded from the probe's server classpath.");
         } catch (LinkageError | ClassNotFoundException failure) {
             check("common adapter classloading", false, failure.toString());
         }
@@ -293,6 +307,8 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
                                 Player player = playerSender(context.sender());
                                 if (player != null) onPlayerNestedCommand(player, value);
                             }))
+                    .subcommand("eventprobe", eventprobe -> eventprobe.execute(context ->
+                            context.sender().sendMessage(Component.text("MDK_EVENT_PROBE"))))
                     ).build();
             new BukkitCommandAdapter(this, new StaticTextProvider(), Locale.ENGLISH).register(definition);
             var protectedCommand = CommandRegistry.builder().root("mdkacceptcloud", root -> root
@@ -823,9 +839,52 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
                     writeReport();
                 }
             });
+            scope.sync().later(Duration.ofMillis(1), () -> {
+                check("Duration delayed scheduler overload", Bukkit.isPrimaryThread(),
+                        "Positive duration was rounded up and dispatched on the primary thread.");
+                writeReport();
+            });
         } catch (Throwable failure) {
             check("Bukkit scheduler runtime", false, failure.toString());
             getLogger().log(Level.SEVERE, "Scheduler runtime probe failed", failure);
+        }
+    }
+
+    private void verifyUtilityRuntime() {
+        try {
+            playerTaskScopes = BukkitPlayerTaskScopes.create(this, scope, false);
+            UUID owner = UUID.randomUUID();
+            TaskScope playerScope = playerTaskScopes.forPlayer(owner);
+            boolean sameScope = playerTaskScopes.forPlayer(owner) == playerScope;
+            boolean removed = playerTaskScopes.closePlayer(owner) && playerScope.isClosed();
+            check("UUID-owned task scope cleanup", sameScope && removed,
+                    "The same UUID receives a stable child scope; explicit cleanup cancels and removes it.");
+
+            cooldowns = CooldownManager.create();
+            boolean acquired = cooldowns.tryAcquire("runtime", Duration.ofMinutes(1));
+            boolean rejectedRepeat = !cooldowns.tryAcquire("runtime", Duration.ofMinutes(1));
+            boolean removable = cooldowns.remove("runtime");
+            rateLimiter = new TokenBucketRateLimiter<>(2, 1, Duration.ofSeconds(1));
+            boolean bucketWorks = rateLimiter.tryAcquire("runtime") && rateLimiter.tryAcquire("runtime")
+                    && !rateLimiter.tryAcquire("runtime") && rateLimiter.remaining("runtime") == 0;
+            check("cooldown acquisition and reset", acquired && rejectedRepeat && removable,
+                    "A first acquisition succeeds, a repeat is rejected, and explicit removal resets the key.");
+            check("token bucket rate limiting", bucketWorks,
+                    "Configured token capacity is accepted atomically and excess requests are rejected.");
+
+            runtimeEvents = BukkitEvents.create(this);
+            runtimeEvents.subscribe(RemoteServerCommandEvent.class, event -> {
+                if (event.getCommand().trim().equalsIgnoreCase("mdkruntimeprobe eventprobe")) {
+                    check("typed Bukkit event dispatch", Bukkit.isPrimaryThread(),
+                            "An actual RCON command caused RemoteServerCommandEvent delivery to a typed callback on the server dispatch thread.");
+                    writeReport();
+                }
+            });
+            check("typed event subscription registration", runtimeEvents.subscriptionCount() == 1,
+                    "RemoteServerCommandEvent was registered using Bukkit's PluginManager.");
+        } catch (Throwable failure) {
+            check("event/cooldown utility runtime", false, failure.toString());
+            getLogger().log(Level.SEVERE, "Utility runtime probe failed", failure);
         }
     }
 
@@ -861,6 +920,10 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
             writeInteractiveReport();
         }
         clearInteractivePermission();
+        if (runtimeEvents != null) runtimeEvents.close();
+        if (playerTaskScopes != null) playerTaskScopes.close();
+        if (cooldowns != null) cooldowns.close();
+        if (rateLimiter != null) rateLimiter.close();
         if (bukkitLifecycle != null) {
             try {
                 bukkitLifecycle.close();

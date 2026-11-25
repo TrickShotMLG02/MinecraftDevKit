@@ -19,6 +19,8 @@ dependencies {
     implementation("com.trickshotmlg.devkit:devkit-bukkit-gui:$mdkVersion")
     implementation("com.trickshotmlg.devkit:devkit-bukkit-lifecycle:$mdkVersion")
     implementation("com.trickshotmlg.devkit:devkit-bukkit-scheduler:$mdkVersion")
+    implementation("com.trickshotmlg.devkit:devkit-bukkit-events:$mdkVersion")
+    implementation("com.trickshotmlg.devkit:devkit-cooldowns:$mdkVersion")
     implementation("com.trickshotmlg.devkit:devkit-config-yaml:$mdkVersion")
     implementation("com.trickshotmlg.devkit:devkit-localization-yaml:$mdkVersion")
     implementation("com.trickshotmlg.devkit:devkit-storage:$mdkVersion")
