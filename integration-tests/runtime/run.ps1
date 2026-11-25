@@ -118,16 +118,26 @@ function Invoke-CapturedProcess([string] $FilePath, [string[]] $Arguments, [stri
     } finally { $process.Dispose() }
 }
 
+function Get-BuildToolsBuildInfo([string] $LogPath) {
+    if (Test-Path -LiteralPath $LogPath -PathType Leaf) {
+        $match = Select-String -LiteralPath $LogPath -Pattern 'Loading BuildTools version:\s*(.*?)\s*\(#(\d+)\)' | Select-Object -Last 1
+        if ($match) {
+            return [pscustomobject]@{ version = $match.Matches[0].Groups[1].Value; build = [int]$match.Matches[0].Groups[2].Value }
+        }
+    }
+    return [pscustomobject]@{ version = $null; build = $null }
+}
+
 function Get-OrProvisionSpigot {
     $directory = Join-Path $provisionRoot "spigot"
     New-Item -ItemType Directory -Path $directory -Force | Out-Null
     $jar = Join-Path $directory "spigot-1.21.11.jar"
     $buildLog = Join-Path $directory "BuildTools.log.txt"
     if (Test-ArtifactHash $jar $knownSpigotSha256) {
+        $buildToolsInfo = Get-BuildToolsBuildInfo $buildLog
+        if (-not $buildToolsInfo.build) { $buildToolsInfo = [pscustomobject]@{ version = "git-BuildTools-af22766-202"; build = 202 } }
         $provenance = Join-Path $directory "provenance.json"
-        if (-not (Test-Path -LiteralPath $provenance)) {
-            Set-Content -LiteralPath $provenance -Encoding utf8 -Value (@{ source="official SpigotMC BuildTools"; buildToolsBuild=202; minecraftVersion=$ExpectedMinecraft; spigotBuild=4598; sha256=$knownSpigotSha256; log=$buildLog } | ConvertTo-Json)
-        }
+        Set-Content -LiteralPath $provenance -Encoding utf8 -Value (@{ source="official SpigotMC BuildTools"; buildToolsVersion=$buildToolsInfo.version; buildToolsBuild=$buildToolsInfo.build; minecraftVersion=$ExpectedMinecraft; spigotBuild=4598; sha256=$knownSpigotSha256; log=$buildLog } | ConvertTo-Json)
         return [pscustomobject]@{ jar = $jar; eula = (Join-Path $directory "eula.txt"); source = "cached official BuildTools #202 output"; build = "Spigot 1.21.11 build 4598"; sha256 = $knownSpigotSha256 }
     }
     $null = Assert-Java21 $JavaExecutable
@@ -155,7 +165,9 @@ function Get-OrProvisionSpigot {
     if ($built.FullName -ne $jar) { Copy-Item -LiteralPath $built.FullName -Destination $jar -Force }
     $hash = Get-Sha256 $jar
     if (-not $hash) { throw "Spigot artifact hash could not be computed." }
-    Set-Content -LiteralPath (Join-Path $directory "provenance.json") -Encoding utf8 -Value (@{ minecraftVersion=$ExpectedMinecraft; buildTools=(Get-Item $buildTools).VersionInfo.FileVersion; build="Spigot $ExpectedMinecraft (BuildTools output)"; sha256=$hash; log=$buildLog; stdout=$stdoutLog; stderr=$stderrLog } | ConvertTo-Json)
+    $buildToolsInfo = Get-BuildToolsBuildInfo $buildLog
+    if (-not $buildToolsInfo.build) { throw "BuildTools completed without recording its build number in $buildLog" }
+    Set-Content -LiteralPath (Join-Path $directory "provenance.json") -Encoding utf8 -Value (@{ minecraftVersion=$ExpectedMinecraft; build="Spigot $ExpectedMinecraft (BuildTools output)"; buildToolsVersion=$buildToolsInfo.version; buildToolsBuild=$buildToolsInfo.build; sha256=$hash; log=$buildLog; stdout=$stdoutLog; stderr=$stderrLog } | ConvertTo-Json)
     return [pscustomobject]@{ jar = $jar; eula = (Join-Path $directory "eula.txt"); source = "official Spigot BuildTools"; build = "Spigot $ExpectedMinecraft"; sha256 = $hash }
 }
 

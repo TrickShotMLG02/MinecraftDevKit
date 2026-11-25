@@ -40,6 +40,10 @@ try {
     Assert ((Get-Sha256 $paper.jar) -eq $knownPaperSha256 -and $paper.source -match 'cached') 'valid cached Paper fixture reused without network access'
     Assert (Test-ArtifactHash $paper.jar $knownPaperSha256) 'cache checksum predicate accepts matching fixture bytes'
     Assert (-not (Test-ArtifactHash $paper.jar ('0' * 64))) 'corrupted or wrong-version cache hash is rejected'
+    $buildToolsLog = Join-Path $temp 'BuildTools.log.txt'
+    Set-Content -LiteralPath $buildToolsLog -Value 'Loading BuildTools version: git-BuildTools-af22766-202 (#202)'
+    $buildToolsInfo = Get-BuildToolsBuildInfo $buildToolsLog
+    Assert ($buildToolsInfo.build -eq 202 -and $buildToolsInfo.version -eq 'git-BuildTools-af22766-202') 'BuildTools provenance is parsed from its own log instead of JAR file metadata'
 
     function Invoke-WebRequest { param($Uri, $OutFile, [switch] $UseBasicParsing, $TimeoutSec); Copy-Item -LiteralPath $script:testPayload -Destination $OutFile -Force }
     $script:testPayload = $payload
