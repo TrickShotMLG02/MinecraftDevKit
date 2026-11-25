@@ -1,10 +1,10 @@
 # Bukkit Storage Example
 
-This standalone Paper plugin demonstrates asynchronous player data persistence with MinecraftDevKit. It composes typed YAML settings, lifecycle-owned JDBC storage, Flyway SQL migrations, explicit SQL, Cloud commands, typed permission declarations, and a lifecycle-owned scheduler scope for returning query results to Paper's server thread.
+This standalone plugin demonstrates asynchronous player data persistence with MinecraftDevKit. It composes typed YAML settings, lifecycle-owned JDBC storage, Flyway SQL migrations, explicit SQL, Cloud commands, typed permission declarations, and a lifecycle-owned scheduler scope for returning query results to the Bukkit server thread.
 
 ## Platform and build
 
-- Paper 1.21.11
+- Spigot or Paper 1.21.11
 - Java 21
 - SQLite works by default and stores `players.db` below the plugin data directory.
 - MySQL and MariaDB are selectable after including the matching JDBC driver.
@@ -17,6 +17,8 @@ Build after publishing the modules to Maven Local:
 ```
 
 The standalone build defaults to Maven Local. For JitPack, pass `-PmdkRepository=jitpack -PmdkVersion=<version>`. Default packaging has no network JDBC driver. To build for MySQL, add `runtimeOnly("com.mysql:mysql-connector-j:26.10.0")`; for MariaDB, add `runtimeOnly("org.mariadb.jdbc:mariadb-java-client:3.5.7")` to the example's Gradle dependencies and include the selected driver's required license notices when redistributing the shaded JAR. MySQL Connector/J 26.10.0 targets modern MySQL servers; MariaDB Connector/J 3.5.7 supports Java 21 and MariaDB/MySQL servers.
+
+The same source can be compiled against Spigot with `-PmdkPlatform=spigot`; the default is Paper. Spigot mode includes compatible Adventure runtime classes because Spigot does not supply them. Neither mode has live runtime verification until run through the optional platform acceptance harness.
 
 ## Service graph
 

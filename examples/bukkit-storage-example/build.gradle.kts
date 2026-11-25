@@ -16,9 +16,17 @@ val mdkVersion = when (mode) {
 }
 val mdkGroup = if (mode == "mavenlocal") "com.trickshotmlg.devkit"
     else "com.github.TrickShotMLG02.MinecraftDevKit"
+val serverPlatform = providers.gradleProperty("mdkPlatform").orElse("paper").get().lowercase()
+if (serverPlatform !in setOf("paper", "spigot")) {
+    throw GradleException("Unsupported -PmdkPlatform='$serverPlatform'; use paper or spigot")
+}
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+    if (serverPlatform == "paper") {
+        compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+    } else {
+        compileOnly("org.spigotmc:spigot-api:1.21.11-R0.1-SNAPSHOT")
+    }
     implementation("$mdkGroup:devkit-bukkit-lifecycle:$mdkVersion")
     implementation("$mdkGroup:devkit-bukkit-scheduler:$mdkVersion")
     implementation("$mdkGroup:devkit-bukkit-commands:$mdkVersion")
@@ -26,6 +34,7 @@ dependencies {
     implementation("$mdkGroup:devkit-storage:$mdkVersion")
     implementation("$mdkGroup:devkit-storage-migrations:$mdkVersion")
     implementation("$mdkGroup:devkit-permissions:$mdkVersion")
+    implementation("net.kyori:adventure-text-serializer-legacy:4.26.1")
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.4")
 }
@@ -43,6 +52,12 @@ tasks.shadowJar {
     archiveClassifier.set("")
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     mergeServiceFiles()
+    if (serverPlatform == "paper") {
+        dependencies {
+            exclude(dependency("net.kyori:adventure-api:.*"))
+            exclude(dependency("net.kyori:adventure-key:.*"))
+        }
+    }
     filesMatching("META-INF/services/**") {
         duplicatesStrategy = DuplicatesStrategy.INCLUDE
     }

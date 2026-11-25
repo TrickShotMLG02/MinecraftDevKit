@@ -31,7 +31,7 @@ final class StorageCommands {
                                 if (error != null) playerMessage(plugin, id, "Database read failed: " + error.getMessage());
                                 else playerMessage(plugin, id, "Stored coins: " + balance.orElse(0L));
                             }));
-                    player.sendMessage(Component.text("Loading balance asynchronously..."));
+                    StorageMessages.send(player, Component.text("Loading balance asynchronously..."));
                 }))
                 .subcommand("add", node -> node.permission(StoragePermissions.ADMIN).required(TARGET).required(AMOUNT)
                         .execute(context -> {
@@ -71,6 +71,6 @@ final class StorageCommands {
 
     private static void playerMessage(StorageExamplePlugin plugin, UUID playerId, String message) {
         Player online = Bukkit.getPlayer(playerId);
-        if (online != null) online.sendMessage(Component.text(message));
+        if (online != null) StorageMessages.send(online, Component.text(message));
     }
 }
