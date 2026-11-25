@@ -4,6 +4,7 @@ repositories {
 }
 
 dependencies {
+    api(project(":devkit-bukkit-items"))
     api(project(":devkit-text"))
     api(project(":devkit-permissions"))
     api("net.kyori:adventure-api:4.26.1")

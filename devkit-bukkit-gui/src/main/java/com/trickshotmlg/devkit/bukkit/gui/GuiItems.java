@@ -12,6 +12,11 @@ import java.util.Objects;
 /** Small factories for common decorative GUI items. */
 public final class GuiItems {
     private GuiItems() { }
+    /** Adapts a reusable item template to this viewer-specific GUI render. */
+    public static GuiItemTemplate template(com.trickshotmlg.devkit.bukkit.items.ItemTemplate template) {
+        Objects.requireNonNull(template, "template");
+        return context -> template.create(reference -> context.text(reference));
+    }
     public static ItemStack of(Material material, String plainName) {
         return ItemBuilder.of(material).name(Objects.requireNonNull(plainName, "plainName")).build();
     }

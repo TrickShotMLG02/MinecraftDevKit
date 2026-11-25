@@ -3,6 +3,8 @@ repositories {
 }
 
 dependencies {
+    implementation(project(":devkit-bukkit-items"))
+    implementation(project(":devkit-bukkit-feedback"))
     implementation(project(":devkit-bukkit-gui"))
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     testCompileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
