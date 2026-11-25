@@ -109,6 +109,15 @@ try {
     try { [Diagnostics.Process]::Start($missingExecutable) | Out-Null } catch { $startFailed = $true }
     Assert $startFailed 'process startup failure is observable instead of being treated as a server run'
 
+    $captureScript = Join-Path $temp 'capture fixture with spaces.ps1'
+    Set-Content -LiteralPath $captureScript -Encoding utf8 -Value '[Console]::Out.WriteLine("stdout-marker"); [Console]::Error.WriteLine("stderr-marker"); exit 17'
+    $capturedOut = Join-Path $temp 'captured output\stdout.log'
+    $capturedErr = Join-Path $temp 'captured output\stderr.log'
+    $captured = Invoke-CapturedProcess $java @('-NoProfile', '-File', $captureScript) $temp $capturedOut $capturedErr
+    $outputReadable = (Get-Content -LiteralPath $capturedOut -Raw).Contains('stdout-marker') -and (Get-Content -LiteralPath $capturedErr -Raw).Contains('stderr-marker')
+    [IO.File]::AppendAllText($capturedOut, 'reopened')
+    Assert ($captured.exitCode -eq 17 -and $outputReadable -and (Get-Content -LiteralPath $capturedOut -Raw).Contains('reopened')) 'captured process preserves exit code, both streams, paths with spaces, and closes log handles'
+
     $sleepProcess = Start-Process -FilePath $java -ArgumentList '-NoProfile -Command Start-Sleep -Seconds 30' -PassThru -WindowStyle Hidden
     try {
         $timedOut = $false

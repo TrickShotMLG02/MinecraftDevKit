@@ -77,6 +77,47 @@ function Invoke-VerifiedDownload([string] $Uri, [string] $Destination, [string] 
     }
 }
 
+function ConvertTo-ProcessArgument([string] $Value) {
+    if ($null -eq $Value) { return '""' }
+    # Start-Process joins ArgumentList elements into one Windows command line. Quote each
+    # value using the standard CommandLineToArgvW backslash/quote rules so paths with
+    # spaces (and trailing backslashes) survive intact on Windows PowerShell 5.1.
+    $builder = [Text.StringBuilder]::new()
+    [void]$builder.Append('"')
+    $slashes = 0
+    foreach ($character in $Value.ToCharArray()) {
+        if ($character -eq '\') { $slashes++; continue }
+        if ($character -eq '"') {
+            [void]$builder.Append(('\' * (($slashes * 2) + 1)))
+            [void]$builder.Append('"')
+            $slashes = 0
+            continue
+        }
+        if ($slashes -gt 0) { [void]$builder.Append(('\' * $slashes)); $slashes = 0 }
+        [void]$builder.Append($character)
+    }
+    if ($slashes -gt 0) { [void]$builder.Append(('\' * ($slashes * 2))) }
+    [void]$builder.Append('"')
+    return $builder.ToString()
+}
+
+function Invoke-CapturedProcess([string] $FilePath, [string[]] $Arguments, [string] $WorkingDirectory, [string] $StdoutPath, [string] $StderrPath) {
+    foreach ($capturePath in @($StdoutPath, $StderrPath)) {
+        $parent = Split-Path -Parent $capturePath
+        if ($parent) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+        if (Test-Path -LiteralPath $capturePath) { Remove-Item -LiteralPath $capturePath -Force }
+    }
+    $argumentLine = (@($Arguments | ForEach-Object { ConvertTo-ProcessArgument ([string]$_) }) -join ' ')
+    $process = Start-Process -FilePath $FilePath -ArgumentList $argumentLine -WorkingDirectory $WorkingDirectory `
+        -RedirectStandardOutput $StdoutPath -RedirectStandardError $StderrPath -PassThru -Wait -WindowStyle Hidden
+    try {
+        # Start-Process -Wait has reaped the process and closed redirected output handles.
+        # Return only after that point so callers can safely read/merge both captures.
+        $process.Refresh()
+        return [pscustomobject]@{ exitCode = $process.ExitCode; processId = $process.Id; stdout = $StdoutPath; stderr = $StderrPath }
+    } finally { $process.Dispose() }
+}
+
 function Get-OrProvisionSpigot {
     $directory = Join-Path $provisionRoot "spigot"
     New-Item -ItemType Directory -Path $directory -Force | Out-Null
@@ -98,18 +139,23 @@ function Get-OrProvisionSpigot {
     if (-not $gitExe) { throw "Official Spigot BuildTools requires Git on PATH. Install Git for Windows and retry." }
     Push-Location $directory
     try {
-        $oldGit = $env:PATH
-        try {
-            & $JavaExecutable -jar $buildTools --rev $ExpectedMinecraft *>&1 | Tee-Object -FilePath $buildLog
-            if ($LASTEXITCODE -ne 0) { throw "Spigot BuildTools failed with exit code $LASTEXITCODE. See $buildLog" }
-        } finally { $env:PATH = $oldGit }
+        $stdoutLog = Join-Path $directory "BuildTools.stdout.log"
+        $stderrLog = Join-Path $directory "BuildTools.stderr.log"
+        # BuildTools itself owns BuildTools.log.txt. Never Tee native output into that
+        # same path: BuildTools keeps its log open while running, which caused the first
+        # provisioned run to fail when PowerShell reopened the locked file.
+        $buildProcess = Invoke-CapturedProcess $JavaExecutable @("-jar", $buildTools, "--rev", $ExpectedMinecraft) `
+            $directory $stdoutLog $stderrLog
+        if ($buildProcess.exitCode -ne 0) {
+            throw "Spigot BuildTools failed with exit code $($buildProcess.exitCode). See $buildLog, $stdoutLog, and $stderrLog"
+        }
     } finally { Pop-Location }
     $built = Get-ChildItem -LiteralPath $directory -Filter "spigot-1.21.11.jar" -Recurse -File | Select-Object -First 1
     if (-not $built) { throw "BuildTools completed without producing Spigot $ExpectedMinecraft. See $buildLog" }
     if ($built.FullName -ne $jar) { Copy-Item -LiteralPath $built.FullName -Destination $jar -Force }
     $hash = Get-Sha256 $jar
     if (-not $hash) { throw "Spigot artifact hash could not be computed." }
-    Set-Content -LiteralPath (Join-Path $directory "provenance.json") -Encoding utf8 -Value (@{ minecraftVersion=$ExpectedMinecraft; buildTools=(Get-Item $buildTools).VersionInfo.FileVersion; build="Spigot $ExpectedMinecraft (BuildTools output)"; sha256=$hash; log=$buildLog } | ConvertTo-Json)
+    Set-Content -LiteralPath (Join-Path $directory "provenance.json") -Encoding utf8 -Value (@{ minecraftVersion=$ExpectedMinecraft; buildTools=(Get-Item $buildTools).VersionInfo.FileVersion; build="Spigot $ExpectedMinecraft (BuildTools output)"; sha256=$hash; log=$buildLog; stdout=$stdoutLog; stderr=$stderrLog } | ConvertTo-Json)
     return [pscustomobject]@{ jar = $jar; eula = (Join-Path $directory "eula.txt"); source = "official Spigot BuildTools"; build = "Spigot $ExpectedMinecraft"; sha256 = $hash }
 }
 
@@ -256,6 +302,30 @@ function Test-PluginArtifact([string] $Name, [string] $Path, [string] $Platform,
             $expectedProviderCount = if ($PaperExtensionExpected) { 1 } else { 0 }
             $providerValid = if ($PaperExtensionExpected) { $providerEntries.Count -eq 1 -and $providerText -eq "com.trickshotmlg.devkit.paper.gui.PaperGuiPlatformExtension" -and $paperClassPresent } else { $providerEntries.Count -eq 0 -and -not $paperClassPresent }
             Add-Check $Checks "$Name isolates the optional Paper GUI provider" $(if ($providerValid) { "PASS" } else { "FAIL" }) "expected=$PaperExtensionExpected; serviceFiles=$($providerEntries.Count); provider=$providerText; extensionClass=$paperClassPresent" $Path
+
+            $itemProviderPath = "META-INF/services/com.trickshotmlg.devkit.bukkit.items.ItemTextAdapter"
+            $itemProviderEntries = @($archive.Entries | Where-Object FullName -eq $itemProviderPath)
+            $itemProviderText = ""
+            if ($itemProviderEntries.Count -eq 1) {
+                $reader = [IO.StreamReader]::new($itemProviderEntries[0].Open())
+                try { $itemProviderText = $reader.ReadToEnd().Trim() } finally { $reader.Dispose() }
+            }
+            $itemProviderValid = if ($PaperExtensionExpected) {
+                $itemProviderEntries.Count -eq 1 -and $itemProviderText -eq "com.trickshotmlg.devkit.paper.gui.PaperGuiPlatformExtension"
+            } else { $itemProviderEntries.Count -eq 0 }
+            Add-Check $Checks "$Name isolates the optional Paper item text provider" $(if ($itemProviderValid) { "PASS" } else { "FAIL" }) "expected=$PaperExtensionExpected; serviceFiles=$($itemProviderEntries.Count); provider=$itemProviderText" $Path
+
+            $feedbackProviderPath = "META-INF/services/com.trickshotmlg.devkit.bukkit.feedback.FeedbackPlatformExtension"
+            $feedbackProviderEntries = @($archive.Entries | Where-Object FullName -eq $feedbackProviderPath)
+            $feedbackProviderText = ""
+            if ($feedbackProviderEntries.Count -eq 1) {
+                $reader = [IO.StreamReader]::new($feedbackProviderEntries[0].Open())
+                try { $feedbackProviderText = $reader.ReadToEnd().Trim() } finally { $reader.Dispose() }
+            }
+            $feedbackProviderValid = if ($PaperExtensionExpected) {
+                $feedbackProviderEntries.Count -eq 1 -and $feedbackProviderText -eq "com.trickshotmlg.devkit.paper.gui.PaperGuiPlatformExtension"
+            } else { $feedbackProviderEntries.Count -eq 0 }
+            Add-Check $Checks "$Name isolates the optional Paper feedback provider" $(if ($feedbackProviderValid) { "PASS" } else { "FAIL" }) "expected=$PaperExtensionExpected; serviceFiles=$($feedbackProviderEntries.Count); provider=$feedbackProviderText" $Path
 
             if ($Name -eq "Integration example") {
                 $nativeCommandsClass = $paths -contains "com/trickshotmlg/devkit/paper/commands/PaperCommandAdapter.class"
@@ -411,7 +481,7 @@ function Start-OneCycle([string] $Name, [int] $Cycle, [string] $ServerJar, [stri
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
     $startInfo.FileName = $JavaExecutable
     $startInfo.WorkingDirectory = $ServerDirectory
-    $startInfo.Arguments = "-Xms512M -Xmx2G -Dmdk.runtime.platform=$Name -Dmdk.runtime.cycle=$Cycle -jar `"$ServerJar`" --nogui"
+    $startInfo.Arguments = "-Xms512M -Xmx2G -Dmdk.runtime.platform=$Name -Dmdk.runtime.cycle=$Cycle -Dmdk.runtime.acceptanceId=$script:acceptanceId -jar `"$ServerJar`" --nogui"
     $startInfo.UseShellExecute = $false
     $startInfo.CreateNoWindow = $true
     $startInfo.RedirectStandardOutput = $true
@@ -443,7 +513,7 @@ function Start-OneCycle([string] $Name, [int] $Cycle, [string] $ServerJar, [stri
 
         $probePath = Join-Path $PluginDirectory "MdkRuntimeProbe/runtime-results.json"
         $probeWait = [Diagnostics.Stopwatch]::StartNew()
-        $requiredProbeChecks = @("sync task primary-thread ownership", "async-to-sync scheduler continuation", "repeating task lifecycle", "async storage to server-thread handoff", "UUID-owned task scope cleanup", "cooldown acquisition and reset", "token bucket rate limiting", "typed event subscription registration", "Duration delayed scheduler overload")
+        $requiredProbeChecks = @("sync task primary-thread ownership", "async-to-sync scheduler continuation", "repeating task lifecycle", "async storage to server-thread handoff", "UUID-owned task scope cleanup", "cooldown acquisition and reset", "token bucket rate limiting", "typed event subscription registration", "Duration delayed scheduler overload", "typed PDC item metadata and template isolation", "TileState PDC commit and restart persistence", "feedback and boss bar lifecycle")
         $probeReport = $null
         while ($probeWait.Elapsed.TotalSeconds -lt 45) {
             if (Test-Path -LiteralPath $probePath) {
@@ -680,6 +750,7 @@ function Run-Platform([string] $Name) {
         Set-Content -LiteralPath (Join-Path $platformResults "environment.json") -Value ($environment | ConvertTo-Json -Depth 5) -Encoding utf8
 
         $cycleLimit = if ($Interactive) { 1 } else { 2 }
+        $script:acceptanceId = [Guid]::NewGuid().ToString("N")
         for ($cycle = 1; $cycle -le $cycleLimit; $cycle++) {
             $script:activeCycle = $cycle
             $cycleChecks = Start-OneCycle $Name $cycle $serverJar $runDirectory $pluginsDirectory $serverPort $rconPort $password $platformResults ([bool]$Interactive)
