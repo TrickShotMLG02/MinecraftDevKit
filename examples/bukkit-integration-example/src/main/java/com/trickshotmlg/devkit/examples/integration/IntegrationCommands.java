@@ -18,6 +18,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.logging.Level;
+import java.time.Duration;
 
 /** Cloud command tree for the complete integration example. */
 final class IntegrationCommands {
@@ -50,7 +51,8 @@ final class IntegrationCommands {
                 .subcommand("demo", demo -> demo.permission(IntegrationPermissions.USE).playerOnly()
                         .description("Demonstrate delayed and asynchronous scheduler tasks")
                         .subcommand("delayed", delayed -> delayed.execute(this::delayed))
-                        .subcommand("async", async -> async.execute(this::async)))
+                        .subcommand("async", async -> async.execute(this::async))
+                        .subcommand("cooldown", cooldown -> cooldown.execute(this::cooldown)))
                 .subcommand("typed", typed -> typed.required(NATIVE_VALUE)
                         .execute(context -> context.sender().sendMessage(Component.text(
                                 "MDK_TYPED_" + context.get(NATIVE_VALUE)))))
@@ -108,8 +110,7 @@ final class IntegrationCommands {
         Player player = player(context);
         if (player == null) return;
         UUID id = player.getUniqueId();
-        lifecycle.get(IntegrationServices.FEATURES).scope().sync().later(
-                com.trickshotmlg.devkit.scheduler.TickDelay.of(40), () -> {
+        lifecycle.get(IntegrationServices.FEATURES).scope().sync().later(Duration.ofSeconds(2), () -> {
                     Player online = Bukkit.getPlayer(id);
                     if (online != null) send(online, "integration.command.delayed", "Delayed task ran on the server thread.");
                 });
@@ -131,6 +132,20 @@ final class IntegrationCommands {
                     "Background calculation result: {result}", Map.of("result", result));
         }).onFailure(error -> plugin.getLogger().log(Level.SEVERE, "Integration async calculation failed", error));
         send(player, "integration.command.async-started", "Started a background calculation.");
+    }
+
+    private void cooldown(CommandContext context) {
+        Player player = player(context);
+        if (player == null) return;
+        var cooldowns = lifecycle.get(IntegrationServices.FEATURES).commandCooldowns();
+        UUID id = player.getUniqueId();
+        if (cooldowns.tryAcquire(id, Duration.ofSeconds(8))) {
+            IntegrationMessages.send(player, Component.text("Cooldown action executed. Try again in 8 seconds."));
+        } else {
+            IntegrationMessages.send(player, Component.text("Cooldown active for "
+                    + String.format(Locale.ROOT, "%.1f", cooldowns.remaining(id).toNanos() / 1_000_000_000.0)
+                    + " seconds."));
+        }
     }
 
     private Player player(CommandContext context) {

@@ -39,6 +39,8 @@ dependencies {
     }
     implementation("$mdkGroup:devkit-bukkit-lifecycle:$mdkVersion")
     implementation("$mdkGroup:devkit-bukkit-scheduler:$mdkVersion")
+    implementation("$mdkGroup:devkit-bukkit-events:$mdkVersion")
+    implementation("$mdkGroup:devkit-cooldowns:$mdkVersion")
     implementation("$mdkGroup:devkit-bukkit-gui:$mdkVersion")
     implementation("$mdkGroup:devkit-bukkit-commands:$mdkVersion")
     implementation("$mdkGroup:devkit-bukkit-permissions:$mdkVersion")

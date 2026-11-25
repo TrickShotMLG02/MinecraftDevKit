@@ -44,7 +44,7 @@ This variant uses the same `IntegrationExamplePlugin` runtime entry point and sh
 - **GUI** owns protected inventories, per-viewer radio selection, navigation, and pagination.
 - **Scheduler** groups periodic and asynchronous work in a lifecycle-owned scope.
 
-The actual service graph is shared by Spigot and Paper. The scheduler service binds the Bukkit scheduler implementation for the selected server:
+The actual service graph is shared by Spigot and Paper. The scheduler service binds the Bukkit scheduler implementation for the selected server. Lifecycle-managed typed Bukkit event subscriptions handle join/quit refreshes, while UUID-keyed cooldown and token-bucket state demonstrates command cooldowns and GUI action throttling:
 
 ```mermaid
 flowchart TD
@@ -61,7 +61,7 @@ flowchart TD
   Scheduler --> Features
 ```
 
-Services start in stable registration order when dependencies permit. Shutdown reverses the dependency order: feature listeners and their task scope close first, then menus, scheduler, localization, and configuration. `BukkitLifecycle` delegates synchronous startup and shutdown to the platform's traditional Bukkit primary thread. The build variant intentionally selects exactly one Cloud backend: legacy Bukkit registration on Spigot and Paper's native lifecycle/Brigadier manager on Paper. Paper's lifecycle owns native command re-registration and removes it with the plugin; the common adapter remains usable on Spigot.
+Services start in stable registration order when dependencies permit. Shutdown reverses the dependency order: feature subscriptions and their task scope close first, then menus, scheduler, localization, and configuration. `BukkitLifecycle` delegates synchronous startup and shutdown to the platform's traditional Bukkit primary thread. The build variant intentionally selects exactly one Cloud backend: legacy Bukkit registration on Spigot and Paper's native lifecycle/Brigadier manager on Paper. Paper's lifecycle owns native command re-registration and removes it with the plugin; the common adapter remains usable on Spigot.
 
 ## Commands and permissions
 
@@ -111,9 +111,9 @@ All menu item text is built at render time from the viewer's locale. ItemStack c
 
 ## Scheduler and ownership
 
-`Features` owns a child `TaskScope` created from `BukkitTaskScheduler`. It refreshes current player views at the configured interval, replaces that repeating task when the interval changes, and is closed before the scheduler. The delayed command uses that same scope. The async demo performs only plain arithmetic off-thread, hands the result to `thenSync`, and looks up the player by UUID on the server thread before messaging. Work already executing asynchronously is not forcibly interrupted on shutdown, but the scope prevents its queued synchronous continuation from running after closure.
+`Features` owns a child `TaskScope` created from `BukkitTaskScheduler`. It refreshes current player views at the configured interval using the `Duration` overload, replaces that repeating task when the interval changes, and is closed before the scheduler. `/mdkintegration demo cooldown` demonstrates an atomic eight-second UUID cooldown and remaining-time response. The status GUI refresh action uses a per-viewer token bucket. Player quit removes both keys. The async demo performs only plain arithmetic off-thread, hands the result to `thenSync`, and looks up the player by UUID on the server thread before messaging. Work already executing asynchronously is not forcibly interrupted on shutdown, but the scope prevents its queued synchronous continuation from running after closure.
 
-The localization service, configuration handle, and scheduler are returned from lifecycle factories and closed automatically. The GUI manager, feature task scope, listener unregister action, and config subscription are registered with their `LifecycleContext` as soon as ownership begins. The command adapter is created during `onEnable` and its platform registrations are associated with the plugin by Cloud/Paper.
+The localization service, configuration handle, and scheduler are returned from lifecycle factories and closed automatically. The GUI manager, cooldown managers, typed event registrar/subscriptions, feature task scope, and config subscription are registered with their `LifecycleContext` as soon as ownership begins. `BukkitEvents` uses Bukkit's own event dispatch thread and closes its individually owned listeners on lifecycle or plugin shutdown. The command adapter is created during `onEnable` and its platform registrations are associated with the plugin by Cloud/Paper.
 
 The service wiring follows the lifecycle API directly:
 
