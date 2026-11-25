@@ -43,9 +43,17 @@ try {
     $ownedEula = Join-Path $serverDir 'eula.txt'; Set-TestEula $ownedEula
     Assert ((Get-Content $ownedEula -Raw).Trim() -eq 'eula=true') 'authorized EULA setting is confined to disposable test directory'
     $latest = Join-Path $serverDir 'logs/latest.log'; $probe = Join-Path $pluginDir 'MdkRuntimeProbe/runtime-results.json'
-    Set-Content $latest 'Done (old cycle)!'; Set-Content $probe '{"cycle":1}'
+    $interactiveMarker = Join-Path $pluginDir 'MdkRuntimeProbe/interactive-results.json'
+    Set-Content $latest 'Done (old cycle)!'; Set-Content $probe '{"cycle":1}'; Set-Content $interactiveMarker '{"complete":true,"cycle":1}'
     Reset-CycleMarkers $serverDir $pluginDir
-    Assert (-not (Test-Path $latest) -and -not (Test-Path $probe)) 'cycle reset removes stale readiness and probe markers'
+    Assert (-not (Test-Path $latest) -and -not (Test-Path $probe) -and -not (Test-Path $interactiveMarker)) 'cycle reset removes stale readiness, probe, and interactive markers'
+
+    $interactiveReportDir = Join-Path $temp 'interactive-report'
+    $interactiveChecks = [Collections.Generic.List[object]]::new()
+    Add-Check $interactiveChecks 'Interactive session completion' 'NOT VERIFIED' 'No real client session was executed.'
+    Write-RunReport $interactiveReportDir 'paper' ([ordered]@{ interactiveMode=$true }) $interactiveChecks
+    $interactiveReport = Get-Content (Join-Path $interactiveReportDir 'results.json') -Raw | ConvertFrom-Json
+    Assert ($interactiveReport.totals.byCategory.'client-dependent'.notVerified -eq 1) 'interactive no-client result stays NOT VERIFIED in its own report category'
 
     $java = Join-Path $PSHOME 'powershell.exe'
     $exitProcess = Start-Process -FilePath $java -ArgumentList '-NoProfile -Command exit 17' -PassThru -WindowStyle Hidden

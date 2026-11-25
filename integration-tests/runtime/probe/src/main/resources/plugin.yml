@@ -4,3 +4,7 @@ main: com.trickshotmlg.devkit.runtimeprobe.RuntimeProbePlugin
 api-version: '1.21'
 depend: [MinecraftDevKitIntegrationExample, MinecraftDevKitStorageExample]
 description: Test-only runtime acceptance probe for MinecraftDevKit
+commands:
+  devkitaccept:
+    description: Guided real-player MinecraftDevKit acceptance session
+    usage: /devkitaccept <help|start|status|protected|grant|gui|cancelgui|finish|cancel>

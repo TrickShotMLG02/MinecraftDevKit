@@ -8,8 +8,11 @@ param(
     [string] $JavaExecutable = "java",
     [ValidateRange(30, 900)] [int] $StartupTimeoutSeconds = 240,
     [ValidateRange(5, 180)] [int] $ShutdownTimeoutSeconds = 45,
+    [ValidateRange(15, 3600)] [int] $InteractiveConnectionTimeoutSeconds = 180,
+    [ValidateRange(30, 3600)] [int] $InteractiveSessionTimeoutSeconds = 900,
     [switch] $SkipBuild,
-    [switch] $Provision
+    [switch] $Provision,
+    [switch] $Interactive
 )
 
 $ErrorActionPreference = "Stop"
@@ -127,7 +130,7 @@ function Set-TestEula([string] $Path) {
 }
 
 function Add-Check($Checks, [string] $Name, [string] $Status, [string] $Detail, [string] $Evidence = "") {
-    $category = if ($Name -match "Actual player command|Client-originated GUI|Multi-viewer GUI|Online/offline profile") { "client-dependent" }
+    $category = if ($Name -match "Actual player command|Client-originated GUI|Multi-viewer GUI|Online/offline profile|Interactive player|Interactive session") { "client-dependent" }
         elseif ($Name -match "duplicate archive|one plugin.yml|server API classes|required application class|Paper GUI provider|Adventure runtime packaging|SQLite driver and native") { "packaging" }
         elseif ($Name -match "^Cycle [12] (clean process shutdown|localhost ports released)$") { "harness" }
         else { "server-runtime" }
@@ -350,7 +353,8 @@ function Stop-Server([System.Diagnostics.Process] $Process, [int] $RconPort, [st
 
 function Reset-CycleMarkers([string] $ServerDirectory, [string] $PluginDirectory) {
     foreach ($stale in @((Join-Path $ServerDirectory "logs/latest.log"),
-            (Join-Path $PluginDirectory "MdkRuntimeProbe/runtime-results.json"))) {
+            (Join-Path $PluginDirectory "MdkRuntimeProbe/runtime-results.json"),
+            (Join-Path $PluginDirectory "MdkRuntimeProbe/interactive-results.json"))) {
         if (Test-Path -LiteralPath $stale -PathType Leaf) { Remove-Item -LiteralPath $stale -Force }
     }
 }
@@ -367,7 +371,7 @@ function Test-PortReleased([int] $Port) {
 
 function Start-OneCycle([string] $Name, [int] $Cycle, [string] $ServerJar, [string] $ServerDirectory,
                         [string] $PluginDirectory, [int] $ServerPort, [int] $RconPort,
-                        [string] $RconPassword, [string] $ResultsDirectory) {
+                        [string] $RconPassword, [string] $ResultsDirectory, [bool] $WaitInteractive = $false) {
     $stdoutPath = Join-Path $ServerDirectory "stdout.log"
     $stderrPath = Join-Path $ServerDirectory "stderr.log"
     $cycleChecks = [System.Collections.Generic.List[object]]::new()
@@ -428,6 +432,40 @@ function Start-OneCycle([string] $Name, [int] $Cycle, [string] $ServerJar, [stri
             } catch { Add-Check $cycleChecks $entry.name "FAIL" $_.Exception.Message "Local RCON command" }
         }
 
+        if ($WaitInteractive) {
+            $interactivePath = Join-Path $PluginDirectory "MdkRuntimeProbe/interactive-results.json"
+            $connectionWait = [Diagnostics.Stopwatch]::StartNew()
+            $interactiveReport = $null
+            Write-Host "$Name interactive session is ready at 127.0.0.1:$ServerPort. Join with an authenticated Minecraft 1.21.11 client, run /devkitaccept start, and follow chat. Connect timeout: $InteractiveConnectionTimeoutSeconds seconds; session timeout: $InteractiveSessionTimeoutSeconds seconds."
+            $joined = $false
+            while ($connectionWait.Elapsed.TotalSeconds -lt $InteractiveConnectionTimeoutSeconds -and -not $process.HasExited) {
+                if ((Get-ServerLog $ServerDirectory) -match '\]: (\w+) joined the game') { $joined = $true; break }
+                Start-Sleep -Milliseconds 500
+            }
+            if ($joined) { Add-Check $cycleChecks "Interactive player connection" "PASS" "Server log observed an authenticated player join while online-mode=true." "logs/latest.log" }
+            else { Add-Check $cycleChecks "Interactive player connection" "NOT VERIFIED" "No player joined before the configured connection timeout or server exit." "logs/latest.log" }
+            $deadline = [Diagnostics.Stopwatch]::StartNew()
+            while ($joined -and $deadline.Elapsed.TotalSeconds -lt $InteractiveSessionTimeoutSeconds -and -not $process.HasExited) {
+                if (Test-Path -LiteralPath $interactivePath) {
+                    try { $interactiveReport = Get-Content -LiteralPath $interactivePath -Raw | ConvertFrom-Json } catch { $interactiveReport = $null }
+                    if ($interactiveReport -and $interactiveReport.complete) { break }
+                }
+                Start-Sleep -Milliseconds 500
+            }
+            if ($interactiveReport) {
+                foreach ($assertion in $interactiveReport.assertions) {
+                    Add-Check $cycleChecks "Interactive player: $($assertion.scenario)" $assertion.status $assertion.detail "plugins/MdkRuntimeProbe/interactive-results.json"
+                }
+            }
+            if ($interactiveReport -and $interactiveReport.complete) {
+                Add-Check $cycleChecks "Interactive session completion" "PASS" "Player UUID $($interactiveReport.playerUuid) completed session $($interactiveReport.sessionId)." "plugins/MdkRuntimeProbe/interactive-results.json"
+            } elseif ($interactiveReport -and @($interactiveReport.assertions | Where-Object status -eq "FAIL").Count -gt 0) {
+                Add-Check $cycleChecks "Interactive session completion" "FAIL" "One or more observed player actions failed; see the structured assertions." "plugins/MdkRuntimeProbe/interactive-results.json"
+            } else {
+                Add-Check $cycleChecks "Interactive session completion" "NOT VERIFIED" "No complete authenticated-player session arrived before the configured session timeout or server exit." "plugins/MdkRuntimeProbe/interactive-results.json"
+            }
+        }
+
         $dataChecks = @(
             @{ name = "Integration config generated"; path = Join-Path $PluginDirectory "MinecraftDevKitIntegrationExample/config.yml" },
             @{ name = "Translations initialized"; path = Join-Path $PluginDirectory "MinecraftDevKitIntegrationExample/lang/en.yml" },
@@ -457,7 +495,7 @@ function Start-OneCycle([string] $Name, [int] $Cycle, [string] $ServerJar, [stri
             $reportCopy = Join-Path $ResultsDirectory "cycle-$Cycle-probe-results.json"
             $shutdownChecks = @("lifecycle shutdown and owned resource cleanup", "TaskScope shutdown", "Bukkit scheduler shutdown",
                 "GUI manager shutdown", "SQLite storage shutdown", "async storage result completion")
-            if (Test-Path -LiteralPath $probePath) {
+        if (Test-Path -LiteralPath $probePath) {
                 Copy-Item -LiteralPath $probePath -Destination $reportCopy -Force
                 try {
                     $finalProbe = Get-Content -LiteralPath $probePath -Raw | ConvertFrom-Json
@@ -467,6 +505,10 @@ function Start-OneCycle([string] $Name, [int] $Cycle, [string] $ServerJar, [stri
                 } catch { Add-Check $cycleChecks "Final probe report parsing" "FAIL" $_.Exception.Message "cycle-$Cycle-probe-results.json" }
             } else {
                 Add-Check $cycleChecks "Final probe shutdown report" "FAIL" "Probe did not write its shutdown assertions during disable." "plugins/MdkRuntimeProbe/runtime-results.json"
+            }
+            $interactivePath = Join-Path $PluginDirectory "MdkRuntimeProbe/interactive-results.json"
+            if (Test-Path -LiteralPath $interactivePath) {
+                Copy-Item -LiteralPath $interactivePath -Destination (Join-Path $ResultsDirectory "cycle-$Cycle-interactive-results.json") -Force
             }
             $finalLog = Get-ServerLog $ServerDirectory
             $finalLinkage = $finalLog -match 'ClassNotFoundException|NoClassDefFoundError|NoSuchMethodError|AbstractMethodError|IncompatibleClassChangeError|ServiceConfigurationError'
@@ -515,6 +557,7 @@ function Run-Platform([string] $Name) {
         $environment.integrationPluginSha256 = Get-Sha256 $integrationJar
         $environment.storagePluginSha256 = Get-Sha256 $storageJar
         $environment.probePluginSha256 = Get-Sha256 $probeJar
+        $environment.interactiveMode = [bool]$Interactive
         $paperExpected = $Name -eq "paper"
         Test-PluginArtifact "Integration example" $integrationJar $Name "com/trickshotmlg/devkit/examples/integration/IntegrationExamplePlugin.class" $paperExpected $false $checks
         Test-PluginArtifact "Storage example" $storageJar $Name "com/trickshotmlg/devkit/examples/storage/StorageExamplePlugin.class" $false $true $checks
@@ -571,9 +614,10 @@ function Run-Platform([string] $Name) {
         $environment.rconBoundTo = "127.0.0.1"
         Set-Content -LiteralPath (Join-Path $platformResults "environment.json") -Value ($environment | ConvertTo-Json -Depth 5) -Encoding utf8
 
-        for ($cycle = 1; $cycle -le 2; $cycle++) {
+        $cycleLimit = if ($Interactive) { 1 } else { 2 }
+        for ($cycle = 1; $cycle -le $cycleLimit; $cycle++) {
             $script:activeCycle = $cycle
-            $cycleChecks = Start-OneCycle $Name $cycle $serverJar $runDirectory $pluginsDirectory $serverPort $rconPort $password $platformResults
+            $cycleChecks = Start-OneCycle $Name $cycle $serverJar $runDirectory $pluginsDirectory $serverPort $rconPort $password $platformResults ([bool]$Interactive)
             foreach ($check in $cycleChecks) { $checks.Add($check) }
             Add-Check $checks "Cycle $cycle clean process shutdown" ($(if ($script:lastShutdown.clean) { "PASS" } else { "FAIL" })) $script:lastShutdown.detail "stdout.log, stderr.log, logs/latest.log"
             $portsFree = (Test-PortReleased $serverPort) -and (Test-PortReleased $rconPort)
@@ -581,10 +625,15 @@ function Run-Platform([string] $Name) {
             if (-not $script:lastShutdown.clean) { break }
         }
 
-        Add-Check $checks "Actual player command and permission behavior" "NOT VERIFIED" "No authenticated player client is configured; console execution does not establish player-sender behavior." "Manual steps in README.md"
-        Add-Check $checks "Client-originated GUI click/drag/navigation" "NOT VERIFIED" "A real client is required; no simulated event is counted as client acceptance." "Manual steps in README.md"
-        Add-Check $checks "Multi-viewer GUI session isolation" "NOT VERIFIED" "Requires two real authorized players." "Manual steps in README.md"
-        Add-Check $checks "Online/offline profile completion" "NOT VERIFIED" "No real player profile service/client interaction was exercised." "Manual steps in README.md"
+        if (-not $Interactive) {
+            Add-Check $checks "Actual player command and permission behavior" "NOT VERIFIED" "No authenticated player client is configured; console execution does not establish player-sender behavior." "Manual steps in README.md"
+            Add-Check $checks "Client-originated GUI click/drag/navigation" "NOT VERIFIED" "A real client is required; no simulated event is counted as client acceptance." "Manual steps in README.md"
+            Add-Check $checks "Multi-viewer GUI session isolation" "NOT VERIFIED" "Requires two real authorized players." "Manual steps in README.md"
+            Add-Check $checks "Online/offline profile completion" "NOT VERIFIED" "No real player profile service/client interaction was exercised." "Manual steps in README.md"
+        } else {
+            Add-Check $checks "Interactive player GUI presentation and client inventory state" "NOT VERIFIED" "The server can observe event cancellation but visual client presentation and post-action item state require the player to report/verify the client view; inspect session evidence." "Manual client checklist"
+            Add-Check $checks "Interactive player command suggestions and multi-viewer isolation" "NOT VERIFIED" "Requires client-side tab UI observation and a second authenticated player." "Manual client checklist"
+        }
         Add-Check $checks "Version/build identity" "NOT VERIFIED" "Server startup log records the Minecraft version; exact upstream build identity is retained in logs but not cryptographically attested by this harness." "logs/latest.log"
     }
     catch {

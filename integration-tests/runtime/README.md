@@ -88,6 +88,28 @@ Join each isolated server with an authenticated 1.21.11 test account. The harnes
 
 Record client/version, account permissions, steps, and results in the relevant report. Do not use offline authentication or expose the temporary server publicly. Profile-service tests are network-dependent and must be separately identified.
 
+### Guided interactive acceptance
+
+Run the opt-in interactive mode separately for each platform. It performs the normal startup probes, keeps that isolated server online for a bounded player connection window and session window, then requests a graceful stop. The defaults are 180 seconds to connect and 900 seconds to complete the session; override them for short local checks.
+
+```powershell
+./integration-tests/runtime/run.ps1 -Platform spigot -Provision -Interactive
+./integration-tests/runtime/run.ps1 -Platform paper -Provision -Interactive
+```
+
+For an already provisioned server, omit `-Provision` and supply the matching server jar and accepted EULA file as documented above. In Minecraft 1.21.11, join the `127.0.0.1:<serverPort>` endpoint printed by the runner and follow these steps:
+
+1. Run `/devkitaccept start`, then `/mdkruntimeprobe`, `/mdkruntimeprobe status`, `/mdkruntimeprobe nested 42`, and `/mdkruntimeprobe nested nope`. The probe records root/status/nested callbacks from the actual Cloud sender bridge and records invalid-argument rejection only if the typed handler execution count remains unchanged.
+2. Run `/mdkacceptcloud protected` while denied. Then run `/devkitaccept grant` followed by `/mdkacceptcloud protected`; Cloud must reject then execute the real permission-gated handler. The test-only attachment is revoked after execution and removed at completion, disconnect, or shutdown.
+3. Run `/devkitaccept gui`. Click the emerald button, open the child and click Back, toggle the dye twice, select Beta then Alpha in the radio group, and open/confirm the confirmation menu. Open the pagination test with the book; click Next and verify Entry 46 appears first, then Previous and verify Entry 1 returns.
+4. Run `/devkitaccept cancelgui` and click the red Cancel control. The report distinguishes cancellation from confirmation.
+5. Run `/devkitaccept kit` to add a stone and paper to free slots and a stick to an empty offhand without replacing existing items. While a managed test inventory is open, perform Shift-left, Shift-right, number-key swap, double-click collection, offhand swap, and a drag that crosses from the GUI into the player inventory. Each transfer action is recorded only if the real Bukkit event was cancelled and the player's full inventory plus cursor remained unchanged after event processing. Pick up the paper before the double-click collection attempt.
+6. Run `/devkitaccept status` as needed, then `/devkitaccept finish`. Finish succeeds only when every required observation above has passed. A typed command alone cannot advance an assertion.
+
+The session is bound to the joining player's UUID. Other players' events are ignored. The in-game report is written to `plugins/MdkRuntimeProbe/interactive-results.json`; the harness copies it into `cycle-1-interactive-results.json`. If the client does not connect or the session does not finish, the report remains `NOT VERIFIED` and the server is stopped after the respective timeout. Existing automated mode and its two restart cycles are unchanged.
+
+The guided probe directly exercises the common `GuiManager`, `GuiButton`, `ToggleButton`, `RadioGroup`, `PagedGui`, and `ConfirmGui` implementations. It does not verify client screenshots or visual fidelity, player-side tab-completion UI, multiple-player isolation, profile-service texture resolution, every click/drag gesture, or restart persistence through an interactive player session. Those remain `NOT VERIFIED`; a server-side assertion is not treated as client presentation evidence. Use the example's `/mdkintegration menu` for a manual broader localization/player-head check after completing the deterministic probe.
+
 ## Unit-test count reconciliation
 
 The current root JUnit XML results are the authoritative local count for this checkout. The earlier 309/60 and 302 reports were not accompanied by a common archived XML baseline, so their seven-test difference cannot be assigned to exact test identities. Comparison of the platform-refactor source changes shows no deleted ordinary test classes; it added common GUI and Paper extension coverage, and the runtime probe has its own one-test suite. The optional network-storage integration source set is excluded from normal `test`. The discrepancy is therefore consistent with differing reporting scopes or a prior counting error, but the historical cause cannot be proven from the repository alone. Do not restore seven tests merely to match a reported number.
