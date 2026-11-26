@@ -5,6 +5,45 @@ api-version: '1.21'
 depend: [MinecraftDevKitIntegrationExample, MinecraftDevKitStorageExample]
 description: Test-only runtime acceptance probe for MinecraftDevKit
 commands:
+  devkitcompletionprobe:
+    description: Test-only permission profile and completion instrumentation
+    usage: /devkitcompletionprobe <profile|stats|reset>
   devkitaccept:
     description: Guided real-player MinecraftDevKit acceptance session
     usage: /devkitaccept <help|start|status|protected|grant|gui|cancelgui|finish|cancel>
+permissions:
+  devkittest.*:
+    default: false
+    children:
+      devkittest.inspect: true
+      devkittest.modify: true
+      devkittest.admin.*: true
+      devkittest.region.*: true
+  devkittest.admin.*:
+    default: false
+    children:
+      devkittest.admin.reload: true
+      devkittest.admin.reset: true
+  devkittest.region.*:
+    default: false
+    children:
+      devkittest.region.info: true
+      devkittest.region.list: true
+      devkittest.region.add: true
+      devkittest.region.delete: true
+  devkittest.inspect:
+    default: false
+  devkittest.modify:
+    default: false
+  devkittest.admin.reload:
+    default: false
+  devkittest.admin.reset:
+    default: false
+  devkittest.region.info:
+    default: false
+  devkittest.region.list:
+    default: false
+  devkittest.region.add:
+    default: false
+  devkittest.region.delete:
+    default: false

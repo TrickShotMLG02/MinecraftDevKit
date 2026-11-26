@@ -63,6 +63,9 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.Event;
+import org.bukkit.plugin.EventExecutor;
+import org.bukkit.event.server.TabCompleteEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -81,6 +84,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -90,6 +94,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.time.Duration;
 import java.util.UUID;
 import java.util.logging.Level;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
 
 /** Test-only probe. It runs real MinecraftDevKit APIs inside the selected server process. */
 public final class RuntimeProbePlugin extends JavaPlugin implements Listener, CommandExecutor {
@@ -124,11 +130,25 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
     private int confirmExecutions;
     private int cancelConfirmExecutions;
     private int toggleCallbackExecutions;
+    private final Map<String, AtomicInteger> completionProviderCalls = new java.util.concurrent.ConcurrentHashMap<>();
+    private final AtomicInteger completionHandlerCalls = new AtomicInteger();
+    private final AtomicReference<String> completionLastProvider = new AtomicReference<>("none");
+    private final AtomicReference<String> completionLastSender = new AtomicReference<>("none");
+    private final AtomicReference<String> completionLastInput = new AtomicReference<>("");
+    private final AtomicInteger completionTabEvents = new AtomicInteger();
+    private final AtomicInteger completionPaperEvents = new AtomicInteger();
+    private final List<String> completionEventJson = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final AtomicInteger completionProfileChanges = new AtomicInteger();
+    private volatile String completionProfile = "unset";
+    private volatile String completionPlayerId = "none";
+    private final Map<UUID, PermissionAttachment> completionAttachments = new java.util.concurrent.ConcurrentHashMap<>();
 
     @Override public void onEnable() {
         getDataFolder().mkdirs();
         Bukkit.getPluginManager().registerEvents(this, this);
+        registerPaperSuggestionObserver();
         if (getCommand("devkitaccept") != null) getCommand("devkitaccept").setExecutor(this);
+        if (getCommand("devkitcompletionprobe") != null) getCommand("devkitcompletionprobe").setExecutor(this);
         check("dependent examples enabled", enabled("MinecraftDevKitIntegrationExample")
                         && enabled("MinecraftDevKitStorageExample"),
                 "Both standalone examples are plugin.yml dependencies of this probe.");
@@ -347,11 +367,185 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
                         }
                     }))).build();
             new BukkitCommandAdapter(this, new StaticTextProvider(), Locale.ENGLISH).register(protectedCommand);
+            verifyCompletionRuntime();
             check("Cloud Bukkit command registration", true, "Registered root, nested argument, and status commands during onEnable.");
         } catch (Throwable failure) {
             check("Cloud Bukkit command registration", false, failure.toString());
             getLogger().log(Level.SEVERE, "Command runtime probe failed", failure);
         }
+    }
+
+    /** Test-only typed command tree used by the opt-in protocol completion probe. */
+    private void verifyCompletionRuntime() {
+        try {
+            if (Boolean.getBoolean("mdk.protocol.directCloud")) {
+                Class<?> directControl = Class.forName("com.trickshotmlg.devkit.runtimeprobe.PaperCloudOnlyControl", true,
+                        getClass().getClassLoader());
+                directControl.getDeclaredMethod("register", org.bukkit.plugin.java.JavaPlugin.class).invoke(null, this);
+            }
+            Permission inspect = PermissionNamespace.create("devkittest").permission("inspect");
+            Permission modify = PermissionNamespace.create("devkittest").permission("modify");
+            Permission adminReload = PermissionNamespace.create("devkittest").permission("admin.reload");
+            Permission adminReset = PermissionNamespace.create("devkittest").permission("admin.reset");
+            Permission regionInfo = PermissionNamespace.create("devkittest").permission("region.info");
+            Permission regionList = PermissionNamespace.create("devkittest").permission("region.list");
+            Permission regionAdd = PermissionNamespace.create("devkittest").permission("region.add");
+            Permission regionDelete = PermissionNamespace.create("devkittest").permission("region.delete");
+            Argument<String> inspectTarget = Arguments.word("target").withSuggestions((context, input) -> {
+                recordCompletionProvider("inspect", context.sender(), input);
+                return CompletableFuture.completedFuture(List.of("inspection-target", "private-target"));
+            });
+            Argument<String> modifyTarget = Arguments.word("target").withSuggestions((context, input) -> {
+                recordCompletionProvider("modify", context.sender(), input);
+                return CompletableFuture.completedFuture(List.of("modify-target", "private-modify-target"));
+            });
+            Argument<String> regionTarget = Arguments.word("region").withSuggestions((context, input) -> {
+                recordCompletionProvider("region-info", context.sender(), input);
+                return CompletableFuture.completedFuture(List.of("region-alpha", "region-beta", "restricted-region"));
+            });
+            Argument<String> regionAddTarget = Arguments.word("region").withSuggestions((context, input) -> {
+                recordCompletionProvider("region-add", context.sender(), input);
+                return CompletableFuture.completedFuture(List.of("region-alpha", "region-beta"));
+            });
+            Argument<String> regionDeleteTarget = Arguments.word("region").withSuggestions((context, input) -> {
+                recordCompletionProvider("region-delete", context.sender(), input);
+                return CompletableFuture.completedFuture(List.of("restricted-region"));
+            });
+
+            var definition = CommandRegistry.builder().root("devkittest", root -> root.aliases("dkt", "dktest")
+                    .subcommand("public", node -> node.execute(context -> recordCompletionHandler()))
+                    .subcommand("inspect", node -> node.required(inspectTarget).permission(inspect)
+                            .execute(context -> recordCompletionHandler()))
+                    .subcommand("modify", node -> node.required(modifyTarget).permission(modify)
+                            .execute(context -> recordCompletionHandler()))
+                    .subcommand("admin", node -> node
+                            .subcommand("reload", leaf -> leaf.permission(adminReload).execute(context -> recordCompletionHandler()))
+                            .subcommand("reset", leaf -> leaf.permission(adminReset).execute(context -> recordCompletionHandler())))
+                    .subcommand("region", node -> node
+                            .subcommand("info", leaf -> leaf.required(regionTarget).permission(regionInfo)
+                                    .execute(context -> recordCompletionHandler()))
+                            .subcommand("list", leaf -> leaf.permission(regionList).execute(context -> recordCompletionHandler()))
+                            .subcommand("add", leaf -> leaf.required(regionAddTarget).permission(regionAdd)
+                                    .execute(context -> recordCompletionHandler()))
+                            .subcommand("delete", leaf -> leaf.required(regionDeleteTarget).permission(regionDelete)
+                                    .execute(context -> recordCompletionHandler())))
+                    ).build();
+            if (Boolean.getBoolean("mdk.protocol.paperNative")) {
+                Class<?> mdkPaperControl = Class.forName("com.trickshotmlg.devkit.runtimeprobe.PaperMinecraftDevKitControl", true,
+                        getClass().getClassLoader());
+                mdkPaperControl.getDeclaredMethod("register", org.bukkit.plugin.java.JavaPlugin.class,
+                        com.trickshotmlg.devkit.commands.CommandDefinition.class).invoke(null, this, definition);
+            } else {
+                new BukkitCommandAdapter(this, new StaticTextProvider(), Locale.ENGLISH).register(definition);
+            }
+            check("permission completion probe registration", true,
+                    "Registered devkittest through MinecraftDevKit's typed command API with test-only suggestion counters.");
+        } catch (Throwable failure) {
+            check("permission completion probe registration", false, failure.toString());
+            getLogger().log(Level.SEVERE, "Completion probe registration failed", failure);
+        }
+    }
+
+    private void recordCompletionProvider(String provider, com.trickshotmlg.devkit.commands.CommandSender sender, String input) {
+        completionProviderCalls.computeIfAbsent(provider, ignored -> new AtomicInteger()).incrementAndGet();
+        completionLastProvider.set(provider);
+        completionLastInput.set(input);
+        completionLastSender.set(sender.kind() + ":" + (sender instanceof BukkitCommandSender bridge
+                && bridge.bukkitSender() instanceof Player player ? player.getUniqueId() : "console"));
+        writeCompletionProbeState();
+    }
+
+    private void recordCompletionHandler() {
+        completionHandlerCalls.incrementAndGet();
+        writeCompletionProbeState();
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void observeBukkitTabComplete(TabCompleteEvent event) {
+        completionTabEvents.incrementAndGet();
+        String uuid = event.getSender() instanceof Player player ? player.getUniqueId().toString() : "console";
+        completionEventJson.add(completionEvent("bukkit", uuid, event.getBuffer(), event.getCompletions(), Thread.currentThread().getName()));
+        getLogger().info("MDK_COMPLETION_EVENT bukkit sender=" + event.getSender().getName()
+                + " buffer=" + event.getBuffer() + " thread=" + Thread.currentThread().getName()
+                + " completions=" + event.getCompletions());
+        writeCompletionProbeState();
+    }
+
+    @SuppressWarnings("unchecked")
+    private void registerPaperSuggestionObserver() {
+        try {
+            Class<?> raw = Class.forName("com.destroystokyo.paper.event.brigadier.AsyncPlayerSendSuggestionsEvent", false,
+                    Bukkit.getServer().getClass().getClassLoader());
+            if (!Event.class.isAssignableFrom(raw)) return;
+            Class<? extends Event> eventType = (Class<? extends Event>) raw;
+            EventExecutor executor = (listener, event) -> {
+                completionPaperEvents.incrementAndGet();
+                try {
+                    Object player = raw.getMethod("getPlayer").invoke(event);
+                    Object buffer = raw.getMethod("getBuffer").invoke(event);
+                    Object suggestions = raw.getMethod("getSuggestions").invoke(event);
+                    Object list = suggestions.getClass().getMethod("getList").invoke(suggestions);
+                    List<String> values = new ArrayList<>();
+                    for (Object suggestion : (List<?>) list) values.add(String.valueOf(suggestion.getClass().getMethod("getText").invoke(suggestion)));
+                    completionEventJson.add(completionEvent("paper", ((Player) player).getUniqueId().toString(),
+                            String.valueOf(buffer), values, Thread.currentThread().getName()));
+                    getLogger().info("MDK_COMPLETION_EVENT paper player=" + ((Player) player).getUniqueId()
+                            + " buffer=" + buffer + " thread=" + Thread.currentThread().getName()
+                            + " suggestions=" + suggestions);
+                    writeCompletionProbeState();
+                } catch (ReflectiveOperationException failure) {
+                    getLogger().log(Level.WARNING, "Unable to inspect Paper suggestion event", failure);
+                }
+            };
+            Bukkit.getPluginManager().registerEvent(eventType, this, EventPriority.MONITOR, executor, this, true);
+            getLogger().info("MDK_COMPLETION_EVENT paper observer registered");
+        } catch (ClassNotFoundException ignored) {
+            getLogger().info("MDK_COMPLETION_EVENT Paper suggestion event unavailable on this server");
+        }
+    }
+
+    private synchronized void writeCompletionProbeState() {
+        try {
+            String providers = completionProviderCalls.entrySet().stream().sorted(Map.Entry.comparingByKey())
+                    .map(entry -> "\"" + entry.getKey() + "\":" + entry.getValue().get())
+                    .collect(java.util.stream.Collectors.joining(","));
+            String json = "{\"platform\":\"" + System.getProperty("mdk.runtime.platform", "unknown")
+                    + "\",\"profile\":\"" + completionProfile + "\",\"playerUuid\":\"" + completionPlayerId
+                    + "\",\"handlers\":" + completionHandlerCalls.get() + ",\"providers\":{" + providers
+                    + "},\"lastProvider\":\"" + completionLastProvider.get() + "\",\"lastSender\":\"" + completionLastSender.get()
+                    + "\",\"lastInput\":\"" + completionLastInput.get().replace("\\", "\\\\").replace("\"", "\\\"")
+                    + "\",\"bukkitTabCompleteEvents\":" + completionTabEvents.get()
+                    + ",\"paperSuggestionEvents\":" + completionPaperEvents.get()
+                    + ",\"completionEvents\":[" + String.join(",", completionEventJson) + "]"
+                    + ",\"profileChanges\":" + completionProfileChanges.get() + "}";
+            Files.writeString(getDataFolder().toPath().resolve("completion-protocol-state.json"), json);
+        } catch (IOException failure) {
+            getLogger().log(Level.WARNING, "Unable to persist completion protocol state", failure);
+        }
+    }
+
+    private static String completionEvent(String platform, String sender, String buffer, List<String> suggestions, String thread) {
+        String encodedSuggestions = suggestions.stream().map(RuntimeProbePlugin::jsonString)
+                .collect(java.util.stream.Collectors.joining(","));
+        return "{\"platform\":" + jsonString(platform) + ",\"sender\":" + jsonString(sender)
+                + ",\"buffer\":" + jsonString(buffer) + ",\"thread\":" + jsonString(thread)
+                + ",\"suggestions\":[" + encodedSuggestions + "]}";
+    }
+
+    private static String jsonString(String value) {
+        StringBuilder escaped = new StringBuilder("\"");
+        for (int i = 0; i < value.length(); i++) {
+            char character = value.charAt(i);
+            switch (character) {
+                case '\\' -> escaped.append("\\\\");
+                case '"' -> escaped.append("\\\"");
+                case '\n' -> escaped.append("\\n");
+                case '\r' -> escaped.append("\\r");
+                case '\t' -> escaped.append("\\t");
+                default -> { if (character < 0x20) escaped.append(String.format("\\u%04x", (int) character)); else escaped.append(character); }
+            }
+        }
+        return escaped.append('"').toString();
     }
 
     private static Player playerSender(Object sender) {
@@ -361,6 +555,12 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
     @EventHandler
     public void onInteractiveJoin(PlayerJoinEvent event) {
         send(event.getPlayer(), Component.text("Interactive MinecraftDevKit acceptance is available: run /devkitaccept help"));
+    }
+
+    @EventHandler
+    public void onCompletionProbeQuit(org.bukkit.event.player.PlayerQuitEvent event) {
+        PermissionAttachment attachment = completionAttachments.remove(event.getPlayer().getUniqueId());
+        if (attachment != null) event.getPlayer().removeAttachment(attachment);
     }
 
     @EventHandler
@@ -405,6 +605,9 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (command.getName().equalsIgnoreCase("devkitcompletionprobe")) {
+            return onCompletionProbeCommand(sender, args);
+        }
         if (!(sender instanceof Player player)) {
             sender.sendMessage("This acceptance command requires a real player client.");
             return true;
@@ -426,6 +629,91 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
             default -> send(player, Component.text("Usage: /devkitaccept <help|start|status|details|retry|grant|kit|gui|pages|cancelgui|finish|cancel>"));
         }
         return true;
+    }
+
+    private boolean onCompletionProbeCommand(CommandSender sender, String[] args) {
+        if (args.length == 0) {
+            sender.sendMessage("Usage: /devkitcompletionprobe <profile|stats|reset>");
+            return true;
+        }
+        switch (args[0].toLowerCase(Locale.ROOT)) {
+            case "profile" -> {
+                if (args.length != 2) { sender.sendMessage("Usage: /devkitcompletionprobe profile <none|operator|inspect|modify|region|region-admin|admin|all|broad-deny>"); return true; }
+                Player player = Bukkit.getOnlinePlayers().stream().findFirst().orElse(null);
+                if (player == null) { sender.sendMessage("No protocol-test player is connected."); return true; }
+                PermissionAttachment old = completionAttachments.remove(player.getUniqueId());
+                if (old != null) player.removeAttachment(old);
+                player.setOp(args[1].equalsIgnoreCase("operator"));
+                PermissionAttachment attachment = player.addAttachment(this);
+                applyCompletionProfile(attachment, args[1].toLowerCase(Locale.ROOT));
+                completionAttachments.put(player.getUniqueId(), attachment);
+                completionProfile = args[1].toLowerCase(Locale.ROOT);
+                completionPlayerId = player.getUniqueId().toString();
+                completionProfileChanges.incrementAndGet();
+                player.recalculatePermissions();
+                player.updateCommands();
+                writeCompletionProbeState();
+                sender.sendMessage("MDK_COMPLETION_PROFILE " + player.getUniqueId() + " " + args[1]
+                        + " op=" + player.isOp()
+                        + " inspect=" + player.hasPermission("devkittest.inspect")
+                        + " modify=" + player.hasPermission("devkittest.modify")
+                        + " adminReload=" + player.hasPermission("devkittest.admin.reload")
+                        + " adminReset=" + player.hasPermission("devkittest.admin.reset")
+                        + " regionInfo=" + player.hasPermission("devkittest.region.info")
+                        + " regionDelete=" + player.hasPermission("devkittest.region.delete"));
+                return true;
+            }
+            case "reset" -> {
+                completionProviderCalls.clear(); completionHandlerCalls.set(0);
+                completionTabEvents.set(0); completionPaperEvents.set(0);
+                completionEventJson.clear();
+                completionProfileChanges.set(0);
+                completionLastProvider.set("none"); completionLastSender.set("none"); completionLastInput.set("");
+                writeCompletionProbeState();
+                sender.sendMessage("MDK_COMPLETION_STATS_RESET");
+                return true;
+            }
+            case "stats" -> {
+                String counts = completionProviderCalls.entrySet().stream().sorted(Map.Entry.comparingByKey())
+                        .map(entry -> entry.getKey() + ":" + entry.getValue().get()).collect(java.util.stream.Collectors.joining(","));
+                sender.sendMessage("MDK_COMPLETION_STATS handlers=" + completionHandlerCalls.get()
+                        + " providers={" + counts + "} lastProvider=" + completionLastProvider.get()
+                        + " lastSender=" + completionLastSender.get() + " lastInput=" + completionLastInput.get()
+                        + " bukkitTabEvents=" + completionTabEvents.get() + " paperSuggestionEvents=" + completionPaperEvents.get());
+                return true;
+            }
+            default -> { sender.sendMessage("Usage: /devkitcompletionprobe <profile|stats|reset>"); return true; }
+        }
+    }
+
+    private static void applyCompletionProfile(PermissionAttachment attachment, String profile) {
+        String[] leaves = {"devkittest.inspect", "devkittest.modify", "devkittest.admin.reload", "devkittest.admin.reset",
+                "devkittest.region.info", "devkittest.region.list", "devkittest.region.add", "devkittest.region.delete"};
+        if (!profile.equals("broad-deny") && !profile.equals("operator")) {
+            for (String leaf : leaves) attachment.setPermission(leaf, false);
+        }
+        switch (profile) {
+            case "none" -> { }
+            case "operator" -> { for (String leaf : leaves) attachment.setPermission(leaf, true); }
+            case "inspect" -> attachment.setPermission("devkittest.inspect", true);
+            case "modify" -> attachment.setPermission("devkittest.modify", true);
+            case "region" -> { attachment.setPermission("devkittest.region.info", true); attachment.setPermission("devkittest.region.list", true); }
+            case "region-admin" -> { for (String leaf : leaves) if (leaf.startsWith("devkittest.region.")) attachment.setPermission(leaf, true); }
+            case "admin" -> { attachment.setPermission("devkittest.admin.reload", true); attachment.setPermission("devkittest.admin.reset", true); }
+            case "all" -> { for (String leaf : leaves) attachment.setPermission(leaf, true); }
+            case "broad-deny" -> {
+                attachment.setPermission("devkittest.*", true);
+                attachment.unsetPermission("devkittest.admin.reset");
+                attachment.setPermission("devkittest.admin.reset", false);
+            }
+            default -> throw new IllegalArgumentException("Unknown completion profile: " + profile);
+        }
+        if (profile.equals("all") || profile.equals("operator")) {
+            for (String node : List.of("secret", "inspect", "modify", "admin.reload", "admin.reset",
+                    "region.info", "region.list", "region.add", "region.delete")) {
+                attachment.setPermission("devkitcloudonly." + node, true);
+            }
+        }
     }
 
     private void sendInteractiveHelp(Player player) {
@@ -973,8 +1261,8 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
     private void check(String name, boolean passed, String detail) {
         RuntimeCheck check = new RuntimeCheck(name, passed ? "PASS" : "FAIL", detail);
         checks.add(check);
-        if (passed) getLogger().info("[MDK-RUNTIME] PASS " + name + " — " + detail);
-        else getLogger().severe("[MDK-RUNTIME] FAIL " + name + " — " + detail);
+        if (passed) getLogger().info("[MDK-RUNTIME] PASS " + name + " â€” " + detail);
+        else getLogger().severe("[MDK-RUNTIME] FAIL " + name + " â€” " + detail);
     }
 
     private void writeReport() {
@@ -991,6 +1279,11 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
     private static String escape(String value) { return value.replace("\\", "\\\\").replace("\"", "\\\""); }
 
     @Override public void onDisable() {
+        completionAttachments.forEach((uuid, attachment) -> {
+            Player player = Bukkit.getPlayer(uuid);
+            if (player != null) player.removeAttachment(attachment);
+        });
+        completionAttachments.clear();
         if (interactive != null && interactive.stage() != InteractiveSessionState.Stage.COMPLETE) {
             interactive.cancel("Server/plugin shutdown ended the interactive session before completion.");
             writeInteractiveReport();

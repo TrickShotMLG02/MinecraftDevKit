@@ -127,3 +127,19 @@ The current root JUnit XML results are the authoritative local count for this ch
 ## Acceptance limitations
 
 This harness targets only Spigot and Paper 1.21.11 on Java 21. It does not test Folia, other Minecraft versions, or MySQL/MariaDB. Without an authorized player client, all client-originated GUI, player command/permission, multi-viewer, and full profile interaction gates remain `NOT VERIFIED`. A successful server-side probe is necessary evidence but is not a substitute for those interactions.
+
+## Opt-in protocol command-completion probe
+
+The protocol completion probe is a separate, disposable fixture for investigating raw command suggestion packets. It does **not** replace the authenticated-player harness and it never connects to or changes an existing acceptance server. The fixture uses a dedicated server directory, loopback game/RCON listeners, random local RCON credentials, and `online-mode=false` only because the test client uses Mineflayer's offline identity. This result is unauthenticated protocol evidence, not authenticated-player compatibility evidence.
+
+Run it only when you want the protocol investigation:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./integration-tests/runtime/protocol/run.ps1 -Platform paper
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./integration-tests/runtime/protocol/run.ps1 -Platform spigot
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./integration-tests/runtime/protocol/run.ps1 -Platform paper -CommandBackend native
+```
+
+The script requires the already checksum-verified Spigot/Paper 1.21.11 cached JARs, Java 21, Node.js, and npm. It installs the pinned Mineflayer client into an ignored build directory, builds and installs the existing integration/storage examples plus the runtime probe, applies temporary permission profiles, and sends serialized `tab_complete` packets with incrementing transaction IDs. On Paper, it also registers a test-only direct Cloud control tree; `-CommandBackend native` selects MinecraftDevKit's native Paper adapter for the main reproduction tree, while the default tests the Bukkit-compatible adapter. The JSON report includes the delivered Brigadier tree nodes, explicit packet suggestions, observed Bukkit/Paper suggestion events, dynamic provider counters, handler counters, execution authorization, shutdown, and port release. The offline profile names and all returned region/target values are synthetic.
+
+At the current tested dependency/server versions, the report intentionally records `FAIL` for explicit static literal filtering where a protected executable literal appears. The Spigot handler omits response packets for empty results; the fixture records those as empty only when the associated `TabCompleteEvent` observed an empty list. Paper's 1.21.11 explicit completion path reproduced protected static literal suggestions for both the MinecraftDevKit command tree and a direct Cloud control. Unauthorized dynamic providers remained uninvoked in tested profiles, and command handlers remained denied. The fixture does not prove what the vanilla graphical client's Tab UI displays and uses offline authentication only on a separate disposable localhost server. See the uncommitted investigation notes in `docs/command-completion-investigation.md` for the current evidence and upstream source trace.

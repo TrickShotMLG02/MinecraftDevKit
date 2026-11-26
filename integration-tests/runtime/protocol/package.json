@@ -1,0 +1,9 @@
+{
+  "name": "minecraftdevkit-protocol-completion-probe",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Opt-in protocol client for permission-aware command completion tests",
+  "dependencies": {
+    "mineflayer": "4.39.0"
+  }
+}

@@ -12,6 +12,11 @@ val platform = providers.gradleProperty("mdkPlatform").orElse("paper").get().low
 require(platform == "paper" || platform == "spigot") { "-PmdkPlatform must be paper or spigot" }
 
 dependencies {
+    if (platform == "paper") {
+        implementation(platform("org.incendo:cloud-minecraft-bom:2.0.1"))
+        implementation("org.incendo:cloud-paper")
+        implementation("com.trickshotmlg.devkit:devkit-paper-commands:$mdkVersion")
+    }
     if (platform == "paper") compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     else compileOnly("org.spigotmc:spigot-api:1.21.11-R0.1-SNAPSHOT")
 
@@ -35,6 +40,8 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
+
+sourceSets.main { java.srcDir("src/$platform/java") }
 
 tasks.test {
     useJUnitPlatform()
