@@ -437,6 +437,12 @@ public final class RuntimeProbePlugin extends JavaPlugin implements Listener, Co
                         com.trickshotmlg.devkit.commands.CommandDefinition.class).invoke(null, this, definition);
             } else {
                 new BukkitCommandAdapter(this, new StaticTextProvider(), Locale.ENGLISH).register(definition);
+                if (Boolean.getBoolean("mdk.protocol.permissionAwareCompletions")) {
+                    Class<?> mdkPaperControl = Class.forName("com.trickshotmlg.devkit.runtimeprobe.PaperMinecraftDevKitControl", true,
+                            getClass().getClassLoader());
+                    mdkPaperControl.getDeclaredMethod("enableFor", org.bukkit.plugin.java.JavaPlugin.class,
+                            com.trickshotmlg.devkit.commands.CommandDefinition.class).invoke(null, this, definition);
+                }
             }
             check("permission completion probe registration", true,
                     "Registered devkittest through MinecraftDevKit's typed command API with test-only suggestion counters.");

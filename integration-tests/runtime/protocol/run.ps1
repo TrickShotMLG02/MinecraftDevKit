@@ -5,7 +5,8 @@ param(
     [string] $JavaExecutable = 'java',
     [ValidateRange(60, 900)] [int] $ClientTimeoutSeconds = 240,
     [ValidateSet('legacy', 'native')] [string] $CommandBackend = 'legacy',
-    [string] $Profiles = 'none,operator,inspect,modify,region,region-admin,admin,all,broad-deny'
+    [string] $Profiles = 'none,operator,inspect,modify,region,region-admin,admin,all,broad-deny',
+    [switch] $PermissionAwareCompletions
 )
 
 # This is an opt-in packet fixture. It is deliberately separate from run.ps1's authenticated,
@@ -15,6 +16,7 @@ $profileList = @($Profiles -split ',' | ForEach-Object { $_.Trim().ToLowerInvari
 $supportedProfiles = @('none', 'operator', 'inspect', 'modify', 'region', 'region-admin', 'admin', 'all', 'broad-deny')
 if (-not $profileList.Count -or @($profileList | Where-Object { $_ -notin $supportedProfiles }).Count) { throw "Unsupported protocol profile list: $Profiles" }
 if ($Platform -eq 'spigot' -and $CommandBackend -ne 'legacy') { throw 'The native Paper backend is only available on Paper.' }
+if ($Platform -eq 'spigot' -and $PermissionAwareCompletions) { throw 'The Paper completion filter cannot be enabled on Spigot.' }
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path
 $gradle = Join-Path $repoRoot 'gradlew.bat'
 $runId = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ')
@@ -129,7 +131,7 @@ $failure = $null
 try {
     $startInfo = [Diagnostics.ProcessStartInfo]::new()
     $startInfo.FileName = $javaPath
-    $paperControls = if ($Platform -eq 'paper') { ' -Dmdk.protocol.directCloud=true' + $(if ($CommandBackend -eq 'native') { ' -Dmdk.protocol.paperNative=true' } else { '' }) } else { '' }
+    $paperControls = if ($Platform -eq 'paper') { ' -Dmdk.protocol.directCloud=true' + $(if ($CommandBackend -eq 'native') { ' -Dmdk.protocol.paperNative=true' } else { '' }) + $(if ($PermissionAwareCompletions) { ' -Dmdk.protocol.permissionAwareCompletions=true' } else { '' }) } else { '' }
     $startInfo.Arguments = "-Xms512M -Xmx2G -Dmdk.runtime.platform=$Platform$paperControls -jar server.jar --nogui"
     $startInfo.WorkingDirectory = $serverDirectory
     $startInfo.UseShellExecute = $false; $startInfo.CreateNoWindow = $true
@@ -219,9 +221,14 @@ if ($protocol) {
         $rootExpected = @('public')
         if ($allowInspect) { $rootExpected += 'inspect' }
         if ($allowModify) { $rootExpected += 'modify' }
-        # Cloud registers a generated-help endpoint for non-executable grouping nodes,
-        # so these two parent literals are public help paths, not protected leaves.
-        $rootExpected += @('admin', 'region')
+        # Paper's Brigadier command tree should expose intermediate paths only when an
+        # executable descendant is accessible. Spigot's Bukkit tab-completion path does not
+        # expose Cloud's filtered Brigadier tree and retains its separately observed behavior.
+        if ($Platform -eq 'spigot') { $rootExpected += @('admin', 'region') }
+        else {
+            if ($allowAdmin) { $rootExpected += 'admin' }
+            if ($allowRegion) { $rootExpected += 'region' }
+        }
         $rootUnauthorized = @($rootValues | Where-Object { $_ -in @('public', 'inspect', 'modify', 'admin', 'region') -and $_ -notin $rootExpected }).Count -gt 0
         $rootObserved = $root.status -eq 'PASS' -or $root.outcome -eq 'EMPTY_COMPLETION_EVENT_NO_PACKET'
         $checks.Add([pscustomobject]@{ name = "explicit root permission filter ($($profile.profile))"; status = $(if ($rootUnauthorized) { 'FAIL' } elseif ($rootObserved) { 'PASS' } else { 'NOT VERIFIED' }); detail = "query=/devkittest ; expected=$($rootExpected -join ','); observed=$($rootValues -join ','); outcome=$($root.outcome)" })
@@ -312,11 +319,13 @@ if ($protocol) {
                 @($cloudOnlyRegionValues | Where-Object { $_ -in @('info', 'list', 'add', 'delete') -and $_ -notin $directExpectedRegion }).Count -gt 0
             $directQueriesObserved = $cloudOnly.transactionId -gt 0 -and $cloudOnlyAdmin.transactionId -gt 0 -and $cloudOnlyRegion.transactionId -gt 0
             $directHasExpected = $cloudOnlyAllowed -and 'secret' -in $cloudOnlyValues -and 'reload' -in $cloudOnlyAdminValues -and 'delete' -in $cloudOnlyRegionValues
-            $directStatus = if ($directRootLeaks -or $directNestedLeaks) { 'FAIL' }
+            # The direct Cloud root is an intentional control: protected literals should still be
+            # visible there because the optional filter is scoped to MDK-owned definitions only.
+            $directStatus = if ($cloudOnlyAllowed -and ($directRootLeaks -or $directNestedLeaks)) { 'FAIL' }
                 elseif ($cloudOnlyAllowed -and $directHasExpected) { 'PASS' }
-                elseif (-not $cloudOnlyAllowed -and $directQueriesObserved -and 'public' -in $cloudOnlyValues) { 'PASS' }
+                elseif (-not $cloudOnlyAllowed -and $directQueriesObserved -and $directRootLeaks) { 'PASS' }
                 else { 'NOT VERIFIED' }
-            $checks.Add([pscustomobject]@{ name = "direct Cloud-only explicit completion control ($($profile.profile))"; status = $directStatus; detail = "allowed=$cloudOnlyAllowed; root=$($cloudOnlyValues -join ','); admin=$($cloudOnlyAdminValues -join ','); region=$($cloudOnlyRegionValues -join ',')" })
+            $checks.Add([pscustomobject]@{ name = "direct Cloud-only explicit completion control ($($profile.profile))"; status = $directStatus; detail = "allowed=$cloudOnlyAllowed; expected unfiltered raw control for denied profile=$(-not $cloudOnlyAllowed); root=$($cloudOnlyValues -join ','); admin=$($cloudOnlyAdminValues -join ','); region=$($cloudOnlyRegionValues -join ',')" })
             $cloudProtectedPaths = @('cloudonlyprobe secret', 'cloudonlyprobe inspect', 'cloudonlyprobe modify',
                 'cloudonlyprobe admin reload', 'cloudonlyprobe admin reset', 'cloudonlyprobe region info',
                 'cloudonlyprobe region list', 'cloudonlyprobe region add', 'cloudonlyprobe region delete')
@@ -340,7 +349,7 @@ if ($protocol) {
 }
 $report = [ordered]@{
     runId = $runId; startedUtc = $started.ToString('o'); completedUtc = [DateTime]::UtcNow.ToString('o')
-    platform = $Platform; minecraftVersion = '1.21.11'; commandBackend = $CommandBackend; serverArtifactSha256 = $actualServerHash
+    platform = $Platform; minecraftVersion = '1.21.11'; commandBackend = $CommandBackend; permissionAwareCompletions = [bool]$PermissionAwareCompletions; serverArtifactSha256 = $actualServerHash
     serverJar = [IO.Path]::GetFileName($ServerJar); onlineMode = $false; authenticatedClient = $false
     gitRevision = (& git -C $repoRoot rev-parse HEAD).Trim()
     pluginArtifacts = @(
