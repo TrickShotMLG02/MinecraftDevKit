@@ -11,6 +11,7 @@ import com.trickshotmlg.devkit.commands.error.CommandErrorMessages;
 import com.trickshotmlg.devkit.commands.help.CommandHelpRenderer;
 import com.trickshotmlg.devkit.text.TextProvider;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.incendo.cloud.execution.ExecutionCoordinator;
@@ -26,11 +27,14 @@ import java.util.function.Function;
 public final class PaperCommandAdapter implements AutoCloseable {
     private final PaperCommandManager<CommandSourceStack> manager;
     private final JavaPlugin plugin;
+    private final Locale defaultLocale;
     private final Function<CommandSourceStack, com.trickshotmlg.devkit.commands.CommandSender> senderAdapter;
     private final CloudCommandRegistrar<CommandSourceStack> registrar;
     private final CloudCommandErrorHandler<CommandSourceStack> errorHandler;
     private final Set<Argument<?>> playerParsers = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
     private final PaperCommandRootRegistry roots = new PaperCommandRootRegistry();
+    private final java.util.List<CommandDefinition> definitions = new java.util.ArrayList<>();
+    private PaperPermissionSuggestionFilter suggestionFilter;
     private boolean closed;
 
     /**
@@ -59,6 +63,7 @@ public final class PaperCommandAdapter implements AutoCloseable {
         if (defaultLocale.getLanguage().isEmpty()) throw new IllegalArgumentException("defaultLocale must have a language");
         Objects.requireNonNull(errors, "errors");
         this.plugin = plugin;
+        this.defaultLocale = defaultLocale;
         try {
             manager = PaperCommandManager.builder()
                     .executionCoordinator(ExecutionCoordinator.simpleCoordinator())
@@ -87,6 +92,22 @@ public final class PaperCommandAdapter implements AutoCloseable {
             registerPlayerParsers(definition.roots());
             registrar.register(definition);
         });
+        definitions.add(definition);
+        if (suggestionFilter != null) suggestionFilter.register(definition);
+    }
+
+    /**
+     * Opts this native Paper adapter into filtering unauthorized static literals from outgoing
+     * completion responses. Disabled by default. The filter only tracks definitions successfully
+     * registered through this adapter and is closed with the adapter.
+     * @return this adapter
+     */
+    public synchronized PaperCommandAdapter enablePermissionAwareCompletions() {
+        if (closed) throw new IllegalStateException("Paper command adapter is closed");
+        if (suggestionFilter != null) return this;
+        suggestionFilter = new PaperPermissionSuggestionFilter(plugin, defaultLocale);
+        for (CommandDefinition definition : definitions) suggestionFilter.register(definition);
+        return this;
     }
 
     /** The native Cloud manager for advanced Paper/Brigadier parser and suggestion configuration.
@@ -98,7 +119,13 @@ public final class PaperCommandAdapter implements AutoCloseable {
      * Stops further registrations. Paper removes lifecycle command registrations with the owning
      * plugin; this method does not unregister roots individually or alter Paper's command tree.
      */
-    @Override public synchronized void close() { closed = true; }
+    @Override public synchronized void close() {
+        if (closed) return;
+        if (!Bukkit.isPrimaryThread()) throw new IllegalStateException("Must close Paper command adapter on the Bukkit primary server thread");
+        closed = true;
+        if (suggestionFilter != null) suggestionFilter.close();
+        definitions.clear();
+    }
 
     private void registerPlayerParsers(Iterable<CommandNode> nodes) {
         for (CommandNode node : nodes) {
