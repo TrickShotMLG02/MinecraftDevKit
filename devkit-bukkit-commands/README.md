@@ -16,7 +16,7 @@ dependencies {
 }
 ```
 
-The adapter publishes `devkit-commands` and `org.incendo:cloud-paper:2.0.0` as API dependencies. It compiles against Spigot API 1.21.11. Keep the server API `compileOnly`; do not shade Bukkit/Spigot/Paper classes into the plugin. Spigot does not supply Adventure API classes, so package compatible Adventure runtime libraries for Spigot; Paper supplies them. Cloud is MIT-licensed. If you shade Cloud into your plugin, preserve its license notice and relocate it when multiple plugins may bundle their own Cloud version.
+The adapter publishes `devkit-commands` and Incendo Cloud Paper 2.0.1 as API dependencies. The Cloud Minecraft adapter family is aligned with `cloud-minecraft-bom:2.0.1`; Cloud core/services remain managed by the shared `cloud-bom:2.1.0`. It compiles against Spigot API 1.21.11. Keep the server API `compileOnly`; do not shade Bukkit/Spigot/Paper classes into the plugin. Spigot does not supply Adventure API classes, so package compatible Adventure runtime libraries for Spigot; Paper supplies them. Cloud is MIT-licensed. If you shade Cloud into your plugin, preserve its license notice and relocate it when multiple plugins may bundle their own Cloud version.
 
 ## Register commands
 
@@ -49,6 +49,12 @@ The adapter maps `Player` to `PLAYER`, console senders to `CONSOLE`, and other B
 This adapter uses `LegacyPaperCommandManager` and registers commands from `onEnable()`. Cloud owns the native registration for the plugin lifecycle. Do not duplicate these command roots in `plugin.yml`; continue to use the permission metadata generator for permission declarations only. The adapter enables Cloud's native Brigadier integration when the server advertises that capability. On older Bukkit/Spigot servers without Brigadier, Cloud's legacy command and tab-completion behavior is used.
 
 The default `ExecutionCoordinator.simpleCoordinator()` keeps handlers on the calling thread. Do not move Bukkit API calls into worker-thread command handlers or custom suggestion providers; asynchronous application work must return to the server thread before touching Bukkit state. Cloud's Brigadier suggestions are preferred when available; the adapter does not enable asynchronous legacy completions.
+
+### Permission-aware completion
+
+Typed command permission and sender requirements are attached to each executable Cloud command. Generated help and MinecraftDevKit's Cloud `SuggestionFactory` both use the same effective visibility checks: inaccessible literals are omitted, an intermediate parent remains available when an authorized descendant exists, and custom argument suggestion providers are not invoked for a path that Cloud considers inaccessible. Permission changes take effect on the next suggestion evaluation; call `Player#updateCommands()` when the client-side Brigadier tree also needs refreshing.
+
+There are distinct completion paths. The player-specific Brigadier tree sent by Paper/Spigot is filtered using Brigadier node requirements. Cloud suggestions are evaluated by Cloud's suggestion pipeline. A separate explicit command-completion packet is handled by the server command dispatcher and is not equivalent to inspecting either the delivered tree or calling Cloud's `SuggestionFactory`. A downstream protocol test against Paper 1.21.11 build 132 reported that explicit requests returned static protected literals despite a correctly filtered tree; the current repository has no supported packet hook that can safely repair that server response. See [the investigation record](../docs/command-completion-investigation.md). Do not treat execution authorization as a substitute for completion privacy, and do not expose secrets in command literals or suggestion providers. Dynamic suggestions remain the plugin's responsibility to scope to the command context and sender.
 
 The adapter installs the shared localized error handler and generated help renderer once per manager. Usage/help visibility uses the same inherited permission and sender requirements as command execution. Unhandled execution errors are logged through the shared JDK logger and players receive a safe translated error message.
 

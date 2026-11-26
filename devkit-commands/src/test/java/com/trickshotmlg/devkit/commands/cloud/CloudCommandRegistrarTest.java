@@ -22,6 +22,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -167,6 +168,65 @@ class CloudCommandRegistrarTest {
         var suggestions = manager.suggestionFactory().suggest(new Sender(), "friends ").join();
         assertTrue(suggestions.list().stream().map(org.incendo.cloud.suggestion.Suggestion::suggestion)
                 .noneMatch("admin"::equals));
+    }
+
+    @Test
+    void cloudRetainsAnIntermediateNodeOnlyForItsAuthorizedDescendants() {
+        var permissions = com.trickshotmlg.devkit.permissions.PermissionNamespace.create("regions");
+        Permission inspect = permissions.permission("info");
+        Permission delete = permissions.permission("delete");
+        permissions.build();
+        TestManager manager = new TestManager();
+        var definition = CommandRegistry.builder().root("devkittest", root -> root
+                .aliases("dkt")
+                .subcommand("region", region -> region
+                        .subcommand("info", info -> info.permission(inspect).execute(context -> { }))
+                        .subcommand("delete", command -> command.permission(delete).execute(context -> { }))))
+                .build();
+        new CloudCommandRegistrar<>(manager, Sender::asCommandSender).register(definition);
+
+        Sender sender = new Sender();
+        sender.permissions.add(inspect.node());
+        for (String input : List.of("devkittest region ", "dkt region ")) {
+            List<String> suggestions = manager.suggestionFactory().suggest(sender, input).join().list().stream()
+                    .map(org.incendo.cloud.suggestion.Suggestion::suggestion).toList();
+            assertTrue(suggestions.contains("info"), "the authorized nested path remains discoverable");
+            assertFalse(suggestions.contains("delete"), "a sibling permission is not inherited implicitly");
+        }
+    }
+
+    @Test
+    void cloudDoesNotInvokeDynamicSuggestionProvidersForUnauthorizedCommands() {
+        var permissions = com.trickshotmlg.devkit.permissions.PermissionNamespace.create("completion");
+        Permission inspect = permissions.permission("inspect");
+        permissions.build();
+        AtomicInteger invocations = new AtomicInteger();
+        Argument<String> target = Arguments.word("target").withSuggestions((context, input) -> {
+            invocations.incrementAndGet();
+            return java.util.concurrent.CompletableFuture.completedFuture(List.of("private-target"));
+        });
+        TestManager manager = new TestManager();
+        var definition = CommandRegistry.builder().root("devkittest", root -> root
+                .aliases("dkt")
+                .subcommand("inspect", command -> command.permission(inspect).required(target).execute(context -> { })))
+                .build();
+        new CloudCommandRegistrar<>(manager, Sender::asCommandSender).register(definition);
+
+        Sender sender = new Sender();
+        var denied = manager.suggestionFactory().suggest(sender, "devkittest inspect ").join();
+        assertTrue(denied.list().isEmpty());
+        assertEquals(0, invocations.get(), "an inaccessible provider must not run");
+
+        sender.permissions.add(inspect.node());
+        var allowed = manager.suggestionFactory().suggest(sender, "dkt inspect ").join();
+        assertEquals(List.of("private-target"), allowed.list().stream()
+                .map(org.incendo.cloud.suggestion.Suggestion::suggestion).toList());
+        assertEquals(1, invocations.get());
+
+        sender.permissions.remove(inspect.node());
+        var revoked = manager.suggestionFactory().suggest(sender, "devkittest inspect ").join();
+        assertTrue(revoked.list().isEmpty());
+        assertEquals(1, invocations.get(), "revoked access must stop provider invocation immediately");
     }
 
     @Test
