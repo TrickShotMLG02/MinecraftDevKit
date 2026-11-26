@@ -5,7 +5,8 @@ repositories {
 
 dependencies {
     api(project(":devkit-bukkit-commands"))
-    api("org.incendo:cloud-paper:2.0.0")
+    api(platform("org.incendo:cloud-minecraft-bom:2.0.1"))
+    api("org.incendo:cloud-paper")
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     testCompileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     testRuntimeOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
